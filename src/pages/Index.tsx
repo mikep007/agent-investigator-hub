@@ -2,12 +2,14 @@ import { useState } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Activity, Brain, Network, Search, UserSearch, Image, Clock, CheckCircle2 } from "lucide-react";
+import { Activity, Brain, Network, Search, UserSearch, Image, Clock, CheckCircle2, Target } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import AgentGraph from "@/components/AgentGraph";
 import InvestigationPanel from "@/components/InvestigationPanel";
 
 const Index = () => {
   const [activeInvestigation, setActiveInvestigation] = useState(false);
+  const [searchTarget, setSearchTarget] = useState("");
 
   const agents = [
     {
@@ -57,24 +59,54 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">Multi-Agent Investigation Platform</p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
-              <Badge variant="outline" className="border-primary text-primary">
-                <Activity className="w-3 h-3 mr-1" />
-                {agents.filter(a => a.status === "active").length} Active
-              </Badge>
-              <Button 
-                onClick={() => setActiveInvestigation(!activeInvestigation)}
-                className="cyber-glow"
-              >
-                <Search className="w-4 h-4 mr-2" />
-                {activeInvestigation ? "Stop Investigation" : "Start Investigation"}
-              </Button>
-            </div>
+            <Badge variant="outline" className="border-primary text-primary">
+              <Activity className="w-3 h-3 mr-1" />
+              {agents.filter(a => a.status === "active").length} Active
+            </Badge>
           </div>
         </div>
       </header>
 
       <main className="container mx-auto px-6 py-8">
+        {/* Search Input Panel */}
+        <Card className="mb-8 p-6 bg-card/80 backdrop-blur border-border/50">
+          <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
+            <div className="flex-1 w-full">
+              <label className="text-sm font-medium mb-2 flex items-center gap-2">
+                <Target className="w-4 h-4 text-primary" />
+                Investigation Target
+              </label>
+              <Input
+                placeholder="Enter name, username, email, or identifier..."
+                value={searchTarget}
+                onChange={(e) => setSearchTarget(e.target.value)}
+                className="bg-background/50"
+                disabled={activeInvestigation}
+              />
+            </div>
+            <Button 
+              onClick={() => {
+                if (searchTarget.trim()) {
+                  setActiveInvestigation(!activeInvestigation);
+                }
+              }}
+              disabled={!searchTarget.trim() && !activeInvestigation}
+              className="cyber-glow"
+            >
+              <Search className="w-4 h-4 mr-2" />
+              {activeInvestigation ? "Stop Investigation" : "Start Investigation"}
+            </Button>
+          </div>
+          {activeInvestigation && searchTarget && (
+            <div className="mt-4 p-3 bg-primary/10 border border-primary/30 rounded-lg">
+              <p className="text-sm">
+                <span className="text-muted-foreground">Investigating:</span>{" "}
+                <span className="text-primary font-semibold">{searchTarget}</span>
+              </p>
+            </div>
+          )}
+        </Card>
+
         {/* Agent Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
           {agents.map((agent) => (
