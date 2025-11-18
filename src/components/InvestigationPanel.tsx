@@ -2,9 +2,9 @@ import { useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Clock, AlertCircle, ExternalLink, Shield, Instagram, Facebook, Twitter, Github, Linkedin } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { CheckCircle2, Clock, AlertCircle, ExternalLink, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 interface InvestigationPanelProps {
   active: boolean;
@@ -19,10 +19,12 @@ interface LogEntry {
   status: "success" | "processing" | "pending";
   data?: any;
   agent_type?: string;
+  verification_status?: 'verified' | 'needs_review' | 'inaccurate';
 }
 
 const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const { toast } = useToast();
 
   useEffect(() => {
     if (!active || !investigationId) {
@@ -48,7 +50,6 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           let message = '';
           let status: "success" | "processing" | "pending" = "success";
 
-          // Format message based on agent type and data
           if (finding.agent_type === 'social') {
             const profiles = data.profiles || [];
             const found = profiles.filter((p: any) => p.exists);
@@ -96,6 +97,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             status,
             data: finding.data,
             agent_type: finding.agent_type,
+            verification_status: finding.verification_status as 'verified' | 'needs_review' | 'inaccurate' | undefined,
           };
         });
 
@@ -105,9 +107,8 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
 
     fetchFindings();
 
-    // Set up realtime subscription for new findings
     const channel = supabase
-      .channel(`findings:${investigationId}`)
+      .channel('findings-changes')
       .on(
         'postgres_changes',
         {
@@ -117,10 +118,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           filter: `investigation_id=eq.${investigationId}`,
         },
         (payload) => {
+          console.log('New finding received:', payload);
           const finding = payload.new;
           const data = finding.data as any;
           let message = '';
-          
+
           if (finding.agent_type === 'social') {
             const profiles = data.profiles || [];
             const found = profiles.filter((p: any) => p.exists);
@@ -160,17 +162,19 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
 
           const displayAgent = finding.agent_type === 'sherlock' ? 'Email Match' : finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1);
 
-          const newLog: LogEntry = {
-            id: finding.id,
-            timestamp: new Date(finding.created_at).toLocaleTimeString(),
-            agent: displayAgent,
-            message,
-            status: "success",
-            data: finding.data,
-            agent_type: finding.agent_type,
-          };
-
-          setLogs((prev) => [...prev, newLog]);
+          setLogs((prev) => [
+            ...prev,
+            {
+              id: finding.id,
+              timestamp: new Date(finding.created_at).toLocaleTimeString(),
+              agent: displayAgent,
+              message,
+              status: "success" as const,
+              data: finding.data,
+              agent_type: finding.agent_type,
+              verification_status: finding.verification_status as 'verified' | 'needs_review' | 'inaccurate' | undefined,
+            },
+          ]);
         }
       )
       .subscribe();
@@ -180,148 +184,189 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
     };
   }, [active, investigationId]);
 
-  const getStatusIcon = (status: LogEntry["status"]) => {
-    switch (status) {
-      case "success":
-        return <CheckCircle2 className="w-4 h-4 text-success" />;
-      case "processing":
-        return <Clock className="w-4 h-4 text-warning animate-pulse" />;
-      case "pending":
-        return <AlertCircle className="w-4 h-4 text-muted-foreground" />;
+  const updateVerificationStatus = async (findingId: string, status: 'verified' | 'needs_review' | 'inaccurate') => {
+    try {
+      const { error } = await supabase
+        .from('findings')
+        .update({ verification_status: status })
+        .eq('id', findingId);
+
+      if (error) throw error;
+
+      setLogs(logs.map(log => 
+        log.id === findingId 
+          ? { ...log, verification_status: status }
+          : log
+      ));
+
+      toast({
+        title: "Status Updated",
+        description: `Finding marked as ${status.replace('_', ' ')}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update verification status",
+        variant: "destructive",
+      });
     }
   };
 
+  const getVerificationBadge = (status?: 'verified' | 'needs_review' | 'inaccurate') => {
+    switch (status) {
+      case 'verified':
+        return <Badge variant="default" className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50">Verified</Badge>;
+      case 'inaccurate':
+        return <Badge variant="destructive" className="bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/50">Inaccurate</Badge>;
+      case 'needs_review':
+      default:
+        return <Badge variant="outline" className="bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/50">Needs Review</Badge>;
+    }
+  };
+
+  const getPlatformIcon = (platform: string) => {
+    const platformLower = platform.toLowerCase();
+    if (platformLower.includes('instagram')) return <Instagram className="h-4 w-4" />;
+    if (platformLower.includes('facebook')) return <Facebook className="h-4 w-4" />;
+    if (platformLower.includes('twitter') || platformLower.includes('x.com')) return <Twitter className="h-4 w-4" />;
+    if (platformLower.includes('github')) return <Github className="h-4 w-4" />;
+    if (platformLower.includes('linkedin')) return <Linkedin className="h-4 w-4" />;
+    return <Shield className="h-4 w-4" />;
+  };
+
+  if (!active) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        <p>No active investigation</p>
+      </div>
+    );
+  }
+
+  if (logs.length === 0) {
+    return (
+      <div className="flex items-center justify-center h-full text-muted-foreground">
+        <div className="text-center space-y-2">
+          <Clock className="h-8 w-8 mx-auto animate-pulse" />
+          <p>Initializing agents...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <ScrollArea className="h-[400px] pr-4">
-      {logs.length === 0 && !active && (
-        <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-          <Clock className="w-12 h-12 mb-3 opacity-50" />
-          <p className="text-sm">No active investigation</p>
-        </div>
-      )}
-
-      {logs.length === 0 && active && (
-        <div className="flex flex-col items-center justify-center h-full text-center text-muted-foreground">
-          <Clock className="w-12 h-12 mb-3 opacity-50 animate-pulse" />
-          <p className="text-sm">Initializing agents...</p>
-        </div>
-      )}
-
+    <ScrollArea className="h-full pr-4">
       <div className="space-y-3">
-        {logs.map((log, index) => (
+        {logs.map((log) => (
           <div
             key={log.id}
-            className={cn(
-              "p-3 rounded-lg border border-border/50 bg-card/50 animate-in slide-in-from-right",
-              "transition-all duration-300"
-            )}
-            style={{ animationDelay: `${index * 50}ms` }}
+            className="p-4 rounded-lg border border-border/50 bg-card/50 hover:bg-card transition-colors"
           >
-            <div className="flex items-start gap-2">
-              {getStatusIcon(log.status)}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <Badge variant="outline" className="text-xs">
-                    {log.agent}
-                  </Badge>
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-2 flex-wrap">
+                  {log.status === "success" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                  {log.status === "processing" && <Clock className="h-4 w-4 text-blue-500 animate-spin" />}
+                  {log.status === "pending" && <AlertCircle className="h-4 w-4 text-yellow-500" />}
+                  <span className="font-medium text-sm">{log.agent}</span>
                   <span className="text-xs text-muted-foreground">{log.timestamp}</span>
+                  {getVerificationBadge(log.verification_status)}
                 </div>
-                <p className="text-sm mb-2">{log.message}</p>
-                
-                {/* Display web search results */}
-                {log.agent === 'Web' && log.data?.items && log.data.items.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {log.data.items.map((item: any, idx: number) => (
-                      <Button
-                        key={idx}
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        asChild
-                      >
-                        <a href={item.link} target="_blank" rel="noopener noreferrer">
-                          Match {idx + 1}
-                          <ExternalLink className="ml-1 h-3 w-3" />
-                        </a>
-                      </Button>
-                    ))}
-                  </div>
-                )}
-                
-                {/* Display profile links for social, username, holehe, and email match agents */}
-                {(log.agent === 'Social' || log.agent === 'Username' || log.agent === 'Holehe' || log.agent === 'Email Match') && log.data && (
-                  <div className="flex flex-wrap gap-1.5 mt-2">
-                    {log.agent === 'Social' && log.data.profiles?.filter((p: any) => p.exists).map((profile: any, idx: number) => (
-                      <Button
-                        key={profile.platform}
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        asChild
-                      >
-                        <a href={profile.url} target="_blank" rel="noopener noreferrer">
-                          Match {idx + 1}
-                          <ExternalLink className="ml-1 h-3 w-3" />
-                        </a>
-                      </Button>
-                    ))}
-                    {log.agent === 'Username' && log.data.profileLinks?.map((link: any, idx: number) => (
-                      <Button
-                        key={link.platform}
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        asChild
-                      >
-                        <a href={link.url} target="_blank" rel="noopener noreferrer">
-                          Match {idx + 1}
-                          <ExternalLink className="ml-1 h-3 w-3" />
-                        </a>
-                      </Button>
-                    ))}
-                    {log.agent === 'Holehe' && log.data.allResults?.filter((r: any) => r.exists).map((account: any, idx: number) => (
-                      <Button
-                        key={account.name}
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        asChild
-                      >
-                        <a href={account.url} target="_blank" rel="noopener noreferrer">
-                          Match {idx + 1}
-                          <ExternalLink className="ml-1 h-3 w-3" />
-                        </a>
-                      </Button>
-                    ))}
-                    {log.agent === 'Email Match' && log.data.profileLinks?.map((link: any, idx: number) => {
-                      const getPlatformIcon = (name: string) => {
-                        const lower = name.toLowerCase();
-                        if (lower.includes('instagram')) return <Instagram className="h-3 w-3" />;
-                        if (lower.includes('facebook')) return <Facebook className="h-3 w-3" />;
-                        if (lower.includes('twitter') || lower.includes('x.com')) return <Twitter className="h-3 w-3" />;
-                        if (lower.includes('github')) return <Github className="h-3 w-3" />;
-                        if (lower.includes('linkedin')) return <Linkedin className="h-3 w-3" />;
-                        return <Shield className="h-3 w-3" />;
-                      };
+                <p className="text-sm text-foreground/80 mb-2">{log.message}</p>
 
-                      return (
-                        <Button
-                          key={link.platform}
-                          variant="outline"
-                          size="sm"
-                          className="h-7 text-xs gap-1"
-                          asChild
-                        >
-                          <a href={link.url} target="_blank" rel="noopener noreferrer">
-                            {getPlatformIcon(link.platform)}
-                            Match {idx + 1}
-                            <ExternalLink className="ml-1 h-3 w-3" />
+                {log.agent_type === 'web' && log.data?.items && log.data.items.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    {log.data.items.slice(0, 3).map((item: any, idx: number) => (
+                      <div key={idx} className="flex items-start gap-2 text-xs bg-muted/30 p-2 rounded">
+                        <ExternalLink className="h-3 w-3 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1 min-w-0">
+                          <a 
+                            href={item.link} 
+                            target="_blank" 
+                            rel="noopener noreferrer"
+                            className="font-medium hover:underline text-primary line-clamp-1"
+                          >
+                            {item.title}
                           </a>
-                        </Button>
-                      );
-                    })}
+                          <p className="text-muted-foreground line-clamp-2 mt-0.5">{item.snippet}</p>
+                        </div>
+                      </div>
+                    ))}
+                    {log.data.items.length > 3 && (
+                      <p className="text-xs text-muted-foreground">
+                        + {log.data.items.length - 3} more results
+                      </p>
+                    )}
                   </div>
                 )}
+
+                {log.agent_type === 'social' && log.data?.profiles && (
+                  <div className="space-y-1 mt-3">
+                    {log.data.profiles
+                      .filter((profile: any) => profile.exists)
+                      .map((profile: any, idx: number) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs">
+                          <Badge variant="outline" className="gap-1">
+                            {profile.platform}
+                          </Badge>
+                          <a
+                            href={profile.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-primary hover:underline flex items-center gap-1"
+                          >
+                            View Profile
+                            <ExternalLink className="h-3 w-3" />
+                          </a>
+                        </div>
+                      ))}
+                  </div>
+                )}
+
+                {(log.agent_type === 'holehe' || log.agent_type === 'sherlock') && log.data?.matches && log.data.matches.length > 0 && (
+                  <div className="flex flex-wrap gap-2 mt-3">
+                    {log.data.matches.slice(0, 10).map((match: any, idx: number) => (
+                      <Badge key={idx} variant="secondary" className="gap-1.5 text-xs">
+                        {getPlatformIcon(match.platform || match.site || match.name)}
+                        {match.platform || match.site || match.name}
+                      </Badge>
+                    ))}
+                    {log.data.matches.length > 10 && (
+                      <Badge variant="outline" className="text-xs">
+                        +{log.data.matches.length - 10} more
+                      </Badge>
+                    )}
+                  </div>
+                )}
+
+                <div className="flex gap-2 mt-3 pt-3 border-t border-border/30">
+                  <Button
+                    size="sm"
+                    variant={log.verification_status === 'verified' ? 'default' : 'outline'}
+                    onClick={() => updateVerificationStatus(log.id, 'verified')}
+                    className="flex-1"
+                  >
+                    <Check className="h-3 w-3 mr-1" />
+                    Verified
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={log.verification_status === 'needs_review' ? 'default' : 'outline'}
+                    onClick={() => updateVerificationStatus(log.id, 'needs_review')}
+                    className="flex-1"
+                  >
+                    <AlertCircle className="h-3 w-3 mr-1" />
+                    Review
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant={log.verification_status === 'inaccurate' ? 'destructive' : 'outline'}
+                    onClick={() => updateVerificationStatus(log.id, 'inaccurate')}
+                    className="flex-1"
+                  >
+                    <X className="h-3 w-3 mr-1" />
+                    Inaccurate
+                  </Button>
+                </div>
               </div>
             </div>
           </div>
