@@ -53,9 +53,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               ? `Found ${found} social media profiles: ${profiles.filter((p: any) => p.exists).map((p: any) => p.platform).join(', ')}`
               : 'No social media profiles found';
           } else if (finding.agent_type === 'web') {
-            message = data.abstract 
-              ? `Web search found: ${data.abstractSource || 'information'}`
-              : 'Web search completed - no results';
+            const items = data.items || [];
+            message = items.length > 0
+              ? `Found ${items.length} web results from ${data.totalResults || '0'} total matches`
+              : data.error || 'No web results found';
           } else if (finding.agent_type === 'email') {
             message = data.isValid 
               ? `Email validated: ${data.domain}`
@@ -100,9 +101,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               ? `Found ${found} social media profiles: ${profiles.filter((p: any) => p.exists).map((p: any) => p.platform).join(', ')}`
               : 'No social media profiles found';
           } else if (finding.agent_type === 'web') {
-            message = data.abstract 
-              ? `Web search found: ${data.abstractSource || 'information'}`
-              : 'Web search completed - no results';
+            const items = data.items || [];
+            message = items.length > 0
+              ? `Found ${items.length} web results from ${data.totalResults || '0'} total matches`
+              : data.error || 'No web results found';
           } else if (finding.agent_type === 'email') {
             message = data.isValid 
               ? `Email validated: ${data.domain}`

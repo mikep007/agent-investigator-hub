@@ -5,6 +5,9 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+const GOOGLE_API_KEY = Deno.env.get('GOOGLE_API_KEY');
+const GOOGLE_SEARCH_ENGINE_ID = Deno.env.get('GOOGLE_SEARCH_ENGINE_ID');
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -14,24 +17,34 @@ Deno.serve(async (req) => {
     const { target } = await req.json();
     console.log('Web search for:', target);
 
-    // Using DuckDuckGo's instant answer API (free, no key needed)
-    const searchUrl = `https://api.duckduckgo.com/?q=${encodeURIComponent(target)}&format=json&no_html=1&skip_disambig=1`;
+    if (!GOOGLE_API_KEY || !GOOGLE_SEARCH_ENGINE_ID) {
+      throw new Error('Google API credentials not configured');
+    }
+
+    // Using Google Custom Search API
+    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_SEARCH_ENGINE_ID}&q=${encodeURIComponent(target)}`;
     
     const response = await fetch(searchUrl);
     const data = await response.json();
 
+    console.log('Google API response:', data);
+
+    if (data.error) {
+      throw new Error(`Google API error: ${data.error.message}`);
+    }
+
     const results = {
-      abstract: data.Abstract || '',
-      abstractSource: data.AbstractSource || '',
-      abstractUrl: data.AbstractURL || '',
-      relatedTopics: data.RelatedTopics?.slice(0, 5).map((topic: any) => ({
-        text: topic.Text || '',
-        url: topic.FirstURL || ''
-      })) || [],
-      infobox: data.Infobox || null
+      searchInformation: data.searchInformation || {},
+      items: (data.items || []).slice(0, 10).map((item: any) => ({
+        title: item.title || '',
+        link: item.link || '',
+        snippet: item.snippet || '',
+        displayLink: item.displayLink || ''
+      })),
+      totalResults: data.searchInformation?.totalResults || '0'
     };
 
-    console.log('Web search results found:', results.abstract ? 'Yes' : 'No');
+    console.log('Web search results found:', results.items.length, 'results');
 
     return new Response(JSON.stringify(results), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
