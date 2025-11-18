@@ -23,6 +23,7 @@ export type Database = {
           id: string
           investigation_id: string
           source: string
+          verification_status: string | null
         }
         Insert: {
           agent_type: string
@@ -32,6 +33,7 @@ export type Database = {
           id?: string
           investigation_id: string
           source: string
+          verification_status?: string | null
         }
         Update: {
           agent_type?: string
@@ -41,6 +43,7 @@ export type Database = {
           id?: string
           investigation_id?: string
           source?: string
+          verification_status?: string | null
         }
         Relationships: [
           {

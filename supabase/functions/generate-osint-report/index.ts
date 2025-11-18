@@ -51,8 +51,11 @@ Deno.serve(async (req) => {
       throw new Error(`Failed to fetch investigation: ${invError.message}`);
     }
 
-    // Organize findings by type
+    // Organize findings by type and verification status
     const organizedFindings = {
+      verified: findings.filter(f => f.verification_status === 'verified'),
+      needs_review: findings.filter(f => f.verification_status === 'needs_review'),
+      inaccurate: findings.filter(f => f.verification_status === 'inaccurate'),
       email_matches: findings.filter(f => f.agent_type === 'holehe' || f.agent_type === 'sherlock'),
       social_profiles: findings.filter(f => f.agent_type === 'social'),
       web_results: findings.filter(f => f.agent_type === 'web'),
@@ -68,10 +71,16 @@ Deno.serve(async (req) => {
 Your task is to analyze findings from various sources and create a comprehensive, well-organized report with these sections:
 
 1. **Executive Summary** - Brief overview of the investigation
-2. **Verified Matches** - High-confidence findings with clear evidence
-3. **Potential Matches** - Findings that need further verification
-4. **Digital Footprint Analysis** - Overall online presence assessment
-5. **Recommendations** - Next steps for investigation
+2. **Verified Matches** - Findings marked as verified by investigators
+3. **Potential Matches** - Findings that need further review
+4. **Inaccurate/Dismissed Findings** - Findings marked as inaccurate (briefly summarize why they may have been dismissed)
+5. **Digital Footprint Analysis** - Overall online presence assessment
+6. **Recommendations** - Next steps for investigation
+
+IMPORTANT: Pay special attention to the verification_status field in each finding:
+- 'verified' findings should be in the Verified Matches section
+- 'needs_review' findings should be in the Potential Matches section  
+- 'inaccurate' findings should be briefly mentioned in Inaccurate/Dismissed Findings section
 
 Use professional language, be objective, and clearly distinguish between confirmed and potential findings.
 Format the output in clean, readable Markdown.`;
@@ -84,13 +93,14 @@ FINDINGS DATA:
 ${JSON.stringify(organizedFindings, null, 2)}
 
 Analyze these findings and create a comprehensive report. Pay special attention to:
+- Verification status: ${organizedFindings.verified.length} verified, ${organizedFindings.needs_review.length} need review, ${organizedFindings.inaccurate.length} inaccurate
 - Email matches found via Holehe and Sherlock (these check if email is registered on platforms)
 - Social media profiles discovered
 - Web search results mentioning the target
 - Any patterns or connections between findings
-- Confidence levels for each finding
+- Confidence levels for each finding based on verification status
 
-Organize the report with clear sections and actionable insights.`;
+Organize the report with clear sections and actionable insights. Prioritize verified findings in your analysis.`;
 
     // Call Lovable AI
     const LOVABLE_API_KEY = Deno.env.get('LOVABLE_API_KEY');
