@@ -75,6 +75,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             message = data.found
               ? `Found ${data.count} location(s): ${data.locations?.[0]?.displayName || 'Location found'}`
               : 'No locations found';
+          } else if (finding.agent_type === 'account_enum') {
+            message = data.accountsFound > 0
+              ? `Found accounts on ${data.accountsFound} platforms: ${data.registeredPlatforms?.slice(0, 3).join(', ')}${data.accountsFound > 3 ? '...' : ''}`
+              : `No accounts found on ${data.totalPlatformsChecked} platforms`;
           }
 
           return {
@@ -136,6 +140,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             message = data.found
               ? `Found ${data.count} location(s): ${data.locations?.[0]?.displayName || 'Location found'}`
               : 'No locations found';
+          } else if (finding.agent_type === 'account_enum') {
+            message = data.accountsFound > 0
+              ? `Found accounts on ${data.accountsFound} platforms: ${data.registeredPlatforms?.slice(0, 3).join(', ')}${data.accountsFound > 3 ? '...' : ''}`
+              : `No accounts found on ${data.totalPlatformsChecked} platforms`;
           }
 
           const newLog: LogEntry = {
@@ -236,7 +244,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 )}
                 
                 {/* Display profile links for social and username agents */}
-                {(log.agent === 'Social' || log.agent === 'Username') && log.data && (
+                {(log.agent === 'Social' || log.agent === 'Username' || log.agent === 'Account_enum') && log.data && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {log.agent === 'Social' && log.data.profiles?.filter((p: any) => p.exists).map((profile: any) => (
                       <Button
@@ -262,6 +270,20 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                       >
                         <a href={link.url} target="_blank" rel="noopener noreferrer">
                           {link.platform}
+                          <ExternalLink className="ml-1 h-3 w-3" />
+                        </a>
+                      </Button>
+                    ))}
+                    {log.agent === 'Account_enum' && log.data.allResults?.filter((r: any) => r.exists).map((account: any) => (
+                      <Button
+                        key={account.platform}
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        asChild
+                      >
+                        <a href={account.url || '#'} target="_blank" rel="noopener noreferrer">
+                          {account.platform}
                           <ExternalLink className="ml-1 h-3 w-3" />
                         </a>
                       </Button>
