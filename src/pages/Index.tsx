@@ -122,6 +122,14 @@ const Index = () => {
       color: "text-primary"
     },
     {
+      id: "account_enum",
+      name: "Account Enumeration Agent",
+      icon: Activity,
+      status: "active",
+      task: "Checking 25+ platforms for registered accounts",
+      color: "text-orange-500"
+    },
+    {
       id: "username",
       name: "Username Enumeration Agent",
       icon: Search,

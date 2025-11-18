@@ -85,9 +85,14 @@ Deno.serve(async (req) => {
         })
       );
     } else if (searchType === 'email') {
-      // For emails: email lookup, social media
+      // For emails: email lookup, account enumeration, social media
       searches.push(
         fetch(`${supabaseUrl}/functions/v1/osint-email-lookup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+          body: JSON.stringify({ target })
+        }),
+        fetch(`${supabaseUrl}/functions/v1/osint-email-account-enum`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
           body: JSON.stringify({ target })
@@ -125,7 +130,7 @@ Deno.serve(async (req) => {
       } else if (searchType === 'username') {
         types.push('social', 'username');
       } else if (searchType === 'email') {
-        types.push('email', 'social');
+        types.push('email', 'account_enum', 'social');
       } else if (searchType === 'phone') {
         types.push('phone', 'social');
       }
