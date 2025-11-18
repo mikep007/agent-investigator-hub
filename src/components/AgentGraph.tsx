@@ -1,18 +1,124 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 interface AgentGraphProps {
   active: boolean;
+  investigationId: string | null;
 }
 
-const AgentGraph = ({ active }: AgentGraphProps) => {
+interface NodeData {
+  emails: string[];
+  usernames: string[];
+  phones: string[];
+  social: string[];
+  addresses: string[];
+  relatives: string[];
+}
+
+const AgentGraph = ({ active, investigationId }: AgentGraphProps) => {
   const [pulseNodes, setPulseNodes] = useState<number[]>([]);
+  const [nodeData, setNodeData] = useState<NodeData>({
+    emails: [],
+    usernames: [],
+    phones: [],
+    social: [],
+    addresses: [],
+    relatives: [],
+  });
 
   useEffect(() => {
-    if (!active) {
+    if (!active || !investigationId) {
       setPulseNodes([]);
+      setNodeData({
+        emails: [],
+        usernames: [],
+        phones: [],
+        social: [],
+        addresses: [],
+        relatives: [],
+      });
       return;
     }
+
+    const fetchFindings = async () => {
+      const { data } = await supabase
+        .from("findings")
+        .select("*")
+        .eq("investigation_id", investigationId)
+        .order("created_at", { ascending: true });
+
+      if (data) {
+        const newData: NodeData = {
+          emails: [],
+          usernames: [],
+          phones: [],
+          social: [],
+          addresses: [],
+          relatives: [],
+        };
+
+        data.forEach((finding) => {
+          const findingData = finding.data as any;
+          
+          if (finding.agent_type === "Holehe" && findingData.found) {
+            findingData.results?.forEach((result: any) => {
+              if (result.exists && result.platform && !newData.emails.includes(result.platform)) {
+                newData.emails.push(result.platform);
+              }
+            });
+          }
+          
+          if (finding.agent_type === "Sherlock" && findingData.found) {
+            findingData.platforms?.forEach((platform: any) => {
+              if (platform.exists && !newData.usernames.includes(platform.platform)) {
+                newData.usernames.push(platform.platform);
+              }
+            });
+          }
+          
+          if (finding.agent_type === "Social" && findingData.profiles) {
+            findingData.profiles.forEach((profile: any) => {
+              if (profile.exists && !newData.social.includes(profile.platform)) {
+                newData.social.push(profile.platform);
+              }
+            });
+          }
+          
+          if (finding.agent_type === "Phone" && findingData.valid) {
+            if (!newData.phones.includes(findingData.number || "Found")) {
+              newData.phones.push(findingData.number || "Found");
+            }
+          }
+          
+          if (finding.agent_type === "Address" && findingData.found) {
+            if (!newData.addresses.includes(findingData.location || "Found")) {
+              newData.addresses.push(findingData.location || "Found");
+            }
+          }
+        });
+
+        setNodeData(newData);
+      }
+    };
+
+    fetchFindings();
+
+    const channel = supabase
+      .channel(`findings:${investigationId}`)
+      .on(
+        "postgres_changes",
+        {
+          event: "INSERT",
+          schema: "public",
+          table: "findings",
+          filter: `investigation_id=eq.${investigationId}`,
+        },
+        () => {
+          fetchFindings();
+        }
+      )
+      .subscribe();
 
     const interval = setInterval(() => {
       setPulseNodes(prev => {
@@ -27,16 +133,19 @@ const AgentGraph = ({ active }: AgentGraphProps) => {
       });
     }, 1200);
 
-    return () => clearInterval(interval);
-  }, [active]);
+    return () => {
+      clearInterval(interval);
+      channel.unsubscribe();
+    };
+  }, [active, investigationId]);
 
   const nodes = [
-    { id: 0, x: 80, y: 150, label: "Email", color: "primary" },
-    { id: 1, x: 250, y: 80, label: "Username", color: "primary" },
-    { id: 2, x: 250, y: 220, label: "Phone", color: "accent" },
-    { id: 3, x: 420, y: 80, label: "Social", color: "cyber-glow" },
-    { id: 4, x: 420, y: 150, label: "Address", color: "primary" },
-    { id: 5, x: 420, y: 220, label: "Relatives", color: "accent" },
+    { id: 0, x: 80, y: 150, label: "Email", color: "primary", data: nodeData.emails },
+    { id: 1, x: 250, y: 80, label: "Username", color: "primary", data: nodeData.usernames },
+    { id: 2, x: 250, y: 220, label: "Phone", color: "accent", data: nodeData.phones },
+    { id: 3, x: 420, y: 80, label: "Social", color: "cyber-glow", data: nodeData.social },
+    { id: 4, x: 420, y: 150, label: "Address", color: "primary", data: nodeData.addresses },
+    { id: 5, x: 420, y: 220, label: "Relatives", color: "accent", data: nodeData.relatives },
   ];
 
   const edges = [
@@ -76,6 +185,9 @@ const AgentGraph = ({ active }: AgentGraphProps) => {
         {/* Draw nodes */}
         {nodes.map((node) => {
           const isActive = pulseNodes.includes(node.id);
+          const hasData = node.data && node.data.length > 0;
+          const dataCount = node.data?.length || 0;
+          
           return (
             <g key={node.id}>
               <circle
@@ -89,6 +201,25 @@ const AgentGraph = ({ active }: AgentGraphProps) => {
                   !isActive && "opacity-60"
                 )}
               />
+              {hasData && (
+                <circle
+                  cx={node.x + 18}
+                  cy={node.y - 18}
+                  r="12"
+                  fill="hsl(var(--accent))"
+                  className="drop-shadow-[0_0_8px_hsl(var(--accent))]"
+                />
+              )}
+              {hasData && (
+                <text
+                  x={node.x + 18}
+                  y={node.y - 14}
+                  textAnchor="middle"
+                  className="text-xs font-bold fill-accent-foreground"
+                >
+                  {dataCount}
+                </text>
+              )}
               <text
                 x={node.x}
                 y={node.y + 45}
@@ -97,6 +228,16 @@ const AgentGraph = ({ active }: AgentGraphProps) => {
               >
                 {node.label}
               </text>
+              {hasData && node.data && node.data.length > 0 && (
+                <text
+                  x={node.x}
+                  y={node.y + 60}
+                  textAnchor="middle"
+                  className="text-[10px] fill-muted-foreground"
+                >
+                  {node.data[0].length > 15 ? node.data[0].substring(0, 12) + "..." : node.data[0]}
+                </text>
+              )}
             </g>
           );
         })}
