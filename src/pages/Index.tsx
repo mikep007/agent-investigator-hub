@@ -71,19 +71,35 @@ const Index = () => {
       color: "text-primary"
     },
     {
-      id: "image",
-      name: "Image Analysis Agent",
-      icon: Image,
-      status: "processing",
-      task: "Analyzing photos for metadata",
+      id: "username",
+      name: "Username Enumeration Agent",
+      icon: Search,
+      status: "active",
+      task: "Checking username across platforms",
+      color: "text-primary"
+    },
+    {
+      id: "web",
+      name: "Web Search Agent",
+      icon: Search,
+      status: "active",
+      task: "Google search and web intel",
       color: "text-accent"
     },
     {
-      id: "timeline",
-      name: "Timeline Agent",
-      icon: Clock,
-      status: "idle",
-      task: "Building activity timeline",
+      id: "phone",
+      name: "Phone Lookup Agent",
+      icon: Activity,
+      status: "active",
+      task: "Validating phone numbers",
+      color: "text-accent"
+    },
+    {
+      id: "address",
+      name: "Address Search Agent",
+      icon: Target,
+      status: "active",
+      task: "Geocoding and location intel",
       color: "text-warning"
     },
     {

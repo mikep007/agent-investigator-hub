@@ -67,6 +67,30 @@ Deno.serve(async (req) => {
           'Authorization': authHeader
         },
         body: JSON.stringify({ target })
+      }),
+      fetch(`${supabaseUrl}/functions/v1/osint-phone-lookup`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({ target })
+      }),
+      fetch(`${supabaseUrl}/functions/v1/osint-username-enum`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({ target })
+      }),
+      fetch(`${supabaseUrl}/functions/v1/osint-address-search`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': authHeader
+        },
+        body: JSON.stringify({ target })
       })
     ];
 
@@ -75,7 +99,7 @@ Deno.serve(async (req) => {
     // Store findings
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
-      const agentTypes = ['social', 'web', 'email'];
+      const agentTypes = ['social', 'web', 'email', 'phone', 'username', 'address'];
       
       if (result.status === 'fulfilled') {
         const data = await result.value.json();

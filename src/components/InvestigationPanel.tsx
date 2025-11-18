@@ -61,6 +61,18 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             message = data.isValid 
               ? `Email validated: ${data.domain}`
               : 'Invalid email format';
+          } else if (finding.agent_type === 'phone') {
+            message = data.validity?.isValid
+              ? `Phone validated: ${data.formatted || data.number} (${data.carrier?.country || 'Unknown'})`
+              : 'Invalid phone number';
+          } else if (finding.agent_type === 'username') {
+            message = data.foundOn > 0
+              ? `Username found on ${data.foundOn} platforms: ${data.profileLinks?.slice(0, 3).map((p: any) => p.platform).join(', ')}`
+              : `Username not found on ${data.totalPlatforms} platforms`;
+          } else if (finding.agent_type === 'address') {
+            message = data.found
+              ? `Found ${data.count} location(s): ${data.locations?.[0]?.displayName || 'Location found'}`
+              : 'No locations found';
           }
 
           return {
@@ -109,6 +121,18 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             message = data.isValid 
               ? `Email validated: ${data.domain}`
               : 'Invalid email format';
+          } else if (finding.agent_type === 'phone') {
+            message = data.validity?.isValid
+              ? `Phone validated: ${data.formatted || data.number} (${data.carrier?.country || 'Unknown'})`
+              : 'Invalid phone number';
+          } else if (finding.agent_type === 'username') {
+            message = data.foundOn > 0
+              ? `Username found on ${data.foundOn} platforms: ${data.profileLinks?.slice(0, 3).map((p: any) => p.platform).join(', ')}`
+              : `Username not found on ${data.totalPlatforms} platforms`;
+          } else if (finding.agent_type === 'address') {
+            message = data.found
+              ? `Found ${data.count} location(s): ${data.locations?.[0]?.displayName || 'Location found'}`
+              : 'No locations found';
           }
 
           const newLog: LogEntry = {
