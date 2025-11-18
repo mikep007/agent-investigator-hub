@@ -7,6 +7,8 @@ import { Badge } from "@/components/ui/badge";
 import { Activity, Brain, Network, Search, UserSearch, Image, Clock, CheckCircle2, Target, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Label } from "@/components/ui/label";
 import AgentGraph from "@/components/AgentGraph";
 import InvestigationPanel from "@/components/InvestigationPanel";
 
@@ -14,6 +16,7 @@ const Index = () => {
   const [activeInvestigation, setActiveInvestigation] = useState(false);
   const [currentInvestigationId, setCurrentInvestigationId] = useState<string | null>(null);
   const [searchTarget, setSearchTarget] = useState("");
+  const [searchType, setSearchType] = useState<"name" | "username" | "email" | "phone">("name");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
@@ -33,20 +36,68 @@ const Index = () => {
     navigate("/auth");
   };
 
+  const validateInput = (): boolean => {
+    if (!searchTarget.trim()) {
+      toast({
+        title: "Validation Error",
+        description: "Please enter a search target",
+        variant: "destructive",
+      });
+      return false;
+    }
+
+    // Validate based on search type
+    if (searchType === "email") {
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(searchTarget.trim())) {
+        toast({
+          title: "Invalid Email",
+          description: "Please enter a valid email address",
+          variant: "destructive",
+        });
+        return false;
+      }
+    } else if (searchType === "phone") {
+      const phoneRegex = /^[\d\s\-\+\(\)]{10,}$/;
+      if (!phoneRegex.test(searchTarget.trim())) {
+        toast({
+          title: "Invalid Phone",
+          description: "Please enter a valid phone number (at least 10 digits)",
+          variant: "destructive",
+        });
+        return false;
+      }
+    } else if (searchType === "username") {
+      if (searchTarget.trim().length < 3) {
+        toast({
+          title: "Invalid Username",
+          description: "Username must be at least 3 characters",
+          variant: "destructive",
+        });
+        return false;
+      }
+    }
+
+    return true;
+  };
+
   const startInvestigation = async () => {
-    if (!searchTarget.trim()) return;
+    if (!validateInput()) return;
 
     setLoading(true);
     try {
       const { data, error } = await supabase.functions.invoke('osint-start-investigation', {
-        body: { target: searchTarget }
+        body: { 
+          target: searchTarget,
+          searchType: searchType
+        }
       });
 
       if (error) throw error;
 
       toast({
         title: "Investigation Started",
-        description: `Now investigating: ${searchTarget}`,
+        description: `Now investigating ${searchType}: ${searchTarget}`,
       });
       setActiveInvestigation(true);
       setCurrentInvestigationId(data.investigationId);
@@ -140,45 +191,127 @@ const Index = () => {
       </header>
 
       <main className="container mx-auto px-6 py-8">
-        {/* Search Input Panel */}
+        {/* Search Input Panel with Tabs */}
         <Card className="mb-8 p-6 bg-card/80 backdrop-blur border-border/50">
-          <div className="flex flex-col md:flex-row gap-4 items-start md:items-end">
-            <div className="flex-1 w-full">
-              <label className="text-sm font-medium mb-2 flex items-center gap-2">
-                <Target className="w-4 h-4 text-primary" />
-                Investigation Target
-              </label>
-              <Input
-                placeholder="Enter name, username, email, or identifier..."
-                value={searchTarget}
-                onChange={(e) => setSearchTarget(e.target.value)}
-                className="bg-background/50"
-                disabled={activeInvestigation}
-              />
-            </div>
-            <Button 
-              onClick={() => {
-                if (activeInvestigation) {
-                  setActiveInvestigation(false);
-                } else {
-                  startInvestigation();
-                }
-              }}
-              disabled={(!searchTarget.trim() && !activeInvestigation) || loading}
-              className="cyber-glow"
+          <Tabs value={searchType} onValueChange={(v) => setSearchType(v as any)} className="w-full">
+            <TabsList className="grid w-full grid-cols-4 mb-6">
+              <TabsTrigger value="name">Name</TabsTrigger>
+              <TabsTrigger value="username">Username</TabsTrigger>
+              <TabsTrigger value="email">Email</TabsTrigger>
+              <TabsTrigger value="phone">Phone</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="name" className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="name-input" className="flex items-center gap-2">
+                  <Target className="w-4 h-4 text-primary" />
+                  Full Name
+                </Label>
+                <Input
+                  id="name-input"
+                  type="text"
+                  placeholder="Enter first and last name..."
+                  value={searchTarget}
+                  onChange={(e) => setSearchTarget(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && startInvestigation()}
+                  className="bg-background/50"
+                  maxLength={100}
+                  disabled={loading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Search for social profiles, web presence, and address information
+                </p>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="username" className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="username-input" className="flex items-center gap-2">
+                  <UserSearch className="w-4 h-4 text-primary" />
+                  Username / Handle
+                </Label>
+                <Input
+                  id="username-input"
+                  type="text"
+                  placeholder="Enter username (without @)..."
+                  value={searchTarget}
+                  onChange={(e) => setSearchTarget(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && startInvestigation()}
+                  className="bg-background/50"
+                  maxLength={50}
+                  disabled={loading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Check username across 10+ platforms: GitHub, Reddit, Twitter, LinkedIn, and more
+                </p>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="email" className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="email-input" className="flex items-center gap-2">
+                  <Search className="w-4 h-4 text-primary" />
+                  Email Address
+                </Label>
+                <Input
+                  id="email-input"
+                  type="email"
+                  placeholder="Enter email address..."
+                  value={searchTarget}
+                  onChange={(e) => setSearchTarget(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && startInvestigation()}
+                  className="bg-background/50"
+                  maxLength={255}
+                  disabled={loading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Validate email and discover associated social profiles
+                </p>
+              </div>
+            </TabsContent>
+
+            <TabsContent value="phone" className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="phone-input" className="flex items-center gap-2">
+                  <Activity className="w-4 h-4 text-primary" />
+                  Phone Number
+                </Label>
+                <Input
+                  id="phone-input"
+                  type="tel"
+                  placeholder="Enter phone number..."
+                  value={searchTarget}
+                  onChange={(e) => setSearchTarget(e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && startInvestigation()}
+                  className="bg-background/50"
+                  maxLength={20}
+                  disabled={loading}
+                />
+                <p className="text-xs text-muted-foreground">
+                  Lookup carrier, location, and validate phone number
+                </p>
+              </div>
+            </TabsContent>
+
+            <Button
+              onClick={startInvestigation}
+              disabled={loading || !searchTarget.trim()}
+              className="w-full mt-4 cyber-glow"
+              size="lg"
             >
-              <Search className="w-4 h-4 mr-2" />
-              {loading ? "Starting..." : activeInvestigation ? "Stop Investigation" : "Start Investigation"}
+              {loading ? (
+                <>
+                  <Activity className="w-4 h-4 mr-2 animate-spin" />
+                  Investigating...
+                </>
+              ) : (
+                <>
+                  <Search className="w-4 h-4 mr-2" />
+                  Start Investigation
+                </>
+              )}
             </Button>
-          </div>
-          {activeInvestigation && searchTarget && (
-            <div className="mt-4 p-3 bg-primary/10 border border-primary/30 rounded-lg">
-              <p className="text-sm">
-                <span className="text-muted-foreground">Investigating:</span>{" "}
-                <span className="text-primary font-semibold">{searchTarget}</span>
-              </p>
-            </div>
-          )}
+          </Tabs>
         </Card>
 
         {/* Agent Status Cards */}
