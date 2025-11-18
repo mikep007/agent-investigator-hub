@@ -57,7 +57,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           } else if (finding.agent_type === 'web') {
             const items = data.items || [];
             message = items.length > 0
-              ? `Found ${items.length} web results from ${data.totalResults || '0'} total matches`
+              ? `Found ${items.length} web results`
               : data.error || 'No web results found';
           } else if (finding.agent_type === 'email') {
             message = data.isValid 
@@ -118,7 +118,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           } else if (finding.agent_type === 'web') {
             const items = data.items || [];
             message = items.length > 0
-              ? `Found ${items.length} web results from ${data.totalResults || '0'} total matches`
+              ? `Found ${items.length} web results`
               : data.error || 'No web results found';
           } else if (finding.agent_type === 'email') {
             message = data.isValid 
@@ -204,6 +204,36 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                   <span className="text-xs text-muted-foreground">{log.timestamp}</span>
                 </div>
                 <p className="text-sm mb-2">{log.message}</p>
+                
+                {/* Display web search results */}
+                {log.agent === 'Web' && log.data?.items && log.data.items.length > 0 && (
+                  <div className="space-y-2 mt-3">
+                    {log.data.items.map((item: any, idx: number) => (
+                      <a
+                        key={idx}
+                        href={item.link}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block p-2 rounded border border-border/30 hover:border-primary/50 hover:bg-accent/50 transition-all"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="flex-1 min-w-0">
+                            <div className="text-xs text-primary font-medium mb-0.5 truncate">
+                              {item.displayLink}
+                            </div>
+                            <div className="text-sm font-medium text-foreground mb-1 line-clamp-1">
+                              {item.title}
+                            </div>
+                            <div className="text-xs text-muted-foreground line-clamp-2">
+                              {item.snippet}
+                            </div>
+                          </div>
+                          <ExternalLink className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-1" />
+                        </div>
+                      </a>
+                    ))}
+                  </div>
+                )}
                 
                 {/* Display profile links for social and username agents */}
                 {(log.agent === 'Social' || log.agent === 'Username') && log.data && (
