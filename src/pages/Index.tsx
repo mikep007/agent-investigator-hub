@@ -114,12 +114,20 @@ const Index = () => {
 
   const agents = [
     {
-      id: "social",
-      name: "Social Media Agent",
+      id: "holehe",
+      name: "Holehe Email Scanner",
+      icon: Brain,
+      status: "active",
+      task: "Checking 120+ platforms for email registration",
+      color: "text-orange-500"
+    },
+    {
+      id: "sherlock",
+      name: "Sherlock Username Hunter",
       icon: UserSearch,
       status: "active",
-      task: "Finding social profiles",
-      color: "text-primary"
+      task: "Searching 399+ sites for username profiles",
+      color: "text-cyan-500"
     },
     {
       id: "account_enum",
