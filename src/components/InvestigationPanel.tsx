@@ -3,9 +3,11 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { supabase } from "@/integrations/supabase/client";
 
 interface InvestigationPanelProps {
   active: boolean;
+  investigationId: string | null;
 }
 
 interface LogEntry {
@@ -16,43 +18,114 @@ interface LogEntry {
   status: "success" | "processing" | "pending";
 }
 
-const InvestigationPanel = ({ active }: InvestigationPanelProps) => {
+const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
 
   useEffect(() => {
-    if (!active) {
+    if (!active || !investigationId) {
       setLogs([]);
       return;
     }
 
-    const mockLogs: Omit<LogEntry, "id" | "timestamp">[] = [
-      { agent: "Social Media", message: "Found Instagram profile @target_user", status: "success" },
-      { agent: "Image Analysis", message: "Analyzing profile photo metadata...", status: "processing" },
-      { agent: "Image Analysis", message: "Detected birthday cake with 20 candles", status: "success" },
-      { agent: "Timeline", message: "Estimating DOB from photo context", status: "processing" },
-      { agent: "Social Media", message: "Found military service photo", status: "success" },
-      { agent: "Correlation", message: "Cross-referencing rank insignia", status: "processing" },
-      { agent: "Timeline", message: "Estimated service period: 2020-2023", status: "success" },
-      { agent: "Correlation", message: "Building comprehensive profile", status: "processing" },
-    ];
+    const fetchFindings = async () => {
+      const { data: findings, error } = await supabase
+        .from('findings')
+        .select('*')
+        .eq('investigation_id', investigationId)
+        .order('created_at', { ascending: true });
 
-    let index = 0;
-    const interval = setInterval(() => {
-      if (index < mockLogs.length) {
-        const newLog = {
-          ...mockLogs[index],
-          id: `log-${Date.now()}-${index}`,
-          timestamp: new Date().toLocaleTimeString(),
-        };
-        setLogs(prev => [...prev, newLog]);
-        index++;
-      } else {
-        clearInterval(interval);
+      if (error) {
+        console.error('Error fetching findings:', error);
+        return;
       }
-    }, 2000);
 
-    return () => clearInterval(interval);
-  }, [active]);
+      if (findings) {
+        const formattedLogs: LogEntry[] = findings.map((finding) => {
+          const data = finding.data as any;
+          let message = '';
+          let status: "success" | "processing" | "pending" = "success";
+
+          // Format message based on agent type and data
+          if (finding.agent_type === 'social') {
+            const profiles = data.results || [];
+            const found = profiles.filter((p: any) => p.exists).length;
+            message = found > 0 
+              ? `Found ${found} social media profiles`
+              : 'No social media profiles found';
+          } else if (finding.agent_type === 'web') {
+            message = data.abstract 
+              ? `Web search found: ${data.abstractSource || 'information'}`
+              : 'Web search completed - no results';
+          } else if (finding.agent_type === 'email') {
+            message = data.isValid 
+              ? `Email validated: ${data.domain}`
+              : 'Invalid email format';
+          }
+
+          return {
+            id: finding.id,
+            timestamp: new Date(finding.created_at).toLocaleTimeString(),
+            agent: finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1),
+            message,
+            status,
+          };
+        });
+
+        setLogs(formattedLogs);
+      }
+    };
+
+    fetchFindings();
+
+    // Set up realtime subscription for new findings
+    const channel = supabase
+      .channel(`findings:${investigationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'findings',
+          filter: `investigation_id=eq.${investigationId}`,
+        },
+        (payload) => {
+          const finding = payload.new;
+          const data = finding.data as any;
+          let message = '';
+          
+          if (finding.agent_type === 'social') {
+            const profiles = data.results || [];
+            const found = profiles.filter((p: any) => p.exists).length;
+            message = found > 0 
+              ? `Found ${found} social media profiles`
+              : 'No social media profiles found';
+          } else if (finding.agent_type === 'web') {
+            message = data.abstract 
+              ? `Web search found: ${data.abstractSource || 'information'}`
+              : 'Web search completed - no results';
+          } else if (finding.agent_type === 'email') {
+            message = data.isValid 
+              ? `Email validated: ${data.domain}`
+              : 'Invalid email format';
+          }
+
+          const newLog: LogEntry = {
+            id: finding.id,
+            timestamp: new Date(finding.created_at).toLocaleTimeString(),
+            agent: finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1),
+            message,
+            status: "success",
+          };
+
+          setLogs((prev) => [...prev, newLog]);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [active, investigationId]);
 
   const getStatusIcon = (status: LogEntry["status"]) => {
     switch (status) {

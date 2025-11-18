@@ -12,6 +12,7 @@ import InvestigationPanel from "@/components/InvestigationPanel";
 
 const Index = () => {
   const [activeInvestigation, setActiveInvestigation] = useState(false);
+  const [currentInvestigationId, setCurrentInvestigationId] = useState<string | null>(null);
   const [searchTarget, setSearchTarget] = useState("");
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
@@ -48,6 +49,7 @@ const Index = () => {
         description: `Now investigating: ${searchTarget}`,
       });
       setActiveInvestigation(true);
+      setCurrentInvestigationId(data.investigationId);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -205,7 +207,7 @@ const Index = () => {
               <Search className="w-5 h-5 text-primary" />
               Investigation Log
             </h2>
-            <InvestigationPanel active={activeInvestigation} />
+            <InvestigationPanel active={activeInvestigation} investigationId={currentInvestigationId} />
           </Card>
         </div>
 
