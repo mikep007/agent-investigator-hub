@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Clock, AlertCircle, ExternalLink } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, ExternalLink, Shield, Instagram, Facebook, Twitter, Github, Linkedin } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -18,6 +18,7 @@ interface LogEntry {
   message: string;
   status: "success" | "processing" | "pending";
   data?: any;
+  agent_type?: string;
 }
 
 const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps) => {
@@ -85,13 +86,16 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               : 'No profile matches found';
           }
 
+          const displayAgent = finding.agent_type === 'sherlock' ? 'Email Match' : finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1);
+          
           return {
             id: finding.id,
             timestamp: new Date(finding.created_at).toLocaleTimeString(),
-            agent: finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1),
+            agent: displayAgent,
             message,
             status,
             data: finding.data,
+            agent_type: finding.agent_type,
           };
         });
 
@@ -121,46 +125,49 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             const profiles = data.profiles || [];
             const found = profiles.filter((p: any) => p.exists);
             message = found.length > 0 
-              ? `Found ${found.length} social media profile(s)`
-              : 'No social media profiles found';
+              ? `Found ${found.length} profile match${found.length > 1 ? 'es' : ''}`
+              : 'No profiles found';
           } else if (finding.agent_type === 'web') {
             const items = data.items || [];
             message = items.length > 0
-              ? `Found ${items.length} web results`
+              ? `Found ${items.length} web match${items.length > 1 ? 'es' : ''}`
               : data.error || 'No web results found';
           } else if (finding.agent_type === 'email') {
             message = data.isValid 
-              ? `Email validated: ${data.domain}`
-              : 'Invalid email format';
+              ? `Email verified`
+              : 'Email not verified';
           } else if (finding.agent_type === 'phone') {
             message = data.validity?.isValid
-              ? `Phone validated: ${data.formatted || data.number} (${data.carrier?.country || 'Unknown'})`
-              : 'Invalid phone number';
+              ? `Phone number verified`
+              : 'Phone number not verified';
           } else if (finding.agent_type === 'username') {
             message = data.foundOn > 0
-              ? `Username found on ${data.foundOn} platforms: ${data.profileLinks?.slice(0, 3).map((p: any) => p.platform).join(', ')}`
-              : `Username not found on ${data.totalPlatforms} platforms`;
+              ? `Found ${data.foundOn} username match${data.foundOn > 1 ? 'es' : ''}`
+              : 'No username matches found';
           } else if (finding.agent_type === 'address') {
             message = data.found
-              ? `Found ${data.count} location(s): ${data.locations?.[0]?.displayName || 'Location found'}`
+              ? `Found ${data.count} location match${data.count > 1 ? 'es' : ''}`
               : 'No locations found';
           } else if (finding.agent_type === 'holehe') {
             message = data.accountsFound > 0
-              ? `Holehe found ${data.accountsFound} accounts on ${data.totalPlatforms} platforms checked`
-              : `No accounts found (${data.totalPlatforms} platforms checked)`;
+              ? `Found ${data.accountsFound} account match${data.accountsFound > 1 ? 'es' : ''}`
+              : 'No account matches found';
           } else if (finding.agent_type === 'sherlock') {
             message = data.profilesFound > 0
-              ? `Sherlock found ${data.profilesFound} profiles on ${data.totalSitesChecked} sites checked`
-              : `No profiles found (${data.totalSitesChecked} sites checked)`;
+              ? `Found ${data.profilesFound} profile match${data.profilesFound > 1 ? 'es' : ''}`
+              : 'No profile matches found';
           }
+
+          const displayAgent = finding.agent_type === 'sherlock' ? 'Email Match' : finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1);
 
           const newLog: LogEntry = {
             id: finding.id,
             timestamp: new Date(finding.created_at).toLocaleTimeString(),
-            agent: finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1),
+            agent: displayAgent,
             message,
             status: "success",
             data: finding.data,
+            agent_type: finding.agent_type,
           };
 
           setLogs((prev) => [...prev, newLog]);
@@ -241,8 +248,8 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                   </div>
                 )}
                 
-                {/* Display profile links for social, username, holehe, and sherlock agents */}
-                {(log.agent === 'Social' || log.agent === 'Username' || log.agent === 'Holehe' || log.agent === 'Sherlock') && log.data && (
+                {/* Display profile links for social, username, holehe, and email match agents */}
+                {(log.agent === 'Social' || log.agent === 'Username' || log.agent === 'Holehe' || log.agent === 'Email Match') && log.data && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {log.agent === 'Social' && log.data.profiles?.filter((p: any) => p.exists).map((profile: any, idx: number) => (
                       <Button
@@ -286,20 +293,33 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         </a>
                       </Button>
                     ))}
-                    {log.agent === 'Sherlock' && log.data.profileLinks?.map((link: any) => (
-                      <Button
-                        key={link.platform}
-                        variant="outline"
-                        size="sm"
-                        className="h-7 text-xs"
-                        asChild
-                      >
-                        <a href={link.url} target="_blank" rel="noopener noreferrer">
-                          {link.platform} {link.category && `(${link.category})`}
-                          <ExternalLink className="ml-1 h-3 w-3" />
-                        </a>
-                      </Button>
-                    ))}
+                    {log.agent === 'Email Match' && log.data.profileLinks?.map((link: any, idx: number) => {
+                      const getPlatformIcon = (name: string) => {
+                        const lower = name.toLowerCase();
+                        if (lower.includes('instagram')) return <Instagram className="h-3 w-3" />;
+                        if (lower.includes('facebook')) return <Facebook className="h-3 w-3" />;
+                        if (lower.includes('twitter') || lower.includes('x.com')) return <Twitter className="h-3 w-3" />;
+                        if (lower.includes('github')) return <Github className="h-3 w-3" />;
+                        if (lower.includes('linkedin')) return <Linkedin className="h-3 w-3" />;
+                        return <Shield className="h-3 w-3" />;
+                      };
+
+                      return (
+                        <Button
+                          key={link.platform}
+                          variant="outline"
+                          size="sm"
+                          className="h-7 text-xs gap-1"
+                          asChild
+                        >
+                          <a href={link.url} target="_blank" rel="noopener noreferrer">
+                            {getPlatformIcon(link.platform)}
+                            Match {idx + 1}
+                            <ExternalLink className="ml-1 h-3 w-3" />
+                          </a>
+                        </Button>
+                      );
+                    })}
                   </div>
                 )}
               </div>
