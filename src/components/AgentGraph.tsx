@@ -17,31 +17,36 @@ const AgentGraph = ({ active }: AgentGraphProps) => {
     const interval = setInterval(() => {
       setPulseNodes(prev => {
         const next = [...prev];
-        if (next.length < 4) {
+        if (next.length < 6) {
           next.push(next.length);
         } else {
           next.shift();
-          next.push((next[next.length - 1] + 1) % 4);
+          next.push((next[next.length - 1] + 1) % 6);
         }
         return next;
       });
-    }, 1500);
+    }, 1200);
 
     return () => clearInterval(interval);
   }, [active]);
 
   const nodes = [
-    { id: 0, x: 50, y: 50, label: "Input", color: "primary" },
-    { id: 1, x: 250, y: 30, label: "Social", color: "primary" },
-    { id: 2, x: 250, y: 120, label: "Image", color: "accent" },
-    { id: 3, x: 450, y: 75, label: "Correlate", color: "cyber-glow" },
+    { id: 0, x: 80, y: 150, label: "Email", color: "primary" },
+    { id: 1, x: 250, y: 80, label: "Username", color: "primary" },
+    { id: 2, x: 250, y: 220, label: "Phone", color: "accent" },
+    { id: 3, x: 420, y: 80, label: "Social", color: "cyber-glow" },
+    { id: 4, x: 420, y: 150, label: "Address", color: "primary" },
+    { id: 5, x: 420, y: 220, label: "Relatives", color: "accent" },
   ];
 
   const edges = [
     { from: 0, to: 1 },
     { from: 0, to: 2 },
     { from: 1, to: 3 },
-    { from: 2, to: 3 },
+    { from: 2, to: 5 },
+    { from: 1, to: 4 },
+    { from: 3, to: 4 },
+    { from: 4, to: 5 },
   ];
 
   return (
