@@ -14,7 +14,71 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      findings: {
+        Row: {
+          agent_type: string
+          confidence_score: number | null
+          created_at: string
+          data: Json
+          id: string
+          investigation_id: string
+          source: string
+        }
+        Insert: {
+          agent_type: string
+          confidence_score?: number | null
+          created_at?: string
+          data: Json
+          id?: string
+          investigation_id: string
+          source: string
+        }
+        Update: {
+          agent_type?: string
+          confidence_score?: number | null
+          created_at?: string
+          data?: Json
+          id?: string
+          investigation_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "findings_investigation_id_fkey"
+            columns: ["investigation_id"]
+            isOneToOne: false
+            referencedRelation: "investigations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      investigations: {
+        Row: {
+          created_at: string
+          id: string
+          status: string
+          target: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          status?: string
+          target: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          status?: string
+          target?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

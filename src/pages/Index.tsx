@@ -1,15 +1,63 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
+import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Activity, Brain, Network, Search, UserSearch, Image, Clock, CheckCircle2, Target } from "lucide-react";
+import { Activity, Brain, Network, Search, UserSearch, Image, Clock, CheckCircle2, Target, LogOut } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { useToast } from "@/hooks/use-toast";
 import AgentGraph from "@/components/AgentGraph";
 import InvestigationPanel from "@/components/InvestigationPanel";
 
 const Index = () => {
   const [activeInvestigation, setActiveInvestigation] = useState(false);
   const [searchTarget, setSearchTarget] = useState("");
+  const [loading, setLoading] = useState(false);
+  const navigate = useNavigate();
+  const { toast } = useToast();
+
+  useEffect(() => {
+    const checkAuth = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        navigate("/auth");
+      }
+    };
+    checkAuth();
+  }, [navigate]);
+
+  const handleSignOut = async () => {
+    await supabase.auth.signOut();
+    navigate("/auth");
+  };
+
+  const startInvestigation = async () => {
+    if (!searchTarget.trim()) return;
+
+    setLoading(true);
+    try {
+      const { data, error } = await supabase.functions.invoke('osint-start-investigation', {
+        body: { target: searchTarget }
+      });
+
+      if (error) throw error;
+
+      toast({
+        title: "Investigation Started",
+        description: `Now investigating: ${searchTarget}`,
+      });
+      setActiveInvestigation(true);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to start investigation",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const agents = [
     {
@@ -59,10 +107,16 @@ const Index = () => {
                 <p className="text-sm text-muted-foreground">Multi-Agent Investigation Platform</p>
               </div>
             </div>
-            <Badge variant="outline" className="border-primary text-primary">
-              <Activity className="w-3 h-3 mr-1" />
-              {agents.filter(a => a.status === "active").length} Active
-            </Badge>
+            <div className="flex items-center gap-3">
+              <Badge variant="outline" className="border-primary text-primary">
+                <Activity className="w-3 h-3 mr-1" />
+                {agents.filter(a => a.status === "active").length} Active
+              </Badge>
+              <Button variant="ghost" size="sm" onClick={handleSignOut}>
+                <LogOut className="w-4 h-4 mr-2" />
+                Sign Out
+              </Button>
+            </div>
           </div>
         </div>
       </header>
@@ -86,15 +140,17 @@ const Index = () => {
             </div>
             <Button 
               onClick={() => {
-                if (searchTarget.trim()) {
-                  setActiveInvestigation(!activeInvestigation);
+                if (activeInvestigation) {
+                  setActiveInvestigation(false);
+                } else {
+                  startInvestigation();
                 }
               }}
-              disabled={!searchTarget.trim() && !activeInvestigation}
+              disabled={(!searchTarget.trim() && !activeInvestigation) || loading}
               className="cyber-glow"
             >
               <Search className="w-4 h-4 mr-2" />
-              {activeInvestigation ? "Stop Investigation" : "Start Investigation"}
+              {loading ? "Starting..." : activeInvestigation ? "Stop Investigation" : "Start Investigation"}
             </Button>
           </div>
           {activeInvestigation && searchTarget && (
