@@ -1,7 +1,8 @@
 import { useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
-import { CheckCircle2, Clock, AlertCircle } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { CheckCircle2, Clock, AlertCircle, ExternalLink } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -16,6 +17,7 @@ interface LogEntry {
   agent: string;
   message: string;
   status: "success" | "processing" | "pending";
+  data?: any;
 }
 
 const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps) => {
@@ -48,9 +50,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           // Format message based on agent type and data
           if (finding.agent_type === 'social') {
             const profiles = data.profiles || [];
-            const found = profiles.filter((p: any) => p.exists).length;
-            message = found > 0 
-              ? `Found ${found} social media profiles: ${profiles.filter((p: any) => p.exists).map((p: any) => p.platform).join(', ')}`
+            const found = profiles.filter((p: any) => p.exists);
+            message = found.length > 0 
+              ? `Found ${found.length} social media profile(s)`
               : 'No social media profiles found';
           } else if (finding.agent_type === 'web') {
             const items = data.items || [];
@@ -81,6 +83,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             agent: finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1),
             message,
             status,
+            data: finding.data,
           };
         });
 
@@ -108,9 +111,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           
           if (finding.agent_type === 'social') {
             const profiles = data.profiles || [];
-            const found = profiles.filter((p: any) => p.exists).length;
-            message = found > 0 
-              ? `Found ${found} social media profiles: ${profiles.filter((p: any) => p.exists).map((p: any) => p.platform).join(', ')}`
+            const found = profiles.filter((p: any) => p.exists);
+            message = found.length > 0 
+              ? `Found ${found.length} social media profile(s)`
               : 'No social media profiles found';
           } else if (finding.agent_type === 'web') {
             const items = data.items || [];
@@ -141,6 +144,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             agent: finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1),
             message,
             status: "success",
+            data: finding.data,
           };
 
           setLogs((prev) => [...prev, newLog]);
@@ -199,7 +203,41 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                   </Badge>
                   <span className="text-xs text-muted-foreground">{log.timestamp}</span>
                 </div>
-                <p className="text-sm">{log.message}</p>
+                <p className="text-sm mb-2">{log.message}</p>
+                
+                {/* Display profile links for social and username agents */}
+                {(log.agent === 'Social' || log.agent === 'Username') && log.data && (
+                  <div className="flex flex-wrap gap-1.5 mt-2">
+                    {log.agent === 'Social' && log.data.profiles?.filter((p: any) => p.exists).map((profile: any) => (
+                      <Button
+                        key={profile.platform}
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        asChild
+                      >
+                        <a href={profile.url} target="_blank" rel="noopener noreferrer">
+                          {profile.platform}
+                          <ExternalLink className="ml-1 h-3 w-3" />
+                        </a>
+                      </Button>
+                    ))}
+                    {log.agent === 'Username' && log.data.profileLinks?.map((link: any) => (
+                      <Button
+                        key={link.platform}
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        asChild
+                      >
+                        <a href={link.url} target="_blank" rel="noopener noreferrer">
+                          {link.platform}
+                          <ExternalLink className="ml-1 h-3 w-3" />
+                        </a>
+                      </Button>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
           </div>
