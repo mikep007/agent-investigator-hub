@@ -15,8 +15,8 @@ Deno.serve(async (req) => {
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
     const authHeader = req.headers.get('Authorization')!;
 
-    const { target } = await req.json();
-    console.log('Starting investigation for:', target);
+    const { target, searchType } = await req.json();
+    console.log('Starting investigation for:', target, 'type:', searchType);
 
     // Get current user from JWT
     const jwt = authHeader.replace('Bearer ', '');
@@ -42,64 +42,102 @@ Deno.serve(async (req) => {
     const [investigation] = await invResponse.json();
     console.log('Investigation created:', investigation.id);
 
-    // Start different OSINT searches in parallel
-    const searches = [
-      fetch(`${supabaseUrl}/functions/v1/osint-social-search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({ target })
-      }),
-      fetch(`${supabaseUrl}/functions/v1/osint-web-search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({ target })
-      }),
-      fetch(`${supabaseUrl}/functions/v1/osint-email-lookup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({ target })
-      }),
-      fetch(`${supabaseUrl}/functions/v1/osint-phone-lookup`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({ target })
-      }),
-      fetch(`${supabaseUrl}/functions/v1/osint-username-enum`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({ target })
-      }),
-      fetch(`${supabaseUrl}/functions/v1/osint-address-search`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': authHeader
-        },
-        body: JSON.stringify({ target })
-      })
-    ];
+    // Start different OSINT searches based on search type
+    const searches = [];
+    
+    // Always run web search
+    searches.push(fetch(`${supabaseUrl}/functions/v1/osint-web-search`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': authHeader
+      },
+      body: JSON.stringify({ target })
+    }));
+
+    // Type-specific searches
+    if (searchType === 'name') {
+      // For names: social media, web, address
+      searches.push(
+        fetch(`${supabaseUrl}/functions/v1/osint-social-search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+          body: JSON.stringify({ target })
+        }),
+        fetch(`${supabaseUrl}/functions/v1/osint-address-search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+          body: JSON.stringify({ target })
+        })
+      );
+    } else if (searchType === 'username') {
+      // For usernames: social media, username enumeration
+      searches.push(
+        fetch(`${supabaseUrl}/functions/v1/osint-social-search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+          body: JSON.stringify({ target })
+        }),
+        fetch(`${supabaseUrl}/functions/v1/osint-username-enum`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+          body: JSON.stringify({ target })
+        })
+      );
+    } else if (searchType === 'email') {
+      // For emails: email lookup, social media
+      searches.push(
+        fetch(`${supabaseUrl}/functions/v1/osint-email-lookup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+          body: JSON.stringify({ target })
+        }),
+        fetch(`${supabaseUrl}/functions/v1/osint-social-search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+          body: JSON.stringify({ target })
+        })
+      );
+    } else if (searchType === 'phone') {
+      // For phones: phone lookup, social media
+      searches.push(
+        fetch(`${supabaseUrl}/functions/v1/osint-phone-lookup`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+          body: JSON.stringify({ target })
+        }),
+        fetch(`${supabaseUrl}/functions/v1/osint-social-search`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
+          body: JSON.stringify({ target })
+        })
+      );
+    }
 
     const results = await Promise.allSettled(searches);
+    
+    // Determine agent types based on search type
+    const getAgentTypes = (searchType: string) => {
+      const types = ['web']; // Always include web
+      
+      if (searchType === 'name') {
+        types.push('social', 'address');
+      } else if (searchType === 'username') {
+        types.push('social', 'username');
+      } else if (searchType === 'email') {
+        types.push('email', 'social');
+      } else if (searchType === 'phone') {
+        types.push('phone', 'social');
+      }
+      
+      return types;
+    };
+    
+    const agentTypes = getAgentTypes(searchType);
     
     // Store findings
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
-      const agentTypes = ['social', 'web', 'email', 'phone', 'username', 'address'];
       
       if (result.status === 'fulfilled') {
         const data = await result.value.json();
