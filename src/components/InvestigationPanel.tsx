@@ -47,10 +47,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
 
           // Format message based on agent type and data
           if (finding.agent_type === 'social') {
-            const profiles = data.results || [];
+            const profiles = data.profiles || [];
             const found = profiles.filter((p: any) => p.exists).length;
             message = found > 0 
-              ? `Found ${found} social media profiles`
+              ? `Found ${found} social media profiles: ${profiles.filter((p: any) => p.exists).map((p: any) => p.platform).join(', ')}`
               : 'No social media profiles found';
           } else if (finding.agent_type === 'web') {
             message = data.abstract 
@@ -94,10 +94,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           let message = '';
           
           if (finding.agent_type === 'social') {
-            const profiles = data.results || [];
+            const profiles = data.profiles || [];
             const found = profiles.filter((p: any) => p.exists).length;
             message = found > 0 
-              ? `Found ${found} social media profiles`
+              ? `Found ${found} social media profiles: ${profiles.filter((p: any) => p.exists).map((p: any) => p.platform).join(', ')}`
               : 'No social media profiles found';
           } else if (finding.agent_type === 'web') {
             message = data.abstract 
