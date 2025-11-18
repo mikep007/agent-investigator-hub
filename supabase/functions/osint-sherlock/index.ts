@@ -145,6 +145,46 @@ Deno.serve(async (req) => {
 
         clearTimeout(timeoutId);
 
+        // Handle 405 Method Not Allowed - try GET instead
+        if (response.status === 405) {
+          try {
+            const getController = new AbortController();
+            const getTimeoutId = setTimeout(() => getController.abort(), 5000);
+            
+            const getResponse = await fetch(site.url, {
+              method: 'GET',
+              headers: {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+              },
+              signal: getController.signal
+            });
+            
+            clearTimeout(getTimeoutId);
+            const exists = getResponse.status === 200;
+            
+            if (exists) {
+              foundCount++;
+              console.log(`✓ ${site.name}`);
+            }
+
+            results.push({
+              name: site.name,
+              url: site.url,
+              exists,
+              category: site.category,
+            });
+            return;
+          } catch {
+            results.push({
+              name: site.name,
+              url: site.url,
+              exists: false,
+              category: site.category,
+            });
+            return;
+          }
+        }
+
         // Profile exists if we get 200 OK
         const exists = response.status === 200;
         

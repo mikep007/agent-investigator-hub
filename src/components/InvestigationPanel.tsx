@@ -52,37 +52,37 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             const profiles = data.profiles || [];
             const found = profiles.filter((p: any) => p.exists);
             message = found.length > 0 
-              ? `Found ${found.length} social media profile(s)`
-              : 'No social media profiles found';
+              ? `Found ${found.length} profile match${found.length > 1 ? 'es' : ''}`
+              : 'No profiles found';
           } else if (finding.agent_type === 'web') {
             const items = data.items || [];
             message = items.length > 0
-              ? `Found ${items.length} web results`
+              ? `Found ${items.length} web match${items.length > 1 ? 'es' : ''}`
               : data.error || 'No web results found';
           } else if (finding.agent_type === 'email') {
             message = data.isValid 
-              ? `Email validated: ${data.domain}`
-              : 'Invalid email format';
+              ? `Email verified`
+              : 'Email not verified';
           } else if (finding.agent_type === 'phone') {
             message = data.validity?.isValid
-              ? `Phone validated: ${data.formatted || data.number} (${data.carrier?.country || 'Unknown'})`
-              : 'Invalid phone number';
+              ? `Phone number verified`
+              : 'Phone number not verified';
           } else if (finding.agent_type === 'username') {
             message = data.foundOn > 0
-              ? `Username found on ${data.foundOn} platforms: ${data.profileLinks?.slice(0, 3).map((p: any) => p.platform).join(', ')}`
-              : `Username not found on ${data.totalPlatforms} platforms`;
+              ? `Found ${data.foundOn} username match${data.foundOn > 1 ? 'es' : ''}`
+              : 'No username matches found';
           } else if (finding.agent_type === 'address') {
             message = data.found
-              ? `Found ${data.count} location(s): ${data.locations?.[0]?.displayName || 'Location found'}`
+              ? `Found ${data.count} location match${data.count > 1 ? 'es' : ''}`
               : 'No locations found';
           } else if (finding.agent_type === 'holehe') {
             message = data.accountsFound > 0
-              ? `Holehe found ${data.accountsFound} accounts on ${data.totalPlatforms} platforms checked`
-              : `No accounts found (${data.totalPlatforms} platforms checked)`;
+              ? `Found ${data.accountsFound} account match${data.accountsFound > 1 ? 'es' : ''}`
+              : 'No account matches found';
           } else if (finding.agent_type === 'sherlock') {
             message = data.profilesFound > 0
-              ? `Sherlock found ${data.profilesFound} profiles on ${data.totalSitesChecked} sites checked`
-              : `No profiles found (${data.totalSitesChecked} sites checked)`;
+              ? `Found ${data.profilesFound} profile match${data.profilesFound > 1 ? 'es' : ''}`
+              : 'No profile matches found';
           }
 
           return {
@@ -223,30 +223,20 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 
                 {/* Display web search results */}
                 {log.agent === 'Web' && log.data?.items && log.data.items.length > 0 && (
-                  <div className="space-y-2 mt-3">
+                  <div className="flex flex-wrap gap-1.5 mt-2">
                     {log.data.items.map((item: any, idx: number) => (
-                      <a
+                      <Button
                         key={idx}
-                        href={item.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block p-2 rounded border border-border/30 hover:border-primary/50 hover:bg-accent/50 transition-all"
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        asChild
                       >
-                        <div className="flex items-start justify-between gap-2">
-                          <div className="flex-1 min-w-0">
-                            <div className="text-xs text-primary font-medium mb-0.5 truncate">
-                              {item.displayLink}
-                            </div>
-                            <div className="text-sm font-medium text-foreground mb-1 line-clamp-1">
-                              {item.title}
-                            </div>
-                            <div className="text-xs text-muted-foreground line-clamp-2">
-                              {item.snippet}
-                            </div>
-                          </div>
-                          <ExternalLink className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-1" />
-                        </div>
-                      </a>
+                        <a href={item.link} target="_blank" rel="noopener noreferrer">
+                          Match {idx + 1}
+                          <ExternalLink className="ml-1 h-3 w-3" />
+                        </a>
+                      </Button>
                     ))}
                   </div>
                 )}
@@ -254,7 +244,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 {/* Display profile links for social, username, holehe, and sherlock agents */}
                 {(log.agent === 'Social' || log.agent === 'Username' || log.agent === 'Holehe' || log.agent === 'Sherlock') && log.data && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
-                    {log.agent === 'Social' && log.data.profiles?.filter((p: any) => p.exists).map((profile: any) => (
+                    {log.agent === 'Social' && log.data.profiles?.filter((p: any) => p.exists).map((profile: any, idx: number) => (
                       <Button
                         key={profile.platform}
                         variant="outline"
@@ -263,12 +253,12 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         asChild
                       >
                         <a href={profile.url} target="_blank" rel="noopener noreferrer">
-                          {profile.platform}
+                          Match {idx + 1}
                           <ExternalLink className="ml-1 h-3 w-3" />
                         </a>
                       </Button>
                     ))}
-                    {log.agent === 'Username' && log.data.profileLinks?.map((link: any) => (
+                    {log.agent === 'Username' && log.data.profileLinks?.map((link: any, idx: number) => (
                       <Button
                         key={link.platform}
                         variant="outline"
@@ -277,12 +267,12 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         asChild
                       >
                         <a href={link.url} target="_blank" rel="noopener noreferrer">
-                          {link.platform}
+                          Match {idx + 1}
                           <ExternalLink className="ml-1 h-3 w-3" />
                         </a>
                       </Button>
                     ))}
-                    {log.agent === 'Holehe' && log.data.allResults?.filter((r: any) => r.exists).map((account: any) => (
+                    {log.agent === 'Holehe' && log.data.allResults?.filter((r: any) => r.exists).map((account: any, idx: number) => (
                       <Button
                         key={account.name}
                         variant="outline"
@@ -291,7 +281,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         asChild
                       >
                         <a href={account.url} target="_blank" rel="noopener noreferrer">
-                          {account.name}
+                          Match {idx + 1}
                           <ExternalLink className="ml-1 h-3 w-3" />
                         </a>
                       </Button>

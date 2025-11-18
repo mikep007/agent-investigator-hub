@@ -174,6 +174,18 @@ Deno.serve(async (req) => {
 
             clearTimeout(timeoutId);
 
+            // Handle 405 Method Not Allowed gracefully
+            if (response.status === 405) {
+              results.push({
+                name: platform.name,
+                domain: platform.url.split('/')[2],
+                method: 'email',
+                url: platform.url,
+                exists: false,
+              });
+              return;
+            }
+
             let exists = false;
 
             // Platform-specific detection logic
