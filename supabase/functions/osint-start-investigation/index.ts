@@ -71,28 +71,28 @@ Deno.serve(async (req) => {
         })
       );
     } else if (searchType === 'username') {
-      // For usernames: social media, username enumeration
+      // For usernames: Sherlock (399+ sites), social media
       searches.push(
-        fetch(`${supabaseUrl}/functions/v1/osint-social-search`, {
+        fetch(`${supabaseUrl}/functions/v1/osint-sherlock`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
           body: JSON.stringify({ target })
         }),
-        fetch(`${supabaseUrl}/functions/v1/osint-username-enum`, {
+        fetch(`${supabaseUrl}/functions/v1/osint-social-search`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
           body: JSON.stringify({ target })
         })
       );
     } else if (searchType === 'email') {
-      // For emails: email lookup, account enumeration, social media
+      // For emails: email validation, Holehe (120+ platforms), social media
       searches.push(
         fetch(`${supabaseUrl}/functions/v1/osint-email-lookup`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
           body: JSON.stringify({ target })
         }),
-        fetch(`${supabaseUrl}/functions/v1/osint-email-account-enum`, {
+        fetch(`${supabaseUrl}/functions/v1/osint-holehe`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', 'Authorization': authHeader },
           body: JSON.stringify({ target })
@@ -128,9 +128,9 @@ Deno.serve(async (req) => {
       if (searchType === 'name') {
         types.push('social', 'address');
       } else if (searchType === 'username') {
-        types.push('social', 'username');
+        types.push('sherlock', 'social');
       } else if (searchType === 'email') {
-        types.push('email', 'account_enum', 'social');
+        types.push('email', 'holehe', 'social');
       } else if (searchType === 'phone') {
         types.push('phone', 'social');
       }

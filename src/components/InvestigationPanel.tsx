@@ -75,10 +75,14 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             message = data.found
               ? `Found ${data.count} location(s): ${data.locations?.[0]?.displayName || 'Location found'}`
               : 'No locations found';
-          } else if (finding.agent_type === 'account_enum') {
+          } else if (finding.agent_type === 'holehe') {
             message = data.accountsFound > 0
-              ? `Found accounts on ${data.accountsFound} platforms: ${data.registeredPlatforms?.slice(0, 3).join(', ')}${data.accountsFound > 3 ? '...' : ''}`
-              : `No accounts found on ${data.totalPlatformsChecked} platforms`;
+              ? `Holehe found ${data.accountsFound} accounts on ${data.totalPlatforms} platforms checked`
+              : `No accounts found (${data.totalPlatforms} platforms checked)`;
+          } else if (finding.agent_type === 'sherlock') {
+            message = data.profilesFound > 0
+              ? `Sherlock found ${data.profilesFound} profiles on ${data.totalSitesChecked} sites checked`
+              : `No profiles found (${data.totalSitesChecked} sites checked)`;
           }
 
           return {
@@ -140,10 +144,14 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             message = data.found
               ? `Found ${data.count} location(s): ${data.locations?.[0]?.displayName || 'Location found'}`
               : 'No locations found';
-          } else if (finding.agent_type === 'account_enum') {
+          } else if (finding.agent_type === 'holehe') {
             message = data.accountsFound > 0
-              ? `Found accounts on ${data.accountsFound} platforms: ${data.registeredPlatforms?.slice(0, 3).join(', ')}${data.accountsFound > 3 ? '...' : ''}`
-              : `No accounts found on ${data.totalPlatformsChecked} platforms`;
+              ? `Holehe found ${data.accountsFound} accounts on ${data.totalPlatforms} platforms checked`
+              : `No accounts found (${data.totalPlatforms} platforms checked)`;
+          } else if (finding.agent_type === 'sherlock') {
+            message = data.profilesFound > 0
+              ? `Sherlock found ${data.profilesFound} profiles on ${data.totalSitesChecked} sites checked`
+              : `No profiles found (${data.totalSitesChecked} sites checked)`;
           }
 
           const newLog: LogEntry = {
@@ -243,8 +251,8 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                   </div>
                 )}
                 
-                {/* Display profile links for social and username agents */}
-                {(log.agent === 'Social' || log.agent === 'Username' || log.agent === 'Account_enum') && log.data && (
+                {/* Display profile links for social, username, holehe, and sherlock agents */}
+                {(log.agent === 'Social' || log.agent === 'Username' || log.agent === 'Holehe' || log.agent === 'Sherlock') && log.data && (
                   <div className="flex flex-wrap gap-1.5 mt-2">
                     {log.agent === 'Social' && log.data.profiles?.filter((p: any) => p.exists).map((profile: any) => (
                       <Button
@@ -274,16 +282,30 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         </a>
                       </Button>
                     ))}
-                    {log.agent === 'Account_enum' && log.data.allResults?.filter((r: any) => r.exists).map((account: any) => (
+                    {log.agent === 'Holehe' && log.data.allResults?.filter((r: any) => r.exists).map((account: any) => (
                       <Button
-                        key={account.platform}
+                        key={account.name}
                         variant="outline"
                         size="sm"
                         className="h-7 text-xs"
                         asChild
                       >
-                        <a href={account.url || '#'} target="_blank" rel="noopener noreferrer">
-                          {account.platform}
+                        <a href={account.url} target="_blank" rel="noopener noreferrer">
+                          {account.name}
+                          <ExternalLink className="ml-1 h-3 w-3" />
+                        </a>
+                      </Button>
+                    ))}
+                    {log.agent === 'Sherlock' && log.data.profileLinks?.map((link: any) => (
+                      <Button
+                        key={link.platform}
+                        variant="outline"
+                        size="sm"
+                        className="h-7 text-xs"
+                        asChild
+                      >
+                        <a href={link.url} target="_blank" rel="noopener noreferrer">
+                          {link.platform} {link.category && `(${link.category})`}
                           <ExternalLink className="ml-1 h-3 w-3" />
                         </a>
                       </Button>
