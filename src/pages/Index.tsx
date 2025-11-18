@@ -4,13 +4,14 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Activity, Brain, Network, Search, UserSearch, Image, Clock, CheckCircle2, Target, LogOut } from "lucide-react";
+import { Activity, Brain, Network, Search, UserSearch, Image, Clock, CheckCircle2, Target, LogOut, FileText, Download } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
 import AgentGraph from "@/components/AgentGraph";
 import InvestigationPanel from "@/components/InvestigationPanel";
+import ReportDisplay from "@/components/ReportDisplay";
 
 const Index = () => {
   const [activeInvestigation, setActiveInvestigation] = useState(false);
@@ -18,6 +19,8 @@ const Index = () => {
   const [searchTarget, setSearchTarget] = useState("");
   const [searchType, setSearchType] = useState<"name" | "username" | "email" | "phone">("name");
   const [loading, setLoading] = useState(false);
+  const [generatingReport, setGeneratingReport] = useState(false);
+  const [report, setReport] = useState<{ report: string; target: string; generatedAt: string; findingsCount: number } | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -109,6 +112,46 @@ const Index = () => {
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const generateReport = async () => {
+    if (!currentInvestigationId) {
+      toast({
+        title: "No Investigation",
+        description: "Please start an investigation first",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setGeneratingReport(true);
+    setReport(null);
+    
+    try {
+      const { data, error } = await supabase.functions.invoke('generate-osint-report', {
+        body: { investigationId: currentInvestigationId }
+      });
+
+      if (error) throw error;
+
+      if (data.error) {
+        throw new Error(data.error);
+      }
+
+      setReport(data);
+      toast({
+        title: "Report Generated",
+        description: "AI-powered investigation report is ready",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Report Generation Failed",
+        description: error.message || "Failed to generate report",
+        variant: "destructive",
+      });
+    } finally {
+      setGeneratingReport(false);
     }
   };
 
@@ -362,16 +405,50 @@ const Index = () => {
                 <CheckCircle2 className="w-3 h-3 mr-1" />
                 Connected to MCP
               </Badge>
-            </div>
+        </div>
+
+        {/* AI-Generated Report Section */}
+        {report && (
+          <div className="mt-6">
+            <ReportDisplay
+              report={report.report}
+              target={report.target}
+              generatedAt={report.generatedAt}
+              findingsCount={report.findingsCount}
+            />
+          </div>
+        )}
             <AgentGraph active={activeInvestigation} investigationId={currentInvestigationId} />
           </Card>
 
           {/* Investigation Results Panel */}
           <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
-            <h2 className="text-xl font-bold mb-6 flex items-center gap-2">
-              <Search className="w-5 h-5 text-primary" />
-              Investigation Log
-            </h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Search className="w-5 h-5 text-primary" />
+                Investigation Log
+              </h2>
+              {currentInvestigationId && (
+                <Button
+                  onClick={generateReport}
+                  disabled={generatingReport || !activeInvestigation}
+                  size="sm"
+                  className="gap-2"
+                >
+                  {generatingReport ? (
+                    <>
+                      <Activity className="w-4 h-4 animate-spin" />
+                      Generating...
+                    </>
+                  ) : (
+                    <>
+                      <FileText className="w-4 h-4" />
+                      Generate Report
+                    </>
+                  )}
+                </Button>
+              )}
+            </div>
             <InvestigationPanel active={activeInvestigation} investigationId={currentInvestigationId} />
           </Card>
         </div>
