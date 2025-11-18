@@ -1,7 +1,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import { FileText } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { FileText, Download } from "lucide-react";
 import ReactMarkdown from "react-markdown";
+import jsPDF from "jspdf";
+import { useToast } from "@/hooks/use-toast";
 
 interface ReportDisplayProps {
   report: string;
@@ -11,20 +14,147 @@ interface ReportDisplayProps {
 }
 
 const ReportDisplay = ({ report, target, generatedAt, findingsCount }: ReportDisplayProps) => {
+  const { toast } = useToast();
+
+  const exportToPDF = () => {
+    try {
+      const doc = new jsPDF();
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const margin = 20;
+      const maxWidth = pageWidth - 2 * margin;
+      let yPosition = margin;
+
+      // Helper to add new page if needed
+      const checkPageBreak = (requiredSpace: number) => {
+        if (yPosition + requiredSpace > pageHeight - margin) {
+          doc.addPage();
+          yPosition = margin;
+          return true;
+        }
+        return false;
+      };
+
+      // Title
+      doc.setFontSize(20);
+      doc.setFont(undefined, 'bold');
+      doc.text('OSINT Investigation Report', margin, yPosition);
+      yPosition += 10;
+
+      // Metadata
+      doc.setFontSize(10);
+      doc.setFont(undefined, 'normal');
+      doc.text(`Target: ${target}`, margin, yPosition);
+      yPosition += 6;
+      doc.text(`Generated: ${new Date(generatedAt).toLocaleString()}`, margin, yPosition);
+      yPosition += 6;
+      doc.text(`Total Findings: ${findingsCount}`, margin, yPosition);
+      yPosition += 12;
+
+      // Process markdown content
+      const lines = report.split('\n');
+      
+      for (const line of lines) {
+        if (!line.trim()) {
+          yPosition += 4;
+          continue;
+        }
+
+        checkPageBreak(20);
+
+        // Headers
+        if (line.startsWith('# ')) {
+          doc.setFontSize(18);
+          doc.setFont(undefined, 'bold');
+          const text = line.replace('# ', '');
+          doc.text(text, margin, yPosition);
+          yPosition += 10;
+        } else if (line.startsWith('## ')) {
+          doc.setFontSize(14);
+          doc.setFont(undefined, 'bold');
+          const text = line.replace('## ', '');
+          doc.text(text, margin, yPosition);
+          yPosition += 8;
+        } else if (line.startsWith('### ')) {
+          doc.setFontSize(12);
+          doc.setFont(undefined, 'bold');
+          const text = line.replace('### ', '');
+          doc.text(text, margin, yPosition);
+          yPosition += 7;
+        } else if (line.startsWith('**') && line.endsWith('**')) {
+          // Bold text
+          doc.setFontSize(11);
+          doc.setFont(undefined, 'bold');
+          const text = line.replace(/\*\*/g, '');
+          const wrappedText = doc.splitTextToSize(text, maxWidth);
+          doc.text(wrappedText, margin, yPosition);
+          yPosition += wrappedText.length * 6;
+        } else if (line.startsWith('- ') || line.startsWith('* ')) {
+          // Bullet points
+          doc.setFontSize(10);
+          doc.setFont(undefined, 'normal');
+          const text = line.replace(/^[-*] /, '');
+          const wrappedText = doc.splitTextToSize(`• ${text}`, maxWidth - 5);
+          doc.text(wrappedText, margin + 5, yPosition);
+          yPosition += wrappedText.length * 5;
+        } else if (/^\d+\./.test(line)) {
+          // Numbered lists
+          doc.setFontSize(10);
+          doc.setFont(undefined, 'normal');
+          const wrappedText = doc.splitTextToSize(line, maxWidth - 5);
+          doc.text(wrappedText, margin + 5, yPosition);
+          yPosition += wrappedText.length * 5;
+        } else {
+          // Regular text
+          doc.setFontSize(10);
+          doc.setFont(undefined, 'normal');
+          const cleanText = line.replace(/\*\*/g, '').replace(/\*/g, '');
+          const wrappedText = doc.splitTextToSize(cleanText, maxWidth);
+          doc.text(wrappedText, margin, yPosition);
+          yPosition += wrappedText.length * 5;
+        }
+      }
+
+      // Save PDF
+      const fileName = `OSINT_Report_${target.replace(/[^a-zA-Z0-9]/g, '_')}_${new Date().toISOString().split('T')[0]}.pdf`;
+      doc.save(fileName);
+
+      toast({
+        title: "PDF Exported",
+        description: "Report has been downloaded successfully",
+      });
+    } catch (error) {
+      console.error('PDF export error:', error);
+      toast({
+        title: "Export Failed",
+        description: "Failed to generate PDF report",
+        variant: "destructive",
+      });
+    }
+  };
+
   return (
     <Card className="w-full">
       <CardHeader>
         <div className="flex items-start gap-3">
           <FileText className="h-6 w-6 text-primary mt-1" />
           <div className="flex-1">
-            <CardTitle>OSINT Investigation Report</CardTitle>
-            <CardDescription className="mt-2">
-              Target: <span className="font-medium text-foreground">{target}</span>
-              <br />
-              Generated: {new Date(generatedAt).toLocaleString()}
-              <br />
-              Total Findings: {findingsCount}
-            </CardDescription>
+            <div className="flex items-start justify-between">
+              <div>
+                <CardTitle>OSINT Investigation Report</CardTitle>
+                <CardDescription className="mt-2">
+                  Target: <span className="font-medium text-foreground">{target}</span>
+                  <br />
+                  Generated: {new Date(generatedAt).toLocaleString()}
+                  <br />
+                  Total Findings: {findingsCount}
+                </CardDescription>
+              </div>
+              <Button onClick={exportToPDF} variant="outline" size="sm" className="gap-2">
+                <Download className="h-4 w-4" />
+                Export PDF
+              </Button>
+            </div>
           </div>
         </div>
       </CardHeader>
