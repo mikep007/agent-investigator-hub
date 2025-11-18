@@ -363,7 +363,7 @@ const Index = () => {
                 Connected to MCP
               </Badge>
             </div>
-            <AgentGraph active={activeInvestigation} />
+            <AgentGraph active={activeInvestigation} investigationId={currentInvestigationId} />
           </Card>
 
           {/* Investigation Results Panel */}
