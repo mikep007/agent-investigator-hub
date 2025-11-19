@@ -5,6 +5,8 @@ import { Button } from "@/components/ui/button";
 import { CheckCircle2, Clock, AlertCircle, ExternalLink, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
+import PlatformLogo from "./PlatformLogo";
 import {
   Dialog,
   DialogContent,
@@ -27,6 +29,7 @@ interface LogEntry {
   data?: any;
   agent_type?: string;
   verification_status?: 'verified' | 'needs_review' | 'inaccurate';
+  confidence_score?: number;
 }
 
 const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps) => {
@@ -108,6 +111,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             data: finding.data,
             agent_type: finding.agent_type,
             verification_status: finding.verification_status as 'verified' | 'needs_review' | 'inaccurate' | undefined,
+            confidence_score: finding.confidence_score || 0,
           };
         });
 
@@ -312,6 +316,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                     {log.status === "pending" && <AlertCircle className="h-4 w-4 text-yellow-500" />}
                     <span className="font-medium text-sm">{log.agent}</span>
                     <span className="text-xs text-muted-foreground">{log.timestamp}</span>
+                    {log.confidence_score !== undefined && <ConfidenceScoreBadge score={log.confidence_score} size="sm" />}
                     {getVerificationBadge(log.verification_status)}
                   </div>
                   <p className="text-sm text-muted-foreground mb-3">{log.message}</p>
@@ -370,7 +375,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                           .map((result: any, idx: number) => (
                             <div key={idx} className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/50">
                               <div className="flex items-center gap-2 text-sm">
-                                <Shield className="h-3 w-3" />
+                                <PlatformLogo platform={result.platform} size="sm" />
                                 <span className="text-muted-foreground">{result.platform}</span>
                               </div>
                               <Button
@@ -397,7 +402,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                             rel="noopener noreferrer"
                             className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
                           >
-                            {getPlatformIcon(platform.name)}
+                            <PlatformLogo platform={platform.name} size="sm" />
                             <span className="text-muted-foreground">{platform.name}</span>
                             <ExternalLink className="h-3 w-3 ml-auto" />
                           </a>

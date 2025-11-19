@@ -1,1 +1,4 @@
 project_id = "sdzmanldgsiizjjffzoo"
+
+[functions.osint-comprehensive-investigation]
+verify_jwt = true
