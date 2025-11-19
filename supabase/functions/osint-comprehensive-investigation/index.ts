@@ -12,6 +12,7 @@ interface SearchData {
   email?: string;
   phone?: string;
   username?: string;
+  keywords?: string;
 }
 
 Deno.serve(async (req) => {
@@ -51,10 +52,19 @@ Deno.serve(async (req) => {
     const searchPromises: Promise<any>[] = [];
     const searchTypes: string[] = [];
 
-    // Always run web search with full name
+    // Parse keywords for matching
+    const keywords = searchData.keywords 
+      ? searchData.keywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k.length > 0)
+      : [];
+
+    // Always run web search with full name + keywords
+    const webSearchQuery = keywords.length > 0 
+      ? `${searchData.fullName} ${keywords.join(' ')}`
+      : searchData.fullName;
+    
     searchPromises.push(
       supabaseClient.functions.invoke('osint-web-search', {
-        body: { target: searchData.fullName }
+        body: { target: webSearchQuery }
       })
     );
     searchTypes.push('web');
@@ -140,12 +150,15 @@ Deno.serve(async (req) => {
             hasPhone: !!searchData.phone,
             hasUsername: !!searchData.username,
             hasAddress: !!searchData.address,
+            hasKeywords: keywords.length > 0,
+            keywords: keywords,
             totalDataPoints: [
               searchData.fullName,
               searchData.email,
               searchData.phone,
               searchData.username,
-              searchData.address
+              searchData.address,
+              searchData.keywords
             ].filter(Boolean).length
           }
         };
@@ -155,9 +168,25 @@ Deno.serve(async (req) => {
         
         // Boost confidence if multiple data points were provided
         const dataPoints = enrichedData.searchContext.totalDataPoints;
-        if (dataPoints >= 4) confidenceScore += 30;
-        else if (dataPoints >= 3) confidenceScore += 20;
+        if (dataPoints >= 5) confidenceScore += 35;
+        else if (dataPoints >= 4) confidenceScore += 25;
+        else if (dataPoints >= 3) confidenceScore += 15;
         else if (dataPoints >= 2) confidenceScore += 10;
+
+        // Keyword matching boost - check if any keywords appear in the finding data
+        if (keywords.length > 0) {
+          const findingDataStr = JSON.stringify(findingData).toLowerCase();
+          const keywordMatches = keywords.filter(keyword => 
+            findingDataStr.includes(keyword)
+          ).length;
+          
+          if (keywordMatches > 0) {
+            // Boost score by 5% per keyword match, max 15%
+            const keywordBoost = Math.min(keywordMatches * 5, 15);
+            confidenceScore += keywordBoost;
+            console.log(`Keyword matches found: ${keywordMatches}, boost: +${keywordBoost}%`);
+          }
+        }
 
         // Store finding
         await supabaseClient
