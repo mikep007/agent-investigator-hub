@@ -133,14 +133,42 @@ Deno.serve(async (req) => {
     console.log(`Running ${searchPromises.length} OSINT searches...`);
     const results = await Promise.allSettled(searchPromises);
 
+    // Collect debug status for each search
+    const searchDebug: Array<{
+      type: string;
+      status: string;
+      error?: string;
+      hasData?: boolean;
+    }> = [];
+
     // Store findings with correlation data
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
       const agentType = searchTypes[i];
 
-      if (result.status === 'fulfilled' && result.value.data) {
-        const findingData = result.value.data;
-        
+      if (result.status === 'fulfilled') {
+        const { data, error } = result.value as { data: any; error: any };
+
+        if (error) {
+          console.error(`Error from ${agentType} function:`, error);
+          searchDebug.push({
+            type: agentType,
+            status: 'error',
+            error: typeof error === 'string' ? error : JSON.stringify(error),
+          });
+          continue;
+        }
+
+        if (!data) {
+          console.warn(`No data returned from ${agentType} function.`);
+          searchDebug.push({ type: agentType, status: 'no_data', hasData: false });
+          continue;
+        }
+
+        const findingData = data;
+
+        searchDebug.push({ type: agentType, status: 'ok', hasData: true });
+
         // Add search context for correlation
         const enrichedData = {
           ...findingData,
@@ -158,14 +186,14 @@ Deno.serve(async (req) => {
               searchData.phone,
               searchData.username,
               searchData.address,
-              searchData.keywords
-            ].filter(Boolean).length
-          }
+              searchData.keywords,
+            ].filter(Boolean).length,
+          },
         };
 
         // Calculate initial confidence score
         let confidenceScore = 50; // Base score
-        
+
         // Boost confidence if multiple data points were provided
         const dataPoints = enrichedData.searchContext.totalDataPoints;
         if (dataPoints >= 5) confidenceScore += 35;
@@ -176,10 +204,8 @@ Deno.serve(async (req) => {
         // Keyword matching boost - check if any keywords appear in the finding data
         if (keywords.length > 0) {
           const findingDataStr = JSON.stringify(findingData).toLowerCase();
-          const keywordMatches = keywords.filter(keyword => 
-            findingDataStr.includes(keyword)
-          ).length;
-          
+          const keywordMatches = keywords.filter((keyword) => findingDataStr.includes(keyword)).length;
+
           if (keywordMatches > 0) {
             // Boost score by 5% per keyword match, max 15%
             const keywordBoost = Math.min(keywordMatches * 5, 15);
@@ -189,26 +215,58 @@ Deno.serve(async (req) => {
         }
 
         // Store finding
-        await supabaseClient
-          .from('findings')
-          .insert({
-            investigation_id: investigation.id,
-            agent_type: agentType.charAt(0).toUpperCase() + agentType.slice(1),
-            source: `OSINT-${agentType}`,
-            data: enrichedData,
-            confidence_score: Math.min(confidenceScore, 100),
-            verification_status: 'needs_review'
-          });
+        const { error: insertError } = await supabaseClient.from('findings').insert({
+          investigation_id: investigation.id,
+          agent_type: agentType.charAt(0).toUpperCase() + agentType.slice(1),
+          source: `OSINT-${agentType}`,
+          data: enrichedData,
+          confidence_score: Math.min(confidenceScore, 100),
+          verification_status: 'needs_review',
+        });
 
-        console.log(`Stored ${agentType} findings with confidence: ${confidenceScore}%`);
+        if (insertError) {
+          console.error(`Error inserting ${agentType} findings:`, insertError);
+        } else {
+          console.log(`Stored ${agentType} findings with confidence: ${confidenceScore}%`);
+        }
+      } else {
+        console.error(`OSINT search ${agentType} failed:`, result.reason);
+        searchDebug.push({
+          type: agentType,
+          status: 'failed',
+          error: typeof result.reason === 'string' ? result.reason : JSON.stringify(result.reason),
+        });
+      }
+    }
+
+    // If no findings were stored, insert a diagnostic record so the UI shows something
+    if (searchDebug.length > 0) {
+      try {
+        const { error: diagError } = await supabaseClient.from('findings').insert({
+          investigation_id: investigation.id,
+          agent_type: 'System',
+          source: 'OSINT-System',
+          data: {
+            message: 'OSINT searches completed',
+            searchSummary: searchDebug,
+          },
+          confidence_score: null,
+          verification_status: 'needs_review',
+        });
+
+        if (diagError) {
+          console.error('Error inserting diagnostic finding:', diagError);
+        }
+      } catch (e) {
+        console.error('Unexpected error inserting diagnostic finding:', e);
       }
     }
 
     return new Response(
-      JSON.stringify({ 
+      JSON.stringify({
         investigationId: investigation.id,
         searchesRun: searchPromises.length,
-        searchTypes: searchTypes
+        searchTypes: searchTypes,
       }),
       {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
