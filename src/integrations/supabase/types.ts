@@ -82,6 +82,54 @@ export type Database = {
         }
         Relationships: []
       }
+      platform_investigations: {
+        Row: {
+          created_at: string
+          finding_id: string
+          id: string
+          investigation_id: string
+          platform: string
+          results: Json | null
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          finding_id: string
+          id?: string
+          investigation_id: string
+          platform: string
+          results?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          finding_id?: string
+          id?: string
+          investigation_id?: string
+          platform?: string
+          results?: Json | null
+          status?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "platform_investigations_finding_id_fkey"
+            columns: ["finding_id"]
+            isOneToOne: false
+            referencedRelation: "findings"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "platform_investigations_investigation_id_fkey"
+            columns: ["investigation_id"]
+            isOneToOne: false
+            referencedRelation: "investigations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
