@@ -3,7 +3,8 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Search, Activity, User, Mail, Phone, MapPin } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Search, Activity, User, Mail, Phone, MapPin, Tag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface SearchData {
@@ -12,6 +13,7 @@ interface SearchData {
   email: string;
   phone: string;
   username: string;
+  keywords: string;
 }
 
 interface ComprehensiveSearchFormProps {
@@ -26,6 +28,7 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
     email: "",
     phone: "",
     username: "",
+    keywords: "",
   });
   const { toast } = useToast();
 
@@ -75,7 +78,8 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
       searchData.address,
       searchData.email,
       searchData.phone,
-      searchData.username
+      searchData.username,
+      searchData.keywords
     ].filter(field => field.trim()).length;
 
     toast({
@@ -197,6 +201,26 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
               maxLength={255}
               disabled={loading}
             />
+          </div>
+
+          {/* Keywords - Optional */}
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="keywords" className="flex items-center gap-2">
+              <Tag className="w-4 h-4 text-muted-foreground" />
+              Keywords / Associated Terms
+            </Label>
+            <Textarea
+              id="keywords"
+              placeholder="Company name, nicknames, interests, hobbies, affiliations... (comma-separated)"
+              value={searchData.keywords}
+              onChange={(e) => handleChange("keywords", e.target.value)}
+              className="bg-background/50 min-h-[80px]"
+              maxLength={500}
+              disabled={loading}
+            />
+            <p className="text-xs text-muted-foreground">
+              Add keywords to improve matching accuracy and boost confidence scores when found across platforms
+            </p>
           </div>
         </div>
 

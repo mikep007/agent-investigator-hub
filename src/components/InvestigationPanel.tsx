@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Clock, AlertCircle, ExternalLink, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, ExternalLink, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Tag } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
@@ -320,6 +320,32 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                     {getVerificationBadge(log.verification_status)}
                   </div>
                   <p className="text-sm text-muted-foreground mb-3">{log.message}</p>
+                  
+                  {/* Keyword Matches Display */}
+                  {log.data?.searchContext?.keywords?.length > 0 && (() => {
+                    const keywords = log.data.searchContext.keywords;
+                    const dataStr = JSON.stringify(log.data).toLowerCase();
+                    const matchedKeywords = keywords.filter((kw: string) => dataStr.includes(kw.toLowerCase()));
+                    
+                    if (matchedKeywords.length > 0) {
+                      return (
+                        <div className="mb-3 p-2 rounded-md bg-success/10 border border-success/20">
+                          <div className="flex items-center gap-2 mb-1">
+                            <Tag className="h-3 w-3 text-success" />
+                            <span className="text-xs font-semibold text-success">Keyword Match</span>
+                          </div>
+                          <div className="flex flex-wrap gap-1">
+                            {matchedKeywords.map((keyword: string, idx: number) => (
+                              <Badge key={idx} variant="outline" className="text-xs border-success/30 text-success">
+                                {keyword}
+                              </Badge>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    }
+                    return null;
+                  })()}
                   
                   <div className="space-y-2">
                     {log.agent_type === 'web' && log.data?.items?.length > 0 && (
