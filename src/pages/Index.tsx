@@ -155,72 +155,6 @@ const Index = () => {
     }
   };
 
-  const agents = [
-    {
-      id: "holehe",
-      name: "Holehe Email Scanner",
-      icon: Brain,
-      status: "active",
-      task: "Checking 120+ platforms for email registration",
-      color: "text-orange-500"
-    },
-    {
-      id: "sherlock",
-      name: "Sherlock Username Hunter",
-      icon: UserSearch,
-      status: "active",
-      task: "Searching 399+ sites for username profiles",
-      color: "text-cyan-500"
-    },
-    {
-      id: "account_enum",
-      name: "Account Enumeration Agent",
-      icon: Activity,
-      status: "active",
-      task: "Checking 25+ platforms for registered accounts",
-      color: "text-orange-500"
-    },
-    {
-      id: "username",
-      name: "Username Enumeration Agent",
-      icon: Search,
-      status: "active",
-      task: "Checking username across platforms",
-      color: "text-primary"
-    },
-    {
-      id: "web",
-      name: "Web Search Agent",
-      icon: Search,
-      status: "active",
-      task: "Google search and web intel",
-      color: "text-accent"
-    },
-    {
-      id: "phone",
-      name: "Phone Lookup Agent",
-      icon: Activity,
-      status: "active",
-      task: "Validating phone numbers",
-      color: "text-accent"
-    },
-    {
-      id: "address",
-      name: "Address Search Agent",
-      icon: Target,
-      status: "active",
-      task: "Geocoding and location intel",
-      color: "text-warning"
-    },
-    {
-      id: "correlation",
-      name: "Data Correlation Agent",
-      icon: Network,
-      status: "idle",
-      task: "Cross-referencing findings",
-      color: "text-cyber-glow"
-    }
-  ];
 
   return (
     <div className="min-h-screen bg-background grid-bg">
@@ -236,10 +170,6 @@ const Index = () => {
               </div>
             </div>
             <div className="flex items-center gap-3">
-              <Badge variant="outline" className="border-primary text-primary">
-                <Activity className="w-3 h-3 mr-1" />
-                {agents.filter(a => a.status === "active").length} Active
-              </Badge>
               <Button variant="ghost" size="sm" onClick={handleSignOut}>
                 <LogOut className="w-4 h-4 mr-2" />
                 Sign Out
@@ -373,24 +303,6 @@ const Index = () => {
           </Tabs>
         </Card>
 
-        {/* Agent Status Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-          {agents.map((agent) => (
-            <Card key={agent.id} className="p-4 bg-card/80 backdrop-blur border-border/50 hover:border-primary/50 transition-all">
-              <div className="flex items-start justify-between mb-3">
-                <agent.icon className={`w-5 h-5 ${agent.color}`} />
-                <Badge 
-                  variant={agent.status === "active" ? "default" : agent.status === "processing" ? "secondary" : "outline"}
-                  className="text-xs"
-                >
-                  {agent.status}
-                </Badge>
-              </div>
-              <h3 className="font-semibold mb-1">{agent.name}</h3>
-              <p className="text-xs text-muted-foreground">{agent.task}</p>
-            </Card>
-          ))}
-        </div>
 
         {/* Main Content Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
