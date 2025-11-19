@@ -34,6 +34,7 @@ interface LogEntry {
 
 const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [loading, setLoading] = useState(false);
   const [deepDiveDialog, setDeepDiveDialog] = useState<{ open: boolean; platform: string; findingId: string } | null>(null);
   const [deepDiveLoading, setDeepDiveLoading] = useState(false);
   const [deepDiveResults, setDeepDiveResults] = useState<any>(null);
@@ -42,8 +43,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   useEffect(() => {
     if (!active || !investigationId) {
       setLogs([]);
+      setLoading(false);
       return;
     }
+
+    setLoading(true);
 
     const fetchFindings = async () => {
       const { data: findings, error } = await supabase
@@ -54,10 +58,12 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
 
       if (error) {
         console.error('Error fetching findings:', error);
+        setLoading(false);
         return;
       }
 
       if (findings) {
+        setLoading(findings.length === 0);
         const formattedLogs: LogEntry[] = findings.map((finding) => {
           const data = finding.data as any;
           let message = '';
@@ -132,6 +138,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           filter: `investigation_id=eq.${investigationId}`,
         },
         (payload) => {
+          setLoading(false);
           const finding = payload.new;
           const data = finding.data as any;
           let message = '';
@@ -186,6 +193,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               data: finding.data,
               agent_type: finding.agent_type,
               verification_status: finding.verification_status as 'verified' | 'needs_review' | 'inaccurate' | undefined,
+              confidence_score: finding.confidence_score || 0,
             },
           ]);
         }
@@ -288,12 +296,13 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
     );
   }
 
-  if (logs.length === 0) {
+  if (logs.length === 0 && loading) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
         <div className="text-center space-y-2">
           <Clock className="h-8 w-8 mx-auto animate-pulse" />
-          <p>Initializing agents...</p>
+          <p>Running OSINT searches...</p>
+          <p className="text-sm">This may take 10-20 seconds</p>
         </div>
       </div>
     );
