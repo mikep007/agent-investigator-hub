@@ -34,6 +34,18 @@ Deno.serve(async (req) => {
     
     for (const platform of platforms) {
       try {
+        // Special handling for TikTok - always include for manual verification
+        if (platform.name === 'TikTok') {
+          results.push({
+            platform: platform.name,
+            username: target,
+            url: platform.url,
+            exists: true // Always show TikTok for manual verification
+          });
+          console.log(`TikTok: Included for manual verification`);
+          continue;
+        }
+
         const response = await fetch(platform.url, { 
           method: 'HEAD',
           redirect: 'follow'

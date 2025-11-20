@@ -131,6 +131,19 @@ Deno.serve(async (req) => {
     // Check sites with HEAD requests (faster than GET)
     const checkSite = async (site: typeof sites[0]) => {
       try {
+        // Special handling for TikTok - always include it since automated checks are blocked
+        if (site.name === "TikTok") {
+          foundCount++;
+          console.log(`✓ ${site.name} (manual verification required)`);
+          results.push({
+            name: site.name,
+            url: site.url,
+            exists: true, // Always show TikTok for manual verification
+            category: site.category,
+          });
+          return;
+        }
+
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 5000);
 
