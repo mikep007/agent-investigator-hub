@@ -11,6 +11,8 @@ import AgentGraph from "@/components/AgentGraph";
 import InvestigationPanel from "@/components/InvestigationPanel";
 import ReportDisplay from "@/components/ReportDisplay";
 import ComprehensiveSearchForm from "@/components/ComprehensiveSearchForm";
+import RelationshipGraph from "@/components/RelationshipGraph";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Index = () => {
   const [activeInvestigation, setActiveInvestigation] = useState(false);
@@ -18,6 +20,7 @@ const Index = () => {
   const [loading, setLoading] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
   const [report, setReport] = useState<{ report: string; target: string; generatedAt: string; findingsCount: number } | null>(null);
+  const [targetName, setTargetName] = useState<string>("");
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -44,6 +47,7 @@ const Index = () => {
     username: string;
   }) => {
     setLoading(true);
+    setTargetName(searchData.fullName || searchData.username || searchData.email || "Target");
     try {
       const { data, error } = await supabase.functions.invoke('osint-comprehensive-investigation', {
         body: searchData
@@ -144,12 +148,12 @@ const Index = () => {
 
           {/* Main Content Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Agent Workflow Graph */}
+            {/* Graph Visualization */}
             <Card className="lg:col-span-2 p-6 bg-card/80 backdrop-blur border-border/50">
               <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <Network className="w-5 h-5 text-primary" />
-                  Agent Workflow Graph
+                  Investigation Visualization
                 </h2>
                 <Tooltip>
                   <TooltipTrigger asChild>
@@ -164,7 +168,7 @@ const Index = () => {
 
               {/* AI-Generated Report Section */}
               {report && (
-                <div className="mt-6">
+                <div className="mb-6">
                   <ReportDisplay
                     report={report.report}
                     target={report.target}
@@ -173,7 +177,23 @@ const Index = () => {
                   />
                 </div>
               )}
-              <AgentGraph active={activeInvestigation} investigationId={currentInvestigationId} />
+
+              <Tabs defaultValue="relationship" className="w-full">
+                <TabsList className="grid w-full grid-cols-2 mb-4">
+                  <TabsTrigger value="relationship">Relationship Graph</TabsTrigger>
+                  <TabsTrigger value="workflow">Workflow Graph</TabsTrigger>
+                </TabsList>
+                <TabsContent value="relationship" className="min-h-[600px]">
+                  <RelationshipGraph 
+                    active={activeInvestigation} 
+                    investigationId={currentInvestigationId}
+                    targetName={targetName}
+                  />
+                </TabsContent>
+                <TabsContent value="workflow" className="min-h-[600px]">
+                  <AgentGraph active={activeInvestigation} investigationId={currentInvestigationId} />
+                </TabsContent>
+              </Tabs>
             </Card>
 
             {/* Investigation Results Panel */}
