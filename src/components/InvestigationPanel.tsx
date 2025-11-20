@@ -355,6 +355,13 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
 
               if (!thumbnailData) return null;
 
+              // Extract clickable links count
+              const hasLinks = 
+                (log.agent_type === 'web' && log.data?.items?.length > 0) ||
+                (log.agent_type === 'social' && log.data?.profiles?.filter((p: any) => p.exists).length > 0) ||
+                (log.agent_type === 'holehe' && log.data?.results?.filter((r: any) => r.exists).length > 0) ||
+                (log.agent_type === 'sherlock' && log.data?.platforms?.length > 0);
+
               return (
                 <Tooltip key={log.id}>
                   <TooltipTrigger asChild>
@@ -370,6 +377,12 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                           <div className="text-2xl font-bold text-primary">{thumbnailData.count}</div>
                           <div className="text-xs text-muted-foreground">{thumbnailData.label}</div>
                         </div>
+                        {hasLinks && (
+                          <div className="flex items-center gap-1 text-xs text-primary">
+                            <ExternalLink className="h-3 w-3" />
+                            <span>Links Available</span>
+                          </div>
+                        )}
                         {log.confidence_score !== undefined && (
                           <ConfidenceScoreBadge score={log.confidence_score} size="sm" />
                         )}
@@ -379,6 +392,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                   <TooltipContent>
                     <p className="font-semibold">{log.agent}</p>
                     <p className="text-xs text-muted-foreground">{log.message}</p>
+                    {hasLinks && <p className="text-xs text-primary mt-1">Click below to view links</p>}
                   </TooltipContent>
                 </Tooltip>
               );
@@ -434,6 +448,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                     <div className="space-y-2">
                       {log.agent_type === 'web' && log.data?.items?.length > 0 && (
                         <div className="space-y-2">
+                          <div className="text-xs font-semibold text-primary mb-2 flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3" />
+                            Clickable Web Results ({log.data.items.length})
+                          </div>
                           {log.data.items.map((item: any, idx: number) => (
                             <Tooltip key={idx}>
                               <TooltipTrigger asChild>
@@ -441,11 +459,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                                   href={item.link}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="flex items-start gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors text-sm group"
+                                  className="flex items-start gap-2 p-3 rounded-md border border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-all text-sm group"
                                 >
-                                  <ExternalLink className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground group-hover:text-primary" />
+                                  <ExternalLink className="h-4 w-4 mt-0.5 shrink-0 text-primary" />
                                   <div className="flex-1 min-w-0">
-                                    <div className="font-medium text-foreground group-hover:text-primary truncate">
+                                    <div className="font-medium text-foreground group-hover:text-primary">
                                       {item.title}
                                     </div>
                                     {item.snippet && (
@@ -453,6 +471,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                                         {item.snippet}
                                       </p>
                                     )}
+                                    <div className="text-xs text-primary/70 mt-1 truncate">
+                                      {item.link}
+                                    </div>
                                   </div>
                                 </a>
                               </TooltipTrigger>
@@ -463,7 +484,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                       )}
 
                       {log.agent_type === 'social' && log.data?.profiles && (
-                        <div className="space-y-1">
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-primary mb-2 flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3" />
+                            Social Media Profiles ({log.data.profiles.filter((p: any) => p.exists).length})
+                          </div>
                           {log.data.profiles
                             .filter((p: any) => p.exists)
                             .map((profile: any, idx: number) => (
@@ -473,11 +498,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                                     href={profile.url}
                                     target="_blank"
                                     rel="noopener noreferrer"
-                                    className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
+                                    className="flex items-center gap-2 p-2 rounded-md border border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-all text-sm group"
                                   >
                                     {getPlatformIcon(profile.platform)}
-                                    <span className="text-muted-foreground">{profile.platform}</span>
-                                    <ExternalLink className="h-3 w-3 ml-auto" />
+                                    <span className="text-foreground group-hover:text-primary font-medium">{profile.platform}</span>
+                                    <ExternalLink className="h-3 w-3 ml-auto text-primary" />
                                   </a>
                                 </TooltipTrigger>
                                 <TooltipContent>View {profile.platform} profile</TooltipContent>
@@ -516,7 +541,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                       )}
 
                       {log.agent_type === 'sherlock' && log.data?.platforms && (
-                        <div className="space-y-1">
+                        <div className="space-y-2">
+                          <div className="text-xs font-semibold text-primary mb-2 flex items-center gap-1">
+                            <ExternalLink className="h-3 w-3" />
+                            Platform Profiles ({log.data.platforms.length})
+                          </div>
                           {log.data.platforms.map((platform: any, idx: number) => (
                             <Tooltip key={idx}>
                               <TooltipTrigger asChild>
@@ -524,11 +553,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                                   href={platform.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
+                                  className="flex items-center gap-2 p-2 rounded-md border border-primary/20 bg-primary/5 hover:bg-primary/10 hover:border-primary/40 transition-all text-sm group"
                                 >
                                   <PlatformLogo platform={platform.name} size="sm" />
-                                  <span className="text-muted-foreground">{platform.name}</span>
-                                  <ExternalLink className="h-3 w-3 ml-auto" />
+                                  <span className="text-foreground group-hover:text-primary font-medium flex-1">{platform.name}</span>
+                                  <ExternalLink className="h-3 w-3 text-primary" />
                                 </a>
                               </TooltipTrigger>
                               <TooltipContent>View profile on {platform.name}</TooltipContent>
