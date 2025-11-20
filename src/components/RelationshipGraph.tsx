@@ -1,7 +1,17 @@
 import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Mail, User, Phone, MapPin, Users, Globe, Link as LinkIcon } from "lucide-react";
+import { Mail, User, Phone, MapPin, Users, Globe, Link as LinkIcon, ZoomIn, ZoomOut, Maximize2 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 interface RelationshipGraphProps {
   active: boolean;
@@ -20,20 +30,30 @@ interface GraphNode {
   url?: string;
   platform?: string;
   confidence?: number;
+  isDragging?: boolean;
 }
 
 interface GraphLink {
   source: string;
   target: string;
   strength: number;
+  type: string;
 }
+
+type LayoutType = 'force' | 'radial' | 'hierarchical';
 
 const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: RelationshipGraphProps) => {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [links, setLinks] = useState<GraphLink[]>([]);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [draggedNode, setDraggedNode] = useState<string | null>(null);
+  const [layout, setLayout] = useState<LayoutType>('force');
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [typeFilters, setTypeFilters] = useState<Set<string>>(new Set());
+  const svgRef = useRef<SVGSVGElement>(null);
   const animationRef = useRef<number>();
+  const dragOffset = useRef({ x: 0, y: 0 });
 
   const getNodeColor = (type: string) => {
     const colors = {
@@ -61,6 +81,73 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
       relative: Users,
     };
     return icons[type as keyof typeof icons] || User;
+  };
+
+  const getConnectionType = (sourceType: string, targetType: string): string => {
+    if (targetType === 'email') return 'registered on';
+    if (targetType === 'username') return 'username on';
+    if (targetType === 'social') return 'profile on';
+    if (targetType === 'phone') return 'phone number';
+    if (targetType === 'address') return 'located at';
+    if (targetType === 'web') return 'mentioned in';
+    return 'linked to';
+  };
+
+  const toggleFilter = (type: string) => {
+    setTypeFilters(prev => {
+      const newFilters = new Set(prev);
+      if (newFilters.has(type)) {
+        newFilters.delete(type);
+      } else {
+        newFilters.add(type);
+      }
+      return newFilters;
+    });
+  };
+
+  const applyLayout = (nodeList: GraphNode[], layoutType: LayoutType) => {
+    const centerX = 400;
+    const centerY = 300;
+
+    if (layoutType === 'radial') {
+      nodeList.forEach((node, index) => {
+        if (node.id === 'target') {
+          node.x = centerX;
+          node.y = centerY;
+        } else {
+          const angle = ((index - 1) / (nodeList.length - 1)) * Math.PI * 2;
+          const radius = 200;
+          node.x = centerX + Math.cos(angle) * radius;
+          node.y = centerY + Math.sin(angle) * radius;
+        }
+      });
+    } else if (layoutType === 'hierarchical') {
+      const typeGroups: { [key: string]: GraphNode[] } = {};
+      nodeList.forEach(node => {
+        if (node.id === 'target') return;
+        if (!typeGroups[node.type]) typeGroups[node.type] = [];
+        typeGroups[node.type].push(node);
+      });
+
+      const types = Object.keys(typeGroups);
+      const layerHeight = 120;
+      
+      types.forEach((type, layerIndex) => {
+        const nodesInLayer = typeGroups[type];
+        const layerY = centerY + (layerIndex - types.length / 2) * layerHeight;
+        nodesInLayer.forEach((node, i) => {
+          node.x = centerX + (i - nodesInLayer.length / 2) * 100;
+          node.y = layerY;
+        });
+      });
+
+      const targetNode = nodeList.find(n => n.id === 'target');
+      if (targetNode) {
+        targetNode.x = centerX;
+        targetNode.y = centerY;
+      }
+    }
+    // Force-directed layout is handled by the simulation
   };
 
   useEffect(() => {
@@ -117,7 +204,7 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
                   platform: result.platform,
                   confidence: finding.confidence_score || 0,
                 });
-                newLinks.push({ source: 'target', target: nodeId, strength: 0.8 });
+                newLinks.push({ source: 'target', target: nodeId, strength: 0.8, type: 'registered on' });
               }
             });
           }
@@ -137,7 +224,7 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
                 platform: profile.platform,
                 confidence: finding.confidence_score || 0,
               });
-              newLinks.push({ source: 'target', target: nodeId, strength: 0.8 });
+              newLinks.push({ source: 'target', target: nodeId, strength: 0.8, type: 'username on' });
             });
           }
 
@@ -157,7 +244,7 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
                   platform: profile.platform,
                   confidence: finding.confidence_score || 0,
                 });
-                newLinks.push({ source: 'target', target: nodeId, strength: 0.8 });
+                newLinks.push({ source: 'target', target: nodeId, strength: 0.8, type: 'profile on' });
               }
             });
           }
@@ -176,7 +263,7 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
                 url: item.link,
                 confidence: finding.confidence_score || 0,
               });
-              newLinks.push({ source: 'target', target: nodeId, strength: 0.6 });
+              newLinks.push({ source: 'target', target: nodeId, strength: 0.6, type: 'mentioned in' });
             });
           }
 
@@ -192,7 +279,7 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
               vy: 0,
               confidence: finding.confidence_score || 0,
             });
-            newLinks.push({ source: 'target', target: nodeId, strength: 0.9 });
+            newLinks.push({ source: 'target', target: nodeId, strength: 0.9, type: 'phone number' });
           }
 
           if (finding.agent_type === "Address" && findingData.location) {
@@ -207,7 +294,7 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
               vy: 0,
               confidence: finding.confidence_score || 0,
             });
-            newLinks.push({ source: 'target', target: nodeId, strength: 0.9 });
+            newLinks.push({ source: 'target', target: nodeId, strength: 0.9, type: 'located at' });
           }
         });
 
