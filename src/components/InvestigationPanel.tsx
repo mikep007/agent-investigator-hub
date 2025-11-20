@@ -2,11 +2,17 @@ import { useEffect, useState } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { CheckCircle2, Clock, AlertCircle, ExternalLink, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Tag } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, ExternalLink, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Tag, Mail, User, Activity, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
 import PlatformLogo from "./PlatformLogo";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   Dialog,
   DialogContent,
@@ -101,17 +107,15 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               ? `Found ${data.accountsFound} account match${data.accountsFound > 1 ? 'es' : ''}`
               : 'No account matches found';
           } else if (finding.agent_type === 'sherlock') {
-            message = data.profilesFound > 0
-              ? `Found ${data.profilesFound} profile match${data.profilesFound > 1 ? 'es' : ''}`
-              : 'No profile matches found';
+            message = data.platformsFound > 0
+              ? `Found ${data.platformsFound} platform match${data.platformsFound > 1 ? 'es' : ''}`
+              : 'No platform matches found';
           }
 
-          const displayAgent = finding.agent_type === 'sherlock' ? 'Email Match' : finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1);
-          
           return {
             id: finding.id,
             timestamp: new Date(finding.created_at).toLocaleTimeString(),
-            agent: displayAgent,
+            agent: finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1) + ' Agent',
             message,
             status,
             data: finding.data,
@@ -120,25 +124,24 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             confidence_score: finding.confidence_score || 0,
           };
         });
-
         setLogs(formattedLogs);
+        setLoading(false);
       }
     };
 
     fetchFindings();
 
     const channel = supabase
-      .channel('findings-changes')
+      .channel(`findings:${investigationId}`)
       .on(
-        'postgres_changes',
+        "postgres_changes",
         {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'findings',
+          event: "INSERT",
+          schema: "public",
+          table: "findings",
           filter: `investigation_id=eq.${investigationId}`,
         },
-        (payload) => {
-          setLoading(false);
+        (payload: any) => {
           const finding = payload.new;
           const data = finding.data as any;
           let message = '';
@@ -155,13 +158,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               ? `Found ${items.length} web match${items.length > 1 ? 'es' : ''}`
               : data.error || 'No web results found';
           } else if (finding.agent_type === 'email') {
-            message = data.isValid 
-              ? `Email verified`
-              : 'Email not verified';
+            message = data.isValid ? `Email verified` : 'Email not verified';
           } else if (finding.agent_type === 'phone') {
-            message = data.validity?.isValid
-              ? `Phone number verified`
-              : 'Phone number not verified';
+            message = data.validity?.isValid ? `Phone number verified` : 'Phone number not verified';
           } else if (finding.agent_type === 'username') {
             message = data.foundOn > 0
               ? `Found ${data.foundOn} username match${data.foundOn > 1 ? 'es' : ''}`
@@ -175,21 +174,19 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               ? `Found ${data.accountsFound} account match${data.accountsFound > 1 ? 'es' : ''}`
               : 'No account matches found';
           } else if (finding.agent_type === 'sherlock') {
-            message = data.profilesFound > 0
-              ? `Found ${data.profilesFound} profile match${data.profilesFound > 1 ? 'es' : ''}`
-              : 'No profile matches found';
+            message = data.platformsFound > 0
+              ? `Found ${data.platformsFound} platform match${data.platformsFound > 1 ? 'es' : ''}`
+              : 'No platform matches found';
           }
 
-          const displayAgent = finding.agent_type === 'sherlock' ? 'Email Match' : finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1);
-          
-          setLogs((prev) => [
+          setLogs(prev => [
             ...prev,
             {
               id: finding.id,
               timestamp: new Date(finding.created_at).toLocaleTimeString(),
-              agent: displayAgent,
+              agent: finding.agent_type.charAt(0).toUpperCase() + finding.agent_type.slice(1) + ' Agent',
               message,
-              status: "success" as const,
+              status: "success",
               data: finding.data,
               agent_type: finding.agent_type,
               verification_status: finding.verification_status as 'verified' | 'needs_review' | 'inaccurate' | undefined,
@@ -309,261 +306,353 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   }
 
   return (
-    <div>
-      <ScrollArea className="h-full pr-4">
-        <div className="space-y-3">
-          {logs.map((log) => (
-            <div
-              key={log.id}
-              className="p-4 rounded-lg border border-border/50 bg-card/50 hover:bg-card transition-colors"
-            >
-              <div className="flex items-start justify-between gap-4">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-2 flex-wrap">
-                    {log.status === "success" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
-                    {log.status === "processing" && <Clock className="h-4 w-4 text-blue-500 animate-spin" />}
-                    {log.status === "pending" && <AlertCircle className="h-4 w-4 text-yellow-500" />}
-                    <span className="font-medium text-sm">{log.agent}</span>
-                    <span className="text-xs text-muted-foreground">{log.timestamp}</span>
-                    {log.confidence_score !== undefined && <ConfidenceScoreBadge score={log.confidence_score} size="sm" />}
-                    {getVerificationBadge(log.verification_status)}
-                  </div>
-                  <p className="text-sm text-muted-foreground mb-3">{log.message}</p>
-                  
-                  {/* Keyword Matches Display */}
-                  {log.data?.searchContext?.keywords?.length > 0 && (() => {
-                    const keywords = log.data.searchContext.keywords;
-                    const dataStr = JSON.stringify(log.data).toLowerCase();
-                    const matchedKeywords = keywords.filter((kw: string) => dataStr.includes(kw.toLowerCase()));
-                    
-                    if (matchedKeywords.length > 0) {
-                      return (
-                        <div className="mb-3 p-2 rounded-md bg-success/10 border border-success/20">
-                          <div className="flex items-center gap-2 mb-1">
-                            <Tag className="h-3 w-3 text-success" />
-                            <span className="text-xs font-semibold text-success">Keyword Match</span>
-                          </div>
-                          <div className="flex flex-wrap gap-1">
-                            {matchedKeywords.map((keyword: string, idx: number) => (
-                              <Badge key={idx} variant="outline" className="text-xs border-success/30 text-success">
-                                {keyword}
-                              </Badge>
-                            ))}
-                          </div>
+    <TooltipProvider>
+      <div>
+        <ScrollArea className="h-full pr-4">
+          {/* Thumbnail Grid View */}
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 mb-6">
+            {logs.map((log) => {
+              let thumbnailData = null;
+              
+              // Extract thumbnail data based on log type
+              if (log.agent_type === 'holehe' && log.data?.results) {
+                const platforms = log.data.results.filter((r: any) => r.exists);
+                if (platforms.length > 0) {
+                  thumbnailData = {
+                    type: 'email',
+                    count: platforms.length,
+                    icon: 'Mail',
+                    label: 'Email Accounts',
+                  };
+                }
+              } else if (log.agent_type === 'sherlock' && log.data?.platforms) {
+                thumbnailData = {
+                  type: 'username',
+                  count: log.data.platforms.length,
+                  icon: 'User',
+                  label: 'Username Matches',
+                };
+              } else if (log.agent_type === 'social' && log.data?.profiles) {
+                const found = log.data.profiles.filter((p: any) => p.exists);
+                if (found.length > 0) {
+                  thumbnailData = {
+                    type: 'social',
+                    count: found.length,
+                    icon: 'Users',
+                    label: 'Social Profiles',
+                  };
+                }
+              } else if (log.agent_type === 'web' && log.data?.items) {
+                if (log.data.items.length > 0) {
+                  thumbnailData = {
+                    type: 'web',
+                    count: log.data.items.length,
+                    icon: 'Globe',
+                    label: 'Web Results',
+                  };
+                }
+              }
+
+              if (!thumbnailData) return null;
+
+              return (
+                <Tooltip key={log.id}>
+                  <TooltipTrigger asChild>
+                    <div className="p-4 rounded-lg border border-border/50 bg-card/50 hover:bg-card hover:border-primary/50 transition-all cursor-pointer group">
+                      <div className="flex flex-col items-center text-center gap-2">
+                        <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                          {log.agent_type === 'holehe' && <Mail className="h-6 w-6 text-primary" />}
+                          {log.agent_type === 'sherlock' && <User className="h-6 w-6 text-primary" />}
+                          {log.agent_type === 'social' && <Activity className="h-6 w-6 text-primary" />}
+                          {log.agent_type === 'web' && <Search className="h-6 w-6 text-primary" />}
                         </div>
-                      );
-                    }
-                    return null;
-                  })()}
-                  
-                  <div className="space-y-2">
-                    {log.agent_type === 'web' && log.data?.items?.length > 0 && (
-                      <div className="space-y-2">
-                        {log.data.items.map((item: any, idx: number) => (
-                          <a
-                            key={idx}
-                            href={item.link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-start gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors text-sm group"
-                          >
-                            <ExternalLink className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground group-hover:text-primary" />
-                            <div className="flex-1 min-w-0">
-                              <div className="font-medium text-foreground group-hover:text-primary truncate">
-                                {item.title}
-                              </div>
-                              {item.snippet && (
-                                <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
-                                  {item.snippet}
-                                </p>
-                              )}
+                        <div>
+                          <div className="text-2xl font-bold text-primary">{thumbnailData.count}</div>
+                          <div className="text-xs text-muted-foreground">{thumbnailData.label}</div>
+                        </div>
+                        {log.confidence_score !== undefined && (
+                          <ConfidenceScoreBadge score={log.confidence_score} size="sm" />
+                        )}
+                      </div>
+                    </div>
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="font-semibold">{log.agent}</p>
+                    <p className="text-xs text-muted-foreground">{log.message}</p>
+                  </TooltipContent>
+                </Tooltip>
+              );
+            })}
+          </div>
+
+          {/* Detailed Results */}
+          <div className="space-y-3">
+            {logs.map((log) => (
+              <div
+                key={log.id}
+                className="p-4 rounded-lg border border-border/50 bg-card/50 hover:bg-card transition-colors"
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex-1">
+                    <div className="flex items-center gap-2 mb-2 flex-wrap">
+                      {log.status === "success" && <CheckCircle2 className="h-4 w-4 text-green-500" />}
+                      {log.status === "processing" && <Clock className="h-4 w-4 text-blue-500 animate-spin" />}
+                      {log.status === "pending" && <AlertCircle className="h-4 w-4 text-yellow-500" />}
+                      <span className="font-medium text-sm">{log.agent}</span>
+                      <span className="text-xs text-muted-foreground">{log.timestamp}</span>
+                      {log.confidence_score !== undefined && <ConfidenceScoreBadge score={log.confidence_score} size="sm" />}
+                      {getVerificationBadge(log.verification_status)}
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-3">{log.message}</p>
+                    
+                    {/* Keyword Matches Display */}
+                    {log.data?.searchContext?.keywords?.length > 0 && (() => {
+                      const keywords = log.data.searchContext.keywords;
+                      const dataStr = JSON.stringify(log.data).toLowerCase();
+                      const matchedKeywords = keywords.filter((kw: string) => dataStr.includes(kw.toLowerCase()));
+                      
+                      if (matchedKeywords.length > 0) {
+                        return (
+                          <div className="mb-3 p-2 rounded-md bg-success/10 border border-success/20">
+                            <div className="flex items-center gap-2 mb-1">
+                              <Tag className="h-3 w-3 text-success" />
+                              <span className="text-xs font-semibold text-success">Keyword Match</span>
                             </div>
-                          </a>
-                        ))}
-                      </div>
-                    )}
-
-                    {log.agent_type === 'social' && log.data?.profiles && (
-                      <div className="space-y-1">
-                        {log.data.profiles
-                          .filter((p: any) => p.exists)
-                          .map((profile: any, idx: number) => (
-                            <a
-                              key={idx}
-                              href={profile.url}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
-                            >
-                              {getPlatformIcon(profile.platform)}
-                              <span className="text-muted-foreground">{profile.platform}</span>
-                              <ExternalLink className="h-3 w-3 ml-auto" />
-                            </a>
-                          ))}
-                      </div>
-                    )}
-
-                    {log.agent_type === 'holehe' && log.data?.results && (
-                      <div className="space-y-2">
-                        {log.data.results
-                          .filter((r: any) => r.exists)
-                          .map((result: any, idx: number) => (
-                            <div key={idx} className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/50">
-                              <div className="flex items-center gap-2 text-sm">
-                                <PlatformLogo platform={result.platform} size="sm" />
-                                <span className="text-muted-foreground">{result.platform}</span>
-                              </div>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => handleDeepDive(result.platform, log.id)}
-                                className="gap-1"
-                              >
-                                <Sparkles className="h-3 w-3" />
-                                Deep Dive
-                              </Button>
+                            <div className="flex flex-wrap gap-1">
+                              {matchedKeywords.map((keyword: string, idx: number) => (
+                                <Badge key={idx} variant="outline" className="text-xs border-success/30 text-success">
+                                  {keyword}
+                                </Badge>
+                              ))}
                             </div>
+                          </div>
+                        );
+                      }
+                      return null;
+                    })()}
+                    
+                    <div className="space-y-2">
+                      {log.agent_type === 'web' && log.data?.items?.length > 0 && (
+                        <div className="space-y-2">
+                          {log.data.items.map((item: any, idx: number) => (
+                            <Tooltip key={idx}>
+                              <TooltipTrigger asChild>
+                                <a
+                                  href={item.link}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-start gap-2 p-2 rounded-md hover:bg-muted/50 transition-colors text-sm group"
+                                >
+                                  <ExternalLink className="h-4 w-4 mt-0.5 shrink-0 text-muted-foreground group-hover:text-primary" />
+                                  <div className="flex-1 min-w-0">
+                                    <div className="font-medium text-foreground group-hover:text-primary truncate">
+                                      {item.title}
+                                    </div>
+                                    {item.snippet && (
+                                      <p className="text-xs text-muted-foreground line-clamp-2 mt-1">
+                                        {item.snippet}
+                                      </p>
+                                    )}
+                                  </div>
+                                </a>
+                              </TooltipTrigger>
+                              <TooltipContent>Click to open web result in new tab</TooltipContent>
+                            </Tooltip>
                           ))}
-                      </div>
-                    )}
+                        </div>
+                      )}
 
-                    {log.agent_type === 'sherlock' && log.data?.platforms && (
-                      <div className="space-y-1">
-                        {log.data.platforms.map((platform: any, idx: number) => (
-                          <a
-                            key={idx}
-                            href={platform.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
-                          >
-                            <PlatformLogo platform={platform.name} size="sm" />
-                            <span className="text-muted-foreground">{platform.name}</span>
-                            <ExternalLink className="h-3 w-3 ml-auto" />
-                          </a>
-                        ))}
-                      </div>
-                    )}
+                      {log.agent_type === 'social' && log.data?.profiles && (
+                        <div className="space-y-1">
+                          {log.data.profiles
+                            .filter((p: any) => p.exists)
+                            .map((profile: any, idx: number) => (
+                              <Tooltip key={idx}>
+                                <TooltipTrigger asChild>
+                                  <a
+                                    href={profile.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
+                                  >
+                                    {getPlatformIcon(profile.platform)}
+                                    <span className="text-muted-foreground">{profile.platform}</span>
+                                    <ExternalLink className="h-3 w-3 ml-auto" />
+                                  </a>
+                                </TooltipTrigger>
+                                <TooltipContent>View {profile.platform} profile</TooltipContent>
+                              </Tooltip>
+                            ))}
+                        </div>
+                      )}
+
+                      {log.agent_type === 'holehe' && log.data?.results && (
+                        <div className="space-y-2">
+                          {log.data.results
+                            .filter((r: any) => r.exists)
+                            .map((result: any, idx: number) => (
+                              <div key={idx} className="flex items-center justify-between gap-2 p-2 rounded-md bg-muted/50">
+                                <div className="flex items-center gap-2 text-sm">
+                                  <PlatformLogo platform={result.platform} size="sm" />
+                                  <span className="text-muted-foreground">{result.platform}</span>
+                                </div>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => handleDeepDive(result.platform, log.id)}
+                                      className="gap-1"
+                                    >
+                                      <Sparkles className="h-3 w-3" />
+                                      Deep Dive
+                                    </Button>
+                                  </TooltipTrigger>
+                                  <TooltipContent>Perform deeper investigation on this platform account</TooltipContent>
+                                </Tooltip>
+                              </div>
+                            ))}
+                        </div>
+                      )}
+
+                      {log.agent_type === 'sherlock' && log.data?.platforms && (
+                        <div className="space-y-1">
+                          {log.data.platforms.map((platform: any, idx: number) => (
+                            <Tooltip key={idx}>
+                              <TooltipTrigger asChild>
+                                <a
+                                  href={platform.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="flex items-center gap-2 text-sm hover:text-primary transition-colors"
+                                >
+                                  <PlatformLogo platform={platform.name} size="sm" />
+                                  <span className="text-muted-foreground">{platform.name}</span>
+                                  <ExternalLink className="h-3 w-3 ml-auto" />
+                                </a>
+                              </TooltipTrigger>
+                              <TooltipContent>View profile on {platform.name}</TooltipContent>
+                            </Tooltip>
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
 
-                <div className="flex gap-1">
-                  <Button
-                    size="sm"
-                    variant={log.verification_status === 'verified' ? 'default' : 'ghost'}
-                    onClick={() => updateVerificationStatus(log.id, 'verified')}
-                    className="h-8 w-8 p-0"
-                  >
-                    <Check className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={log.verification_status === 'needs_review' ? 'default' : 'ghost'}
-                    onClick={() => updateVerificationStatus(log.id, 'needs_review')}
-                    className="h-8 w-8 p-0"
-                  >
-                    <AlertCircle className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={log.verification_status === 'inaccurate' ? 'destructive' : 'ghost'}
-                    onClick={() => updateVerificationStatus(log.id, 'inaccurate')}
-                    className="h-8 w-8 p-0"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
+                  <div className="flex gap-1">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant={log.verification_status === 'verified' ? 'default' : 'ghost'}
+                          onClick={() => updateVerificationStatus(log.id, 'verified')}
+                          className="h-8 w-8 p-0"
+                        >
+                          <Check className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Mark as verified</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant={log.verification_status === 'needs_review' ? 'default' : 'ghost'}
+                          onClick={() => updateVerificationStatus(log.id, 'needs_review')}
+                          className="h-8 w-8 p-0"
+                        >
+                          <AlertCircle className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Mark as needs review</TooltipContent>
+                    </Tooltip>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant={log.verification_status === 'inaccurate' ? 'default' : 'ghost'}
+                          onClick={() => updateVerificationStatus(log.id, 'inaccurate')}
+                          className="h-8 w-8 p-0"
+                        >
+                          <X className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Mark as inaccurate</TooltipContent>
+                    </Tooltip>
+                  </div>
                 </div>
               </div>
-            </div>
-          ))}
-        </div>
-      </ScrollArea>
+            ))}
+          </div>
+        </ScrollArea>
 
-      <Dialog open={deepDiveDialog?.open || false} onOpenChange={(open) => setDeepDiveDialog(open ? deepDiveDialog : null)}>
-        <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle className="flex items-center gap-2">
-              <Sparkles className="h-5 w-5 text-primary" />
-              Deep Platform Investigation: {deepDiveDialog?.platform}
-            </DialogTitle>
-            <DialogDescription>
-              AI-powered analysis of account activity, visibility, and connections
-            </DialogDescription>
-          </DialogHeader>
-
-          {deepDiveLoading ? (
-            <div className="flex items-center justify-center py-8">
-              <Clock className="h-8 w-8 animate-spin text-primary" />
-              <span className="ml-2 text-muted-foreground">Analyzing platform data...</span>
-            </div>
-          ) : deepDiveResults ? (
-            <div className="space-y-4">
-              {deepDiveResults.usernames && deepDiveResults.usernames.length > 0 && (
-                <div>
-                  <h4 className="font-semibold mb-2 flex items-center gap-2">
-                    <Shield className="h-4 w-4" />
-                    Likely Usernames
-                  </h4>
-                  <div className="flex flex-wrap gap-2">
-                    {deepDiveResults.usernames.map((username: string, idx: number) => (
-                      <Badge key={idx} variant="secondary">{username}</Badge>
-                    ))}
+        {/* Deep Dive Dialog */}
+        <Dialog open={deepDiveDialog?.open || false} onOpenChange={(open) => !open && setDeepDiveDialog(null)}>
+          <DialogContent className="max-w-2xl max-h-[80vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Deep Investigation: {deepDiveDialog?.platform}</DialogTitle>
+              <DialogDescription>
+                Detailed analysis of this platform account
+              </DialogDescription>
+            </DialogHeader>
+            
+            {deepDiveLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="text-center space-y-2">
+                  <Clock className="h-8 w-8 mx-auto animate-pulse text-primary" />
+                  <p className="text-sm text-muted-foreground">Performing deep investigation...</p>
+                </div>
+              </div>
+            ) : deepDiveResults ? (
+              <div className="space-y-4">
+                {deepDiveResults.username && (
+                  <div>
+                    <h4 className="font-semibold mb-1">Username</h4>
+                    <p className="text-sm text-muted-foreground">{deepDiveResults.username}</p>
                   </div>
-                </div>
-              )}
-
-              {deepDiveResults.activity_status && (
-                <div>
-                  <h4 className="font-semibold mb-2">Activity Status</h4>
-                  <Badge variant={deepDiveResults.activity_status === 'active' ? 'default' : 'secondary'}>
-                    {deepDiveResults.activity_status}
-                  </Badge>
-                </div>
-              )}
-
-              {deepDiveResults.visibility && (
-                <div>
-                  <h4 className="font-semibold mb-2">Public Visibility</h4>
-                  <Badge variant="outline">{deepDiveResults.visibility}</Badge>
-                  {deepDiveResults.visibility_details && (
-                    <p className="text-sm text-muted-foreground mt-2">{deepDiveResults.visibility_details}</p>
-                  )}
-                </div>
-              )}
-
-              {deepDiveResults.connections && deepDiveResults.connections.length > 0 && (
-                <div>
-                  <h4 className="font-semibold mb-2">Potential Connections</h4>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    {deepDiveResults.connections.map((connection: string, idx: number) => (
-                      <li key={idx}>{connection}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {deepDiveResults.recommendations && deepDiveResults.recommendations.length > 0 && (
-                <div>
-                  <h4 className="font-semibold mb-2">Investigation Recommendations</h4>
-                  <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
-                    {deepDiveResults.recommendations.map((rec: string, idx: number) => (
-                      <li key={idx}>{rec}</li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-
-              {deepDiveResults.raw_analysis && (
-                <div>
-                  <h4 className="font-semibold mb-2">Analysis</h4>
-                  <p className="text-sm text-muted-foreground whitespace-pre-wrap">{deepDiveResults.raw_analysis}</p>
-                </div>
-              )}
-            </div>
-          ) : null}
-        </DialogContent>
-      </Dialog>
-    </div>
+                )}
+                {deepDiveResults.isActive !== undefined && (
+                  <div>
+                    <h4 className="font-semibold mb-1">Account Status</h4>
+                    <Badge variant={deepDiveResults.isActive ? 'default' : 'secondary'}>
+                      {deepDiveResults.isActive ? 'Active' : 'Inactive'}
+                    </Badge>
+                  </div>
+                )}
+                {deepDiveResults.visibility && (
+                  <div>
+                    <h4 className="font-semibold mb-1">Profile Visibility</h4>
+                    <p className="text-sm text-muted-foreground">{deepDiveResults.visibility}</p>
+                  </div>
+                )}
+                {deepDiveResults.connections?.length > 0 && (
+                  <div>
+                    <h4 className="font-semibold mb-2">Connected Identities</h4>
+                    <div className="space-y-1">
+                      {deepDiveResults.connections.map((conn: any, idx: number) => (
+                        <div key={idx} className="text-sm p-2 rounded-md bg-muted/50">
+                          {conn.platform}: {conn.identifier}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                {deepDiveResults.additionalInfo && (
+                  <div>
+                    <h4 className="font-semibold mb-1">Additional Information</h4>
+                    <pre className="text-xs p-3 rounded-md bg-muted overflow-x-auto">
+                      {JSON.stringify(deepDiveResults.additionalInfo, null, 2)}
+                    </pre>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="text-sm text-muted-foreground">No results available</p>
+            )}
+          </DialogContent>
+        </Dialog>
+      </div>
+    </TooltipProvider>
   );
 };
 
