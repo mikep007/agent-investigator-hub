@@ -1,0 +1,142 @@
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Shield, AlertTriangle, Calendar, Database } from "lucide-react";
+import { format } from "date-fns";
+
+interface BreachSource {
+  name: string;
+  date: string;
+  line?: string;
+}
+
+interface BreachData {
+  email: string;
+  found: number;
+  fields: string[];
+  sources: BreachSource[];
+  success: boolean;
+  error?: string;
+}
+
+interface BreachResultsProps {
+  data: BreachData;
+}
+
+const BreachResults = ({ data }: BreachResultsProps) => {
+  if (data.error) {
+    return (
+      <Card className="border-destructive/50">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-destructive">
+            <AlertTriangle className="w-5 h-5" />
+            Breach Check Error
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <Alert variant="destructive">
+            <AlertDescription>{data.error}</AlertDescription>
+          </Alert>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  const hasBreaches = data.found > 0;
+
+  return (
+    <Card className={hasBreaches ? "border-destructive/50" : "border-primary/50"}>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          {hasBreaches ? (
+            <AlertTriangle className="w-5 h-5 text-destructive" />
+          ) : (
+            <Shield className="w-5 h-5 text-primary" />
+          )}
+          Data Breach Intelligence
+        </CardTitle>
+        <CardDescription>
+          Email: <span className="font-mono text-foreground">{data.email}</span>
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Summary */}
+        <div className="flex items-center justify-between p-4 rounded-lg bg-muted/50">
+          <div className="flex items-center gap-3">
+            <Database className="w-5 h-5 text-muted-foreground" />
+            <div>
+              <p className="text-sm font-medium">Breaches Found</p>
+              <p className="text-xs text-muted-foreground">
+                {hasBreaches ? "Email found in data breaches" : "No breaches detected"}
+              </p>
+            </div>
+          </div>
+          <Badge variant={hasBreaches ? "destructive" : "default"} className="text-lg px-4 py-1">
+            {data.found}
+          </Badge>
+        </div>
+
+        {/* Compromised Fields */}
+        {data.fields && data.fields.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-destructive" />
+              Compromised Data Fields
+            </h4>
+            <div className="flex flex-wrap gap-2">
+              {data.fields.map((field, index) => (
+                <Badge key={index} variant="outline" className="border-destructive/50">
+                  {field}
+                </Badge>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Breach Sources */}
+        {data.sources && data.sources.length > 0 && (
+          <div className="space-y-2">
+            <h4 className="text-sm font-semibold">Breach Sources</h4>
+            <div className="space-y-2">
+              {data.sources.map((source, index) => (
+                <div
+                  key={index}
+                  className="p-3 rounded-lg border border-border/50 bg-background/50 space-y-1"
+                >
+                  <div className="flex items-center justify-between">
+                    <p className="font-medium text-sm">{source.name}</p>
+                    {source.date && (
+                      <Badge variant="secondary" className="text-xs">
+                        <Calendar className="w-3 h-3 mr-1" />
+                        {source.date}
+                      </Badge>
+                    )}
+                  </div>
+                  {source.line && (
+                    <p className="text-xs text-muted-foreground font-mono truncate">
+                      {source.line}
+                    </p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Security Recommendation */}
+        {hasBreaches && (
+          <Alert variant="destructive">
+            <AlertTriangle className="h-4 w-4" />
+            <AlertDescription>
+              <strong>Security Recommendation:</strong> This email has been found in {data.found} data breach
+              {data.found > 1 ? "es" : ""}. Consider changing passwords on affected accounts and enabling
+              two-factor authentication.
+            </AlertDescription>
+          </Alert>
+        )}
+      </CardContent>
+    </Card>
+  );
+};
+
+export default BreachResults;
