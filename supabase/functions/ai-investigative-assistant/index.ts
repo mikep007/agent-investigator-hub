@@ -27,7 +27,11 @@ serve(async (req) => {
         source: f.source,
         data: {
           profiles: data.profiles?.filter((p: any) => p.exists).map((p: any) => p.platform),
-          webResults: data.items?.slice(0, 5).map((i: any) => ({ title: i.title, url: i.displayLink })),
+          webResults: data.items?.slice(0, 5).map((i: any) => ({ 
+            title: i.title, 
+            snippet: i.snippet,
+            url: i.displayLink 
+          })),
           sherlockPlatforms: data.foundPlatforms?.map((p: any) => p.name),
           holehePlatforms: data.allResults?.filter((r: any) => r.exists).map((r: any) => r.name),
           location: data.location?.formatted_address,
@@ -42,9 +46,18 @@ serve(async (req) => {
     const systemPrompt = `You are an expert OSINT (Open Source Intelligence) investigator analyzing digital footprint data. Your role is to:
 
 1. Identify patterns and connections between discovered data points
-2. Suggest specific additional platforms, websites, or data sources to investigate based on the findings
-3. Recommend targeted search combinations that could reveal more information
-4. Provide context-aware investigative insights
+2. Detect co-occurring names in search results (spouses, business partners, family members, associates)
+3. Suggest specific additional platforms, websites, or data sources to investigate based on the findings
+4. Recommend targeted search combinations that could reveal more information
+5. Provide context-aware investigative insights
+
+**CRITICAL**: Analyze web search result snippets for additional names that appear alongside the target subject. These could indicate:
+- Spouses or partners (co-ownership, joint accounts, property records)
+- Business associates (co-founders, partners, colleagues)
+- Family members (parents, siblings, children)
+- Co-residents or roommates
+
+When you identify co-occurring names, create a specific suggestion to investigate that person as a separate search target.
 
 Based on the discovered information, provide 3-5 actionable suggestions. Each suggestion should include:
 - A clear action (what to search/where to look)
@@ -54,6 +67,14 @@ Based on the discovered information, provide 3-5 actionable suggestions. Each su
 Format your response as a JSON array of suggestions with this structure:
 {
   "suggestions": [
+    {
+      "action": "Investigate Shapiro Yana",
+      "reasoning": "Name appears with subject in property ownership records, suggesting spouse or co-owner relationship",
+      "platform": "Comprehensive Search",
+      "searchType": "related_person",
+      "searchQuery": "Shapiro Yana",
+      "expectedValue": "Additional addresses, phone numbers, emails, and connections that may link back to subject"
+    },
     {
       "action": "Check Athlinks.com for race results",
       "reasoning": "Found Spartan Race and Tough Mudder mentions indicating obstacle course racing",
@@ -66,6 +87,7 @@ Format your response as a JSON array of suggestions with this structure:
 }
 
 Be specific about platforms and search strategies. Consider:
+- **Related persons** (names appearing in results with the subject)
 - Sports/fitness platforms (Strava, Garmin Connect, MapMyRun, Athlinks)
 - Professional networks (LinkedIn, GitHub, Stack Overflow, Behance)
 - Geographic patterns (local business directories, regional platforms)
@@ -107,7 +129,7 @@ Provide specific, actionable suggestions for additional investigation based on p
                         action: { type: 'string' },
                         reasoning: { type: 'string' },
                         platform: { type: 'string' },
-                        searchType: { type: 'string', enum: ['web', 'social', 'username', 'email'] },
+                        searchType: { type: 'string', enum: ['web', 'social', 'username', 'email', 'related_person'] },
                         searchQuery: { type: 'string' },
                         expectedValue: { type: 'string' }
                       },
