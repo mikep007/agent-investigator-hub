@@ -366,9 +366,9 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
             const dy = node.y - otherNode.y;
             const distance = Math.sqrt(dx * dx + dy * dy) || 1;
             
-            // Get node radii for collision detection
-            const nodeRadius = node.type === 'target' ? 30 : 20;
-            const otherRadius = otherNode.type === 'target' ? 30 : 20;
+            // Get node sizes for collision detection (using half-width for boxes)
+            const nodeRadius = node.type === 'target' ? 25 : 20;
+            const otherRadius = otherNode.type === 'target' ? 25 : 20;
             const minCollisionDist = nodeRadius + otherRadius + 15; // Add padding
             
             // Strong collision force if overlapping
@@ -392,7 +392,7 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
         node.y += node.vy;
 
         // Boundary check with proper padding
-        const nodeRadius = node.type === 'target' ? 30 : 20;
+        const nodeRadius = node.type === 'target' ? 25 : 20;
         const padding = nodeRadius + 20;
         if (node.x < padding) { node.x = padding; node.vx = 0; }
         if (node.x > 800 - padding) { node.x = 800 - padding; node.vx = 0; }
@@ -465,7 +465,8 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
           {nodes.map((node) => {
             const Icon = getNodeIcon(node.type);
             const isHovered = hoveredNode === node.id;
-            const radius = node.type === 'target' ? 30 : 20;
+            const size = node.type === 'target' ? 50 : 40;
+            const iconSize = node.type === 'target' ? 24 : 18;
 
             return (
               <g
@@ -476,9 +477,13 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
                 onClick={() => handleNodeClick(node)}
                 style={{ cursor: node.url ? 'pointer' : 'default' }}
               >
-                {/* Node circle */}
-                <circle
-                  r={radius}
+                {/* Node box - rounded rectangle */}
+                <rect
+                  x={-size/2}
+                  y={-size/2}
+                  width={size}
+                  height={size}
+                  rx={8}
                   fill={getNodeColor(node.type)}
                   stroke={isHovered ? 'hsl(var(--primary))' : 'hsl(var(--background))'}
                   strokeWidth={isHovered ? 3 : 2}
@@ -486,22 +491,35 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
                   className="transition-all duration-200"
                 />
 
+                {/* Icon inside box */}
+                <g transform={`translate(${-iconSize/2}, ${-iconSize/2})`}>
+                  <Icon 
+                    size={iconSize} 
+                    color="hsl(var(--background))" 
+                    strokeWidth={2.5}
+                  />
+                </g>
+
                 {/* Confidence ring for non-target nodes */}
                 {node.type !== 'target' && node.confidence !== undefined && (
-                  <circle
-                    r={radius + 5}
+                  <rect
+                    x={-size/2 - 4}
+                    y={-size/2 - 4}
+                    width={size + 8}
+                    height={size + 8}
+                    rx={10}
                     fill="none"
                     stroke={getNodeColor(node.type)}
                     strokeWidth={2}
                     opacity={node.confidence / 100}
-                    strokeDasharray={`${(node.confidence / 100) * (2 * Math.PI * (radius + 5))} ${2 * Math.PI * (radius + 5)}`}
+                    strokeDasharray={`${(node.confidence / 100) * ((size + 8) * 4)} ${(size + 8) * 4}`}
                   />
                 )}
 
                 {/* Node label */}
                 {(isHovered || node.type === 'target') && (
                   <text
-                    y={radius + 20}
+                    y={size/2 + 16}
                     textAnchor="middle"
                     fill="hsl(var(--foreground))"
                     fontSize="12"
@@ -515,7 +533,7 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
                 {/* Platform badge */}
                 {isHovered && node.platform && (
                   <text
-                    y={radius + 35}
+                    y={size/2 + 30}
                     textAnchor="middle"
                     fill="hsl(var(--muted-foreground))"
                     fontSize="10"
@@ -538,9 +556,11 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
           return (
             <div key={type} className="flex items-center gap-2">
               <div
-                className="w-3 h-3 rounded-full shrink-0"
+                className="w-4 h-4 rounded shrink-0 flex items-center justify-center"
                 style={{ backgroundColor: getNodeColor(type) }}
-              />
+              >
+                <Icon size={10} color="hsl(var(--background))" strokeWidth={2.5} />
+              </div>
               <span className="capitalize text-muted-foreground text-[10px]">{type}</span>
             </div>
           );
