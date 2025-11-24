@@ -530,8 +530,8 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
         </g>
       </svg>
 
-      {/* Legend */}
-      <div className="absolute bottom-4 left-4 bg-background/90 backdrop-blur-sm border border-border rounded-lg p-3 space-y-1 text-xs">
+      {/* Legend - moved to top left to avoid blocking nodes */}
+      <div className="absolute top-4 left-4 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-3 space-y-1 text-xs shadow-lg">
         <div className="font-semibold mb-2 text-foreground">Legend</div>
         {['target', 'email', 'username', 'social', 'web', 'phone', 'address'].map(type => {
           const Icon = getNodeIcon(type);
