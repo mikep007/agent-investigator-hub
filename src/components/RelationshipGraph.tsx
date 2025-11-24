@@ -326,7 +326,7 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
     };
   }, [active, investigationId, targetName]);
 
-  // Force-directed graph simulation
+  // Force-directed graph simulation with collision detection
   useEffect(() => {
     if (nodes.length === 0) return;
 
@@ -334,7 +334,8 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
       const newNodes = [...nodes];
       const alpha = 0.1;
       const linkStrength = 0.3;
-      const repulsion = 800;
+      const repulsion = 1200; // Increased for better spacing
+      const minDistance = 50; // Minimum distance between nodes
 
       // Apply forces
       newNodes.forEach((node, i) => {
@@ -349,7 +350,7 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
             const dx = targetNode.x - sourceNode.x;
             const dy = targetNode.y - sourceNode.y;
             const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-            const force = (distance - 100) * linkStrength * link.strength;
+            const force = (distance - 120) * linkStrength * link.strength; // Increased ideal distance
             
             if (node.id === link.target) {
               node.vx += (dx / distance) * force * alpha;
@@ -358,14 +359,27 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
           }
         });
 
-        // Repulsion force
+        // Collision detection and repulsion force
         newNodes.forEach((otherNode, j) => {
           if (i !== j) {
             const dx = node.x - otherNode.x;
             const dy = node.y - otherNode.y;
             const distance = Math.sqrt(dx * dx + dy * dy) || 1;
-            const force = repulsion / (distance * distance);
             
+            // Get node radii for collision detection
+            const nodeRadius = node.type === 'target' ? 30 : 20;
+            const otherRadius = otherNode.type === 'target' ? 30 : 20;
+            const minCollisionDist = nodeRadius + otherRadius + 15; // Add padding
+            
+            // Strong collision force if overlapping
+            if (distance < minCollisionDist) {
+              const collisionForce = ((minCollisionDist - distance) / distance) * 50;
+              node.vx += (dx / distance) * collisionForce * alpha;
+              node.vy += (dy / distance) * collisionForce * alpha;
+            }
+            
+            // Regular repulsion force
+            const force = repulsion / (distance * distance);
             node.vx += (dx / distance) * force * alpha;
             node.vy += (dy / distance) * force * alpha;
           }
@@ -377,12 +391,13 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
         node.x += node.vx;
         node.y += node.vy;
 
-        // Boundary check
-        const padding = 50;
+        // Boundary check with proper padding
+        const nodeRadius = node.type === 'target' ? 30 : 20;
+        const padding = nodeRadius + 20;
         if (node.x < padding) { node.x = padding; node.vx = 0; }
-        if (node.x > 750) { node.x = 750; node.vx = 0; }
+        if (node.x > 800 - padding) { node.x = 800 - padding; node.vx = 0; }
         if (node.y < padding) { node.y = padding; node.vy = 0; }
-        if (node.y > 550) { node.y = 550; node.vy = 0; }
+        if (node.y > 600 - padding) { node.y = 600 - padding; node.vy = 0; }
       });
 
       setNodes(newNodes);
