@@ -9,6 +9,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
 import PlatformLogo from "./PlatformLogo";
+import InvestigativeAssistant from "./InvestigativeAssistant";
+import AddressResults from "./AddressResults";
 import {
   Tooltip,
   TooltipContent,
@@ -693,6 +695,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           <TabsContent value="all" className="flex-1">
             <ScrollArea className="h-[550px]">
               <div className="space-y-6 px-6 pb-4">
+                {/* AI Investigative Assistant */}
+                {filteredLogs.length > 0 && !searchQuery && (
+                  <InvestigativeAssistant findings={logs} />
+                )}
+                
                 {filteredLogs.length > 0 ? (
                   <>
                     {renderWebResults(filteredLogs)}
