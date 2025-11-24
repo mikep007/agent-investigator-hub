@@ -12,6 +12,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 
 interface RelationshipGraphProps {
   active: boolean;
@@ -431,13 +437,14 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
   }
 
   return (
-    <div className="relative w-full h-full bg-background/50 rounded-lg border border-border overflow-hidden">
-      <svg
-        width="800"
-        height="600"
-        className="w-full h-full"
-        style={{ minHeight: '600px' }}
-      >
+    <TooltipProvider>
+      <div className="relative w-full h-full bg-background/50 rounded-lg border border-border overflow-hidden">
+        <svg
+          width="800"
+          height="600"
+          className="w-full h-full"
+          style={{ minHeight: '600px' }}
+        >
         {/* Draw links */}
         <g>
           {links.map((link, i) => {
@@ -460,7 +467,7 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
           })}
         </g>
 
-        {/* Draw nodes */}
+        {/* Draw nodes with tooltips */}
         <g>
           {nodes.map((node) => {
             const Icon = getNodeIcon(node.type);
@@ -469,80 +476,127 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
             const iconSize = node.type === 'target' ? 24 : 18;
 
             return (
-              <g
-                key={node.id}
-                transform={`translate(${node.x}, ${node.y})`}
-                onMouseEnter={() => setHoveredNode(node.id)}
-                onMouseLeave={() => setHoveredNode(null)}
-                onClick={() => handleNodeClick(node)}
-                style={{ cursor: node.url ? 'pointer' : 'default' }}
-              >
-                {/* Node box - rounded rectangle */}
-                <rect
-                  x={-size/2}
-                  y={-size/2}
-                  width={size}
-                  height={size}
-                  rx={8}
-                  fill={getNodeColor(node.type)}
-                  stroke={isHovered ? 'hsl(var(--primary))' : 'hsl(var(--background))'}
-                  strokeWidth={isHovered ? 3 : 2}
-                  opacity={0.9}
-                  className="transition-all duration-200"
-                />
-
-                {/* Icon inside box */}
-                <g transform={`translate(${-iconSize/2}, ${-iconSize/2})`}>
-                  <Icon 
-                    size={iconSize} 
-                    color="hsl(var(--background))" 
-                    strokeWidth={2.5}
-                  />
-                </g>
-
-                {/* Confidence ring for non-target nodes */}
-                {node.type !== 'target' && node.confidence !== undefined && (
-                  <rect
-                    x={-size/2 - 4}
-                    y={-size/2 - 4}
-                    width={size + 8}
-                    height={size + 8}
-                    rx={10}
-                    fill="none"
-                    stroke={getNodeColor(node.type)}
-                    strokeWidth={2}
-                    opacity={node.confidence / 100}
-                    strokeDasharray={`${(node.confidence / 100) * ((size + 8) * 4)} ${(size + 8) * 4}`}
-                  />
-                )}
-
-                {/* Node label */}
-                {(isHovered || node.type === 'target') && (
-                  <text
-                    y={size/2 + 16}
-                    textAnchor="middle"
-                    fill="hsl(var(--foreground))"
-                    fontSize="12"
-                    fontWeight={node.type === 'target' ? 'bold' : 'normal'}
-                    className="pointer-events-none select-none"
+              <Tooltip key={node.id}>
+                <TooltipTrigger asChild>
+                  <g
+                    transform={`translate(${node.x}, ${node.y})`}
+                    onMouseEnter={() => setHoveredNode(node.id)}
+                    onMouseLeave={() => setHoveredNode(null)}
+                    onClick={() => handleNodeClick(node)}
+                    style={{ cursor: node.url ? 'pointer' : 'default' }}
                   >
-                    {node.label.length > 20 ? node.label.substring(0, 20) + '...' : node.label}
-                  </text>
-                )}
+                    {/* Node box - rounded rectangle */}
+                    <rect
+                      x={-size/2}
+                      y={-size/2}
+                      width={size}
+                      height={size}
+                      rx={8}
+                      fill={getNodeColor(node.type)}
+                      stroke={isHovered ? 'hsl(var(--primary))' : 'hsl(var(--background))'}
+                      strokeWidth={isHovered ? 3 : 2}
+                      opacity={0.9}
+                      className="transition-all duration-200"
+                    />
 
-                {/* Platform badge */}
-                {isHovered && node.platform && (
-                  <text
-                    y={size/2 + 30}
-                    textAnchor="middle"
-                    fill="hsl(var(--muted-foreground))"
-                    fontSize="10"
-                    className="pointer-events-none select-none"
-                  >
-                    {node.platform}
-                  </text>
-                )}
-              </g>
+                    {/* Icon inside box */}
+                    <g transform={`translate(${-iconSize/2}, ${-iconSize/2})`}>
+                      <Icon 
+                        size={iconSize} 
+                        color="hsl(var(--background))" 
+                        strokeWidth={2.5}
+                      />
+                    </g>
+
+                    {/* Confidence ring for non-target nodes */}
+                    {node.type !== 'target' && node.confidence !== undefined && (
+                      <rect
+                        x={-size/2 - 4}
+                        y={-size/2 - 4}
+                        width={size + 8}
+                        height={size + 8}
+                        rx={10}
+                        fill="none"
+                        stroke={getNodeColor(node.type)}
+                        strokeWidth={2}
+                        opacity={node.confidence / 100}
+                        strokeDasharray={`${(node.confidence / 100) * ((size + 8) * 4)} ${(size + 8) * 4}`}
+                      />
+                    )}
+
+                    {/* Node label */}
+                    {(isHovered || node.type === 'target') && (
+                      <text
+                        y={size/2 + 16}
+                        textAnchor="middle"
+                        fill="hsl(var(--foreground))"
+                        fontSize="12"
+                        fontWeight={node.type === 'target' ? 'bold' : 'normal'}
+                        className="pointer-events-none select-none"
+                      >
+                        {node.label.length > 20 ? node.label.substring(0, 20) + '...' : node.label}
+                      </text>
+                    )}
+
+                    {/* Platform badge */}
+                    {isHovered && node.platform && (
+                      <text
+                        y={size/2 + 30}
+                        textAnchor="middle"
+                        fill="hsl(var(--muted-foreground))"
+                        fontSize="10"
+                        className="pointer-events-none select-none"
+                      >
+                        {node.platform}
+                      </text>
+                    )}
+                  </g>
+                </TooltipTrigger>
+                <TooltipContent 
+                  side="top" 
+                  className="max-w-xs bg-background/95 backdrop-blur-sm border-border"
+                >
+                  <div className="space-y-2 p-1">
+                    <div className="flex items-center gap-2 border-b border-border pb-2">
+                      <Icon size={16} className="text-primary" />
+                      <span className="font-semibold text-foreground capitalize">{node.type}</span>
+                    </div>
+                    
+                    <div className="space-y-1 text-sm">
+                      <div className="flex justify-between gap-4">
+                        <span className="text-muted-foreground">Label:</span>
+                        <span className="text-foreground font-medium">{node.label}</span>
+                      </div>
+                      
+                      {node.platform && (
+                        <div className="flex justify-between gap-4">
+                          <span className="text-muted-foreground">Platform:</span>
+                          <span className="text-foreground">{node.platform}</span>
+                        </div>
+                      )}
+                      
+                      {node.confidence !== undefined && (
+                        <div className="flex justify-between gap-4">
+                          <span className="text-muted-foreground">Confidence:</span>
+                          <Badge variant={node.confidence > 70 ? "default" : "secondary"} className="text-xs">
+                            {node.confidence}%
+                          </Badge>
+                        </div>
+                      )}
+                      
+                      {node.url && (
+                        <div className="pt-2 border-t border-border">
+                          <span className="text-muted-foreground text-xs">URL:</span>
+                          <div className="text-xs text-primary break-all mt-1 font-mono">
+                            {node.url.length > 60 ? node.url.substring(0, 60) + '...' : node.url}
+                          </div>
+                          <p className="text-[10px] text-muted-foreground mt-1 italic">Click to open</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </TooltipContent>
+              </Tooltip>
             );
           })}
         </g>
@@ -573,7 +627,8 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
         <div className="text-muted-foreground text-[10px]">Nodes: {nodes.length}</div>
         <div className="text-muted-foreground text-[10px]">Links: {links.length}</div>
       </div>
-    </div>
+      </div>
+    </TooltipProvider>
   );
 };
 
