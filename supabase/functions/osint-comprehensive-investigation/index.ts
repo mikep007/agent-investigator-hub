@@ -71,6 +71,7 @@ Deno.serve(async (req) => {
 
     // Email enumeration
     if (searchData.email) {
+      // Run Holehe for platform enumeration
       searchPromises.push(
         supabaseClient.functions.invoke('osint-holehe', {
           body: { target: searchData.email }
@@ -78,6 +79,7 @@ Deno.serve(async (req) => {
       );
       searchTypes.push('holehe');
 
+      // Run basic email validation and lookup
       searchPromises.push(
         supabaseClient.functions.invoke('osint-email-lookup', {
           body: { target: searchData.email }
@@ -85,12 +87,41 @@ Deno.serve(async (req) => {
       );
       searchTypes.push('email');
 
+      // Run social search for email mentions
       searchPromises.push(
         supabaseClient.functions.invoke('osint-social-search', {
           body: { target: searchData.email }
         })
       );
       searchTypes.push('social');
+
+      // Run OSINT Industries API for email intelligence
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-industries', {
+          body: { target: searchData.email }
+        })
+      );
+      searchTypes.push('osint_industries');
+
+      // Extract username from email local-part (before @) and run Sherlock
+      const emailLocalPart = searchData.email.split('@')[0];
+      if (emailLocalPart && emailLocalPart.length > 0) {
+        console.log(`Extracted username from email: ${emailLocalPart}`);
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-sherlock', {
+            body: { target: emailLocalPart }
+          })
+        );
+        searchTypes.push('sherlock_from_email');
+
+        // Also run web search for the exact email string
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-web-search', {
+            body: { target: `"${searchData.email}"` }
+          })
+        );
+        searchTypes.push('web_email_exact');
+      }
     }
 
     // Username enumeration
