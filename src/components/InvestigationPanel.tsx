@@ -3,7 +3,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
@@ -43,6 +44,7 @@ interface LogEntry {
 const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
   const [deepDiveDialog, setDeepDiveDialog] = useState<{ open: boolean; platform: string; findingId: string } | null>(null);
   const [deepDiveLoading, setDeepDiveLoading] = useState(false);
   const [deepDiveResults, setDeepDiveResults] = useState<any>(null);
@@ -259,11 +261,65 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
     );
   }
 
+  // Filter logs based on search query
+  const filterLogsBySearch = (logsToFilter: LogEntry[]) => {
+    if (!searchQuery.trim()) return logsToFilter;
+    
+    const query = searchQuery.toLowerCase();
+    return logsToFilter.filter(log => {
+      // Search in agent type and message
+      if (log.agent_type?.toLowerCase().includes(query) || log.message.toLowerCase().includes(query)) {
+        return true;
+      }
+      
+      // Search in web results
+      if (log.data?.items) {
+        return log.data.items.some((item: any) => 
+          item.title?.toLowerCase().includes(query) ||
+          item.snippet?.toLowerCase().includes(query) ||
+          item.displayLink?.toLowerCase().includes(query)
+        );
+      }
+      
+      // Search in Sherlock platforms
+      if (log.data?.foundPlatforms) {
+        return log.data.foundPlatforms.some((platform: any) =>
+          platform.name?.toLowerCase().includes(query) ||
+          platform.url?.toLowerCase().includes(query)
+        );
+      }
+      
+      // Search in Holehe results
+      if (log.data?.allResults) {
+        return log.data.allResults.some((result: any) =>
+          result.name?.toLowerCase().includes(query) ||
+          result.domain?.toLowerCase().includes(query)
+        );
+      }
+      
+      // Search in social profiles
+      if (log.data?.profiles) {
+        return log.data.profiles.some((profile: any) =>
+          profile.platform?.toLowerCase().includes(query) ||
+          profile.url?.toLowerCase().includes(query)
+        );
+      }
+      
+      // Search in address data
+      if (log.data?.location) {
+        return log.data.location.formatted_address?.toLowerCase().includes(query);
+      }
+      
+      return false;
+    });
+  };
+
   // Categorize logs
-  const webLogs = logs.filter(log => log.agent_type === 'Web' || (log.source && (log.source.includes('web_search') || log.source.includes('address_owner') || log.source.includes('address_residents'))));
-  const socialLogs = logs.filter(log => log.agent_type === 'Social' || log.agent_type === 'Sherlock' || log.agent_type === 'Holehe');
-  const addressLogs = logs.filter(log => log.agent_type === 'Address');
-  const contactLogs = logs.filter(log => log.agent_type === 'Email' || log.agent_type === 'Phone');
+  const filteredLogs = filterLogsBySearch(logs);
+  const webLogs = filteredLogs.filter(log => log.agent_type === 'Web' || (log.source && (log.source.includes('web_search') || log.source.includes('address_owner') || log.source.includes('address_residents'))));
+  const socialLogs = filteredLogs.filter(log => log.agent_type === 'Social' || log.agent_type === 'Sherlock' || log.agent_type === 'Holehe');
+  const addressLogs = filteredLogs.filter(log => log.agent_type === 'Address');
+  const contactLogs = filteredLogs.filter(log => log.agent_type === 'Email' || log.agent_type === 'Phone');
 
   const renderWebResults = (filteredLogs: LogEntry[]) => (
     <>
@@ -576,90 +632,133 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
     </>
   );
 
+
   return (
     <TooltipProvider>
-      <Tabs defaultValue="all" className="w-full">
-        <TabsList className="grid w-full grid-cols-5 mb-4">
-          <TabsTrigger value="all" className="text-xs">
-            All ({logs.length})
-          </TabsTrigger>
-          <TabsTrigger value="web" className="text-xs">
-            <Globe className="h-3 w-3 mr-1" />
-            Web ({webLogs.length})
-          </TabsTrigger>
-          <TabsTrigger value="social" className="text-xs">
-            <User className="h-3 w-3 mr-1" />
-            Social ({socialLogs.length})
-          </TabsTrigger>
-          <TabsTrigger value="address" className="text-xs">
-            <MapPin className="h-3 w-3 mr-1" />
-            Address ({addressLogs.length})
-          </TabsTrigger>
-          <TabsTrigger value="contact" className="text-xs">
-            <Mail className="h-3 w-3 mr-1" />
-            Contact ({contactLogs.length})
-          </TabsTrigger>
-        </TabsList>
-
-        <TabsContent value="all">
-          <ScrollArea className="h-[600px]">
-            <div className="space-y-6 pr-4 pb-4">
-              {renderWebResults(logs)}
-              {renderSocialResults(logs)}
-              {renderAddressResults(logs)}
-              {renderContactResults(logs)}
+      <div className="flex flex-col h-full">
+        {/* Search Bar */}
+        <div className="px-6 pt-4 pb-3 border-b space-y-3">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              type="text"
+              placeholder="Search results by keyword, platform, or URL..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="pl-10"
+            />
+          </div>
+          {searchQuery && (
+            <div className="flex items-center justify-between text-sm">
+              <span className="text-muted-foreground">
+                Found {filteredLogs.length} result{filteredLogs.length !== 1 ? 's' : ''}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setSearchQuery("")}
+                className="h-7 text-xs"
+              >
+                Clear
+              </Button>
             </div>
-          </ScrollArea>
-        </TabsContent>
+          )}
+        </div>
 
-        <TabsContent value="web">
-          <ScrollArea className="h-[600px]">
-            <div className="space-y-6 pr-4 pb-4">
-              {webLogs.length > 0 ? renderWebResults(webLogs) : (
-                <div className="text-center text-muted-foreground py-8">
-                  No web results found
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-        </TabsContent>
+        <Tabs defaultValue="all" className="flex-1 flex flex-col">
+          <div className="px-6 pt-3 border-b">
+            <TabsList className="grid w-full grid-cols-5">
+              <TabsTrigger value="all" className="text-xs">
+                All ({filteredLogs.length})
+              </TabsTrigger>
+              <TabsTrigger value="web" className="text-xs">
+                <Globe className="h-3 w-3 mr-1" />
+                Web ({webLogs.length})
+              </TabsTrigger>
+              <TabsTrigger value="social" className="text-xs">
+                <User className="h-3 w-3 mr-1" />
+                Social ({socialLogs.length})
+              </TabsTrigger>
+              <TabsTrigger value="address" className="text-xs">
+                <MapPin className="h-3 w-3 mr-1" />
+                Address ({addressLogs.length})
+              </TabsTrigger>
+              <TabsTrigger value="contact" className="text-xs">
+                <Mail className="h-3 w-3 mr-1" />
+                Contact ({contactLogs.length})
+              </TabsTrigger>
+            </TabsList>
+          </div>
 
-        <TabsContent value="social">
-          <ScrollArea className="h-[600px]">
-            <div className="space-y-6 pr-4 pb-4">
-              {socialLogs.length > 0 ? renderSocialResults(socialLogs) : (
-                <div className="text-center text-muted-foreground py-8">
-                  No social media results found
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-        </TabsContent>
+          <TabsContent value="all" className="flex-1">
+            <ScrollArea className="h-[550px]">
+              <div className="space-y-6 px-6 pb-4">
+                {filteredLogs.length > 0 ? (
+                  <>
+                    {renderWebResults(filteredLogs)}
+                    {renderSocialResults(filteredLogs)}
+                    {renderAddressResults(filteredLogs)}
+                    {renderContactResults(filteredLogs)}
+                  </>
+                ) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    No results match your search
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
 
-        <TabsContent value="address">
-          <ScrollArea className="h-[600px]">
-            <div className="space-y-6 pr-4 pb-4">
-              {addressLogs.length > 0 ? renderAddressResults(addressLogs) : (
-                <div className="text-center text-muted-foreground py-8">
-                  No address results found
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-        </TabsContent>
 
-        <TabsContent value="contact">
-          <ScrollArea className="h-[600px]">
-            <div className="space-y-6 pr-4 pb-4">
-              {contactLogs.length > 0 ? renderContactResults(contactLogs) : (
-                <div className="text-center text-muted-foreground py-8">
-                  No contact information found
-                </div>
-              )}
-            </div>
-          </ScrollArea>
-        </TabsContent>
-      </Tabs>
+          <TabsContent value="web" className="flex-1">
+            <ScrollArea className="h-[550px]">
+              <div className="space-y-6 px-6 pb-4">
+                {webLogs.length > 0 ? renderWebResults(webLogs) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    {searchQuery ? "No web results match your search" : "No web results found"}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="social" className="flex-1">
+            <ScrollArea className="h-[550px]">
+              <div className="space-y-6 px-6 pb-4">
+                {socialLogs.length > 0 ? renderSocialResults(socialLogs) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    {searchQuery ? "No social media results match your search" : "No social media results found"}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="address" className="flex-1">
+            <ScrollArea className="h-[550px]">
+              <div className="space-y-6 px-6 pb-4">
+                {addressLogs.length > 0 ? renderAddressResults(addressLogs) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    {searchQuery ? "No address results match your search" : "No address results found"}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="contact" className="flex-1">
+            <ScrollArea className="h-[550px]">
+              <div className="space-y-6 px-6 pb-4">
+                {contactLogs.length > 0 ? renderContactResults(contactLogs) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    {searchQuery ? "No contact information matches your search" : "No contact information found"}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+        </Tabs>
+      </div>
 
       {/* Deep Dive Dialog */}
       <Dialog open={deepDiveDialog?.open || false} onOpenChange={(open) => setDeepDiveDialog(deepDiveDialog ? { ...deepDiveDialog, open } : null)}>
