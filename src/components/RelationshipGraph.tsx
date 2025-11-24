@@ -530,28 +530,28 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
         </g>
       </svg>
 
-      {/* Legend - moved to top left to avoid blocking nodes */}
-      <div className="absolute top-4 left-4 bg-background/95 backdrop-blur-sm border border-border rounded-lg p-3 space-y-1 text-xs shadow-lg">
+      {/* Legend - positioned at bottom right with transparency to avoid blocking */}
+      <div className="absolute bottom-4 right-4 bg-background/80 backdrop-blur-sm border border-border rounded-lg p-3 space-y-1 text-xs shadow-lg max-w-[140px]">
         <div className="font-semibold mb-2 text-foreground">Legend</div>
         {['target', 'email', 'username', 'social', 'web', 'phone', 'address'].map(type => {
           const Icon = getNodeIcon(type);
           return (
             <div key={type} className="flex items-center gap-2">
               <div
-                className="w-3 h-3 rounded-full"
+                className="w-3 h-3 rounded-full shrink-0"
                 style={{ backgroundColor: getNodeColor(type) }}
               />
-              <span className="capitalize text-muted-foreground">{type}</span>
+              <span className="capitalize text-muted-foreground text-[10px]">{type}</span>
             </div>
           );
         })}
       </div>
 
-      {/* Stats */}
-      <div className="absolute top-4 right-4 bg-background/90 backdrop-blur-sm border border-border rounded-lg p-3 text-xs space-y-1">
-        <div className="font-semibold text-foreground">Graph Stats</div>
-        <div className="text-muted-foreground">Nodes: {nodes.length}</div>
-        <div className="text-muted-foreground">Connections: {links.length}</div>
+      {/* Stats - positioned at top right corner, compact */}
+      <div className="absolute top-4 right-4 bg-background/80 backdrop-blur-sm border border-border rounded-lg p-2 text-xs space-y-0.5">
+        <div className="font-semibold text-foreground text-[10px]">Stats</div>
+        <div className="text-muted-foreground text-[10px]">Nodes: {nodes.length}</div>
+        <div className="text-muted-foreground text-[10px]">Links: {links.length}</div>
       </div>
     </div>
   );
