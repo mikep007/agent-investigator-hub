@@ -11,6 +11,7 @@ import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
 import PlatformLogo from "./PlatformLogo";
 import InvestigativeAssistant from "./InvestigativeAssistant";
 import AddressResults from "./AddressResults";
+import BreachResults from "./BreachResults";
 import {
   Tooltip,
   TooltipContent,
@@ -669,7 +670,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
 
         <Tabs defaultValue="all" className="flex-1 flex flex-col">
           <div className="px-6 pt-3 border-b">
-            <TabsList className="grid w-full grid-cols-5">
+            <TabsList className="grid w-full grid-cols-6">
               <TabsTrigger value="all" className="text-xs">
                 All ({filteredLogs.length})
               </TabsTrigger>
@@ -688,6 +689,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               <TabsTrigger value="contact" className="text-xs">
                 <Mail className="h-3 w-3 mr-1" />
                 Contact ({contactLogs.length})
+              </TabsTrigger>
+              <TabsTrigger value="breaches" className="text-xs">
+                <Shield className="h-3 w-3 mr-1" />
+                Breaches
               </TabsTrigger>
             </TabsList>
           </div>
@@ -759,6 +764,23 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 {contactLogs.length > 0 ? renderContactResults(contactLogs) : (
                   <div className="text-center text-muted-foreground py-8">
                     {searchQuery ? "No contact information matches your search" : "No contact information found"}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="breaches" className="flex-1">
+            <ScrollArea className="h-[550px]">
+              <div className="space-y-6 px-6 pb-4">
+                {filteredLogs
+                  .filter((log) => log.agent_type === 'LeakCheck')
+                  .map((log) => (
+                    <BreachResults key={log.id} data={log.data} />
+                  ))}
+                {filteredLogs.filter((log) => log.agent_type === 'LeakCheck').length === 0 && (
+                  <div className="text-center text-muted-foreground py-8">
+                    No breach data available. Include an email address in your search to check for data breaches.
                   </div>
                 )}
               </div>

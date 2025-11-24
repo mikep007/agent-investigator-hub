@@ -106,6 +106,14 @@ Deno.serve(async (req) => {
       );
       searchTypes.push('osint_industries');
 
+      // Run LeakCheck for breach data
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-leakcheck', {
+          body: { email: searchData.email }
+        })
+      );
+      searchTypes.push('leakcheck');
+
       // Extract username from email local-part (before @) and run Sherlock
       const emailLocalPart = searchData.email.split('@')[0];
       if (emailLocalPart && emailLocalPart.length > 0) {
