@@ -21,13 +21,16 @@ Deno.serve(async (req) => {
     const { target } = await req.json();
     console.log('Social search for:', target);
 
+    // Strip spaces and special characters from username for URL construction
+    const cleanUsername = target.replace(/\s+/g, '').trim();
+
     const platforms = [
-      { name: 'Twitter', url: `https://twitter.com/${target}` },
-      { name: 'Instagram', url: `https://instagram.com/${target}` },
-      { name: 'LinkedIn', url: `https://linkedin.com/in/${target}` },
-      { name: 'GitHub', url: `https://github.com/${target}` },
-      { name: 'TikTok', url: `https://tiktok.com/@${target}` },
-      { name: 'Reddit', url: `https://reddit.com/u/${target}` },
+      { name: 'Twitter', url: `https://twitter.com/${cleanUsername}` },
+      { name: 'Instagram', url: `https://instagram.com/${cleanUsername}` },
+      { name: 'LinkedIn', url: `https://linkedin.com/in/${cleanUsername}` },
+      { name: 'GitHub', url: `https://github.com/${cleanUsername}` },
+      { name: 'TikTok', url: `https://tiktok.com/@${cleanUsername}` },
+      { name: 'Reddit', url: `https://reddit.com/u/${cleanUsername}` },
     ];
 
     const results: SocialProfile[] = [];
@@ -38,7 +41,7 @@ Deno.serve(async (req) => {
         if (platform.name === 'TikTok') {
           results.push({
             platform: platform.name,
-            username: target,
+            username: cleanUsername,
             url: platform.url,
             exists: true // Always show TikTok for manual verification
           });
@@ -53,7 +56,7 @@ Deno.serve(async (req) => {
         
         results.push({
           platform: platform.name,
-          username: target,
+          username: cleanUsername,
           url: platform.url,
           exists: response.status === 200
         });
@@ -63,7 +66,7 @@ Deno.serve(async (req) => {
         console.error(`Error checking ${platform.name}:`, error);
         results.push({
           platform: platform.name,
-          username: target,
+          username: cleanUsername,
           url: platform.url,
           exists: false
         });
