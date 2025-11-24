@@ -604,10 +604,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         <TabsContent value="all">
           <ScrollArea className="h-[600px]">
             <div className="space-y-6 pr-4 pb-4">
-              {renderWebResults(webLogs)}
-              {renderSocialResults(socialLogs)}
-              {renderAddressResults(addressLogs)}
-              {renderContactResults(contactLogs)}
+              {renderWebResults(logs)}
+              {renderSocialResults(logs)}
+              {renderAddressResults(logs)}
+              {renderContactResults(logs)}
             </div>
           </ScrollArea>
         </TabsContent>
