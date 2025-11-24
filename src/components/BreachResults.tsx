@@ -11,7 +11,8 @@ interface BreachSource {
 }
 
 interface BreachData {
-  email: string;
+  target: string;
+  type: 'email' | 'phone' | 'username';
   found: number;
   fields: string[];
   sources: BreachSource[];
@@ -43,6 +44,7 @@ const BreachResults = ({ data }: BreachResultsProps) => {
   }
 
   const hasBreaches = data.found > 0;
+  const typeLabel = data.type === 'email' ? 'Email' : data.type === 'phone' ? 'Phone' : 'Username';
 
   return (
     <Card className={hasBreaches ? "border-destructive/50" : "border-primary/50"}>
@@ -56,7 +58,7 @@ const BreachResults = ({ data }: BreachResultsProps) => {
           Data Breach Intelligence
         </CardTitle>
         <CardDescription>
-          Email: <span className="font-mono text-foreground">{data.email}</span>
+          {typeLabel}: <span className="font-mono text-foreground">{data.target}</span>
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -67,7 +69,7 @@ const BreachResults = ({ data }: BreachResultsProps) => {
             <div>
               <p className="text-sm font-medium">Breaches Found</p>
               <p className="text-xs text-muted-foreground">
-                {hasBreaches ? "Email found in data breaches" : "No breaches detected"}
+                {hasBreaches ? `${typeLabel} found in data breaches` : "No breaches detected"}
               </p>
             </div>
           </div>
@@ -128,7 +130,7 @@ const BreachResults = ({ data }: BreachResultsProps) => {
           <Alert variant="destructive">
             <AlertTriangle className="h-4 w-4" />
             <AlertDescription>
-              <strong>Security Recommendation:</strong> This email has been found in {data.found} data breach
+              <strong>Security Recommendation:</strong> This {typeLabel.toLowerCase()} has been found in {data.found} data breach
               {data.found > 1 ? "es" : ""}. Consider changing passwords on affected accounts and enabling
               two-factor authentication.
             </AlertDescription>

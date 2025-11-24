@@ -780,7 +780,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                   ))}
                 {filteredLogs.filter((log) => log.agent_type === 'LeakCheck').length === 0 && (
                   <div className="text-center text-muted-foreground py-8">
-                    No breach data available. Include an email address in your search to check for data breaches.
+                    No breach data available. Include an email address, phone number, or username in your search to check for data breaches.
                   </div>
                 )}
               </div>
