@@ -57,14 +57,17 @@ Deno.serve(async (req) => {
       ? searchData.keywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k.length > 0)
       : [];
 
-    // Always run web search with full name + keywords
+    // Always run web search with full name + keywords + Google Dork operators
     const webSearchQuery = keywords.length > 0 
       ? `${searchData.fullName} ${keywords.join(' ')}`
       : searchData.fullName;
     
     searchPromises.push(
       supabaseClient.functions.invoke('osint-web-search', {
-        body: { target: webSearchQuery }
+        body: { 
+          target: webSearchQuery,
+          searchData: searchData // Pass full context for Google Dork enhancement
+        }
       })
     );
     searchTypes.push('web');
@@ -161,10 +164,13 @@ Deno.serve(async (req) => {
       );
       searchTypes.push('address');
 
-      // Web search for owner/property information
+      // Web search for owner/property information with name+address context
       searchPromises.push(
         supabaseClient.functions.invoke('osint-web-search', {
-          body: { target: `"${searchData.address}" owner property records` }
+          body: { 
+            target: `"${searchData.address}" owner property records`,
+            searchData: searchData
+          }
         })
       );
       searchTypes.push('address_owner_search');
@@ -172,7 +178,10 @@ Deno.serve(async (req) => {
       // Web search for people associated with address
       searchPromises.push(
         supabaseClient.functions.invoke('osint-web-search', {
-          body: { target: `"${searchData.address}" residents people` }
+          body: { 
+            target: `"${searchData.address}" residents people`,
+            searchData: searchData
+          }
         })
       );
       searchTypes.push('address_residents_search');
@@ -248,6 +257,17 @@ Deno.serve(async (req) => {
         else if (dataPoints >= 4) confidenceScore += 25;
         else if (dataPoints >= 3) confidenceScore += 15;
         else if (dataPoints >= 2) confidenceScore += 10;
+
+        // Apply Google Dork co-occurrence boost from web search results
+        if (findingData.items && Array.isArray(findingData.items)) {
+          const maxBoost = Math.max(
+            ...findingData.items.map((item: any) => item.confidenceBoost || 0)
+          );
+          if (maxBoost > 0) {
+            confidenceScore += maxBoost * 100; // Convert decimal to percentage
+            console.log(`Google Dork co-occurrence boost: +${maxBoost * 100}%`);
+          }
+        }
 
         // Keyword matching boost - check if any keywords appear in the finding data
         if (keywords.length > 0) {
