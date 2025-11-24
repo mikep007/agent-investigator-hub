@@ -151,14 +151,31 @@ Deno.serve(async (req) => {
       searchTypes.push('phone');
     }
 
-    // Address search
+    // Address search with enhanced lookups
     if (searchData.address) {
+      // Basic geocoding and Street View
       searchPromises.push(
         supabaseClient.functions.invoke('osint-address-search', {
           body: { target: searchData.address }
         })
       );
       searchTypes.push('address');
+
+      // Web search for owner/property information
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-web-search', {
+          body: { target: `"${searchData.address}" owner property records` }
+        })
+      );
+      searchTypes.push('address_owner_search');
+
+      // Web search for people associated with address
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-web-search', {
+          body: { target: `"${searchData.address}" residents people` }
+        })
+      );
+      searchTypes.push('address_residents_search');
     }
 
     console.log(`Running ${searchPromises.length} OSINT searches...`);
