@@ -106,10 +106,10 @@ Deno.serve(async (req) => {
       );
       searchTypes.push('osint_industries');
 
-      // Run LeakCheck for breach data
+      // Run LeakCheck for breach data (email)
       searchPromises.push(
         supabaseClient.functions.invoke('osint-leakcheck', {
-          body: { email: searchData.email }
+          body: { target: searchData.email, type: 'email' }
         })
       );
       searchTypes.push('leakcheck');
@@ -150,6 +150,14 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('social');
+
+      // Run LeakCheck for username breaches
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-leakcheck', {
+          body: { target: searchData.username, type: 'username' }
+        })
+      );
+      searchTypes.push('leakcheck_username');
     }
 
     // Phone lookup
@@ -160,6 +168,14 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('phone');
+
+      // Run LeakCheck for phone number breaches
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-leakcheck', {
+          body: { target: searchData.phone, type: 'phone' }
+        })
+      );
+      searchTypes.push('leakcheck_phone');
     }
 
     // Address search with enhanced lookups

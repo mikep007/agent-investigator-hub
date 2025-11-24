@@ -24,8 +24,9 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { email } = await req.json();
-    console.log('LeakCheck search for email:', email);
+    const { target, type } = await req.json(); // target can be email, phone, or username
+    const searchType = type || 'email'; // Default to email for backwards compatibility
+    console.log(`LeakCheck search for ${searchType}:`, target);
 
     const leakCheckApiKey = Deno.env.get('LEAKCHECK_API_KEY');
     if (!leakCheckApiKey) {
@@ -33,7 +34,7 @@ Deno.serve(async (req) => {
     }
 
     // Call LeakCheck.io API
-    const response = await fetch(`https://leakcheck.io/api/public?check=${encodeURIComponent(email)}`, {
+    const response = await fetch(`https://leakcheck.io/api/public?check=${encodeURIComponent(target)}`, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -63,7 +64,8 @@ Deno.serve(async (req) => {
     });
 
     return new Response(JSON.stringify({
-      email,
+      target,
+      type: searchType,
       found: data.found || 0,
       fields: data.fields || [],
       sources: data.sources || [],
