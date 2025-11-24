@@ -73,6 +73,37 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
       }
     }
 
+    // Validate username format if provided (platform-compliant)
+    if (searchData.username.trim()) {
+      const usernameRegex = /^[a-zA-Z0-9._-]+$/;
+      if (!usernameRegex.test(searchData.username.trim())) {
+        toast({
+          title: "Invalid Username",
+          description: "Username can only contain letters, numbers, dots, underscores, and hyphens",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (searchData.username.trim().length < 3) {
+        toast({
+          title: "Invalid Username",
+          description: "Username must be at least 3 characters long",
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (searchData.username.trim().length > 30) {
+        toast({
+          title: "Invalid Username",
+          description: "Username must be 30 characters or less",
+          variant: "destructive",
+        });
+        return;
+      }
+    }
+
     // Count filled fields (excluding name which is required)
     const filledFields = [
       searchData.address,
@@ -180,9 +211,12 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
               onChange={(e) => handleChange("username", e.target.value)}
               onKeyDown={handleKeyPress}
               className="bg-background/50"
-              maxLength={50}
+              maxLength={30}
               disabled={loading}
             />
+            <p className="text-xs text-muted-foreground">
+              3-30 characters: letters, numbers, dots, underscores, hyphens only
+            </p>
           </div>
 
           {/* Address - Optional */}
