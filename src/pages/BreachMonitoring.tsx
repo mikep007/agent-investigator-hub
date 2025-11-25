@@ -8,9 +8,10 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { AlertCircle, Bell, BellOff, Trash2, Shield, Mail, User, Phone } from "lucide-react";
+import { AlertCircle, Bell, BellOff, Trash2, Shield, Mail, User, Phone, TrendingUp, BarChart3 } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { BreachTimeline } from "@/components/BreachTimeline";
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
 interface MonitoredSubject {
   id: string;
@@ -32,6 +33,13 @@ interface BreachAlert {
     subject_type: string;
     subject_value: string;
   };
+}
+
+interface SubjectRisk {
+  subject_value: string;
+  subject_type: string;
+  breach_count: number;
+  risk_score: number;
 }
 
 export default function BreachMonitoring() {
@@ -206,6 +214,78 @@ export default function BreachMonitoring() {
 
   const unreadCount = breachAlerts.filter(alert => !alert.is_read).length;
 
+  // Analytics calculations
+  const getBreachTrends = () => {
+    const last30Days = new Date();
+    last30Days.setDate(last30Days.getDate() - 30);
+    
+    const trends: { [key: string]: number } = {};
+    breachAlerts.forEach(alert => {
+      const date = new Date(alert.created_at);
+      if (date >= last30Days) {
+        const dateKey = date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        trends[dateKey] = (trends[dateKey] || 0) + 1;
+      }
+    });
+    
+    return Object.entries(trends).map(([date, count]) => ({ date, count }));
+  };
+
+  const getPlatformStats = () => {
+    const platforms: { [key: string]: number } = {};
+    breachAlerts.forEach(alert => {
+      platforms[alert.breach_source] = (platforms[alert.breach_source] || 0) + 1;
+    });
+    
+    return Object.entries(platforms)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 10);
+  };
+
+  const getSubjectRisks = (): SubjectRisk[] => {
+    const risks: { [key: string]: { count: number; type: string; value: string } } = {};
+    
+    breachAlerts.forEach(alert => {
+      const key = alert.monitored_subject_id;
+      if (!risks[key]) {
+        risks[key] = {
+          count: 0,
+          type: alert.monitored_subjects.subject_type,
+          value: alert.monitored_subjects.subject_value,
+        };
+      }
+      risks[key].count++;
+    });
+    
+    return Object.values(risks)
+      .map(r => ({
+        subject_value: r.value,
+        subject_type: r.type,
+        breach_count: r.count,
+        risk_score: Math.min(r.count * 20, 100), // Max 100
+      }))
+      .sort((a, b) => b.risk_score - a.risk_score);
+  };
+
+  const breachTrends = getBreachTrends();
+  const platformStats = getPlatformStats();
+  const subjectRisks = getSubjectRisks();
+
+  const COLORS = ['hsl(var(--destructive))', 'hsl(var(--primary))', 'hsl(var(--accent))', 'hsl(var(--muted-foreground))', 'hsl(var(--secondary))'];
+
+  const getRiskColor = (score: number) => {
+    if (score >= 80) return 'text-destructive';
+    if (score >= 50) return 'text-orange-500';
+    return 'text-yellow-500';
+  };
+
+  const getRiskBadgeVariant = (score: number): "destructive" | "default" | "secondary" => {
+    if (score >= 80) return 'destructive';
+    if (score >= 50) return 'default';
+    return 'secondary';
+  };
+
   const getTypeIcon = (type: string) => {
     switch (type) {
       case 'email':
@@ -245,8 +325,9 @@ export default function BreachMonitoring() {
       </div>
 
       <Tabs defaultValue="alerts" className="w-full">
-        <TabsList className="grid w-full grid-cols-2">
+        <TabsList className="grid w-full grid-cols-3">
           <TabsTrigger value="alerts">Breach Alerts</TabsTrigger>
+          <TabsTrigger value="analytics">Analytics</TabsTrigger>
           <TabsTrigger value="monitored">Monitored Subjects</TabsTrigger>
         </TabsList>
 
@@ -308,6 +389,123 @@ export default function BreachMonitoring() {
                 </CardContent>
               </Card>
             ))
+          )}
+        </TabsContent>
+
+        <TabsContent value="analytics" className="space-y-6">
+          {breachAlerts.length === 0 ? (
+            <Card>
+              <CardContent className="pt-6">
+                <div className="text-center text-muted-foreground">
+                  <BarChart3 className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                  <p>No breach data available yet</p>
+                  <p className="text-sm mt-2">Analytics will appear once breach alerts are detected</p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              {/* Breach Trends */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5" />
+                    Breach Trends (Last 30 Days)
+                  </CardTitle>
+                  <CardDescription>
+                    Daily breach detection activity
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <LineChart data={breachTrends}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis dataKey="date" stroke="hsl(var(--muted-foreground))" />
+                      <YAxis stroke="hsl(var(--muted-foreground))" />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Line type="monotone" dataKey="count" stroke="hsl(var(--destructive))" strokeWidth={2} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Most Compromised Platforms */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <BarChart3 className="h-5 w-5" />
+                    Most Compromised Platforms
+                  </CardTitle>
+                  <CardDescription>
+                    Top 10 breach sources affecting your monitored subjects
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={300}>
+                    <BarChart data={platformStats} layout="horizontal">
+                      <CartesianGrid strokeDasharray="3 3" stroke="hsl(var(--border))" />
+                      <XAxis type="number" stroke="hsl(var(--muted-foreground))" />
+                      <YAxis dataKey="name" type="category" width={100} stroke="hsl(var(--muted-foreground))" />
+                      <Tooltip 
+                        contentStyle={{ 
+                          backgroundColor: 'hsl(var(--card))', 
+                          border: '1px solid hsl(var(--border))',
+                          borderRadius: '6px'
+                        }}
+                      />
+                      <Bar dataKey="count" fill="hsl(var(--primary))" />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              {/* Risk Scores */}
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center gap-2">
+                    <Shield className="h-5 w-5" />
+                    Subject Risk Scores
+                  </CardTitle>
+                  <CardDescription>
+                    Risk assessment based on breach count and severity
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    {subjectRisks.map((risk, index) => (
+                      <div key={index} className="flex items-center justify-between p-4 border rounded-lg">
+                        <div className="flex items-center gap-3 flex-1">
+                          {getTypeIcon(risk.subject_type)}
+                          <div className="flex-1">
+                            <p className="font-medium">{risk.subject_value}</p>
+                            <p className="text-sm text-muted-foreground capitalize">
+                              {risk.subject_type} • {risk.breach_count} breach{risk.breach_count !== 1 ? 'es' : ''} detected
+                            </p>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-4">
+                          <div className="text-right">
+                            <p className={`text-2xl font-bold ${getRiskColor(risk.risk_score)}`}>
+                              {risk.risk_score}
+                            </p>
+                            <p className="text-xs text-muted-foreground">Risk Score</p>
+                          </div>
+                          <Badge variant={getRiskBadgeVariant(risk.risk_score)}>
+                            {risk.risk_score >= 80 ? 'Critical' : risk.risk_score >= 50 ? 'High' : 'Medium'}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </>
           )}
         </TabsContent>
 
