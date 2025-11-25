@@ -8,12 +8,12 @@ import { Search, Activity, User, Mail, Phone, MapPin, Tag } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface SearchData {
-  fullName: string;
-  address: string;
-  email: string;
-  phone: string;
-  username: string;
-  keywords: string;
+  fullName?: string;
+  address?: string;
+  email?: string;
+  phone?: string;
+  username?: string;
+  keywords?: string;
 }
 
 interface ComprehensiveSearchFormProps {
@@ -37,11 +37,18 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
   };
 
   const validateAndSubmit = () => {
-    // Name is required
-    if (!searchData.fullName.trim()) {
+    // At least one field is required
+    const hasAtLeastOneField = 
+      searchData.fullName?.trim() || 
+      searchData.email?.trim() || 
+      searchData.phone?.trim() || 
+      searchData.username?.trim() || 
+      searchData.address?.trim();
+
+    if (!hasAtLeastOneField) {
       toast({
         title: "Validation Error",
-        description: "Full name is required",
+        description: "At least one search parameter is required",
         variant: "destructive",
       });
       return;
@@ -104,18 +111,19 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
       }
     }
 
-    // Count filled fields (excluding name which is required)
+    // Count filled fields
     const filledFields = [
+      searchData.fullName,
       searchData.address,
       searchData.email,
       searchData.phone,
       searchData.username,
       searchData.keywords
-    ].filter(field => field.trim()).length;
+    ].filter(field => field?.trim()).length;
 
     toast({
       title: "Investigation Started",
-      description: `Searching with ${filledFields + 1} data point${filledFields + 1 > 1 ? 's' : ''}`,
+      description: `Searching with ${filledFields} data point${filledFields > 1 ? 's' : ''}`,
     });
 
     onStartInvestigation(searchData);
@@ -136,16 +144,16 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
             Comprehensive Person Investigation
           </h2>
           <p className="text-sm text-muted-foreground">
-            Enter as much information as you have. More data points = higher accuracy and confidence scores.
+            Enter at least one search parameter. More data points = higher accuracy and confidence scores.
           </p>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Full Name - Required */}
+          {/* Full Name - Optional */}
           <div className="space-y-2 md:col-span-2">
             <Label htmlFor="fullName" className="flex items-center gap-2">
-              <User className="w-4 h-4 text-primary" />
-              Full Name <span className="text-destructive">*</span>
+              <User className="w-4 h-4 text-muted-foreground" />
+              Full Name
             </Label>
             <Input
               id="fullName"
@@ -156,7 +164,6 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
               className="bg-background/50"
               maxLength={100}
               disabled={loading}
-              required
             />
           </div>
 
