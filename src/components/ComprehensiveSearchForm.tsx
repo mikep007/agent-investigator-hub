@@ -373,31 +373,31 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
               </p>
             </div>
           </div>
-        </div>
+          </div>
 
-        <Button
-          onClick={validateAndSubmit}
-          disabled={loading}
-          className="w-full cyber-glow"
-          size="lg"
-        >
-          {loading ? (
-            <>
-              <Activity className="w-4 h-4 mr-2 animate-spin" />
-              Investigating...
-            </>
-          ) : (
-            <>
-              <Search className="w-4 h-4 mr-2" />
-              Start Comprehensive Investigation
-            </>
-          )}
-        </Button>
+          <Button
+            onClick={validateAndSubmit}
+            disabled={loading}
+            className="w-full cyber-glow"
+            size="lg"
+          >
+            {loading ? (
+              <>
+                <Activity className="w-4 h-4 mr-2 animate-spin" />
+                Investigating...
+              </>
+            ) : (
+              <>
+                <Search className="w-4 h-4 mr-2" />
+                Start Comprehensive Investigation
+              </>
+            )}
+          </Button>
 
-        <div className="text-xs text-muted-foreground text-center">
-          <span className="text-destructive">*</span> Required field • All other fields optional but recommended for better accuracy
+          <div className="text-xs text-muted-foreground text-center">
+            <span className="text-destructive">*</span> Required field • All other fields optional but recommended for better accuracy
+          </div>
         </div>
-      </div>
       </TooltipProvider>
     </Card>
   );
