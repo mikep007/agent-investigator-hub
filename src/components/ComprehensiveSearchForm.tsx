@@ -267,7 +267,7 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
 
         <Button
           onClick={validateAndSubmit}
-          disabled={loading || !searchData.fullName.trim()}
+          disabled={loading}
           className="w-full cyber-glow"
           size="lg"
         >
