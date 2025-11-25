@@ -774,11 +774,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             <ScrollArea className="h-[550px]">
               <div className="space-y-6 px-6 pb-4">
                 {filteredLogs
-                  .filter((log) => log.agent_type === 'LeakCheck')
+                  .filter((log) => log.agent_type === 'Leakcheck')
                   .map((log) => (
                     <BreachResults key={log.id} data={log.data} />
                   ))}
-                {filteredLogs.filter((log) => log.agent_type === 'LeakCheck').length === 0 && (
+                {filteredLogs.filter((log) => log.agent_type === 'Leakcheck').length === 0 && (
                   <div className="text-center text-muted-foreground py-8">
                     No breach data available. Include an email address, phone number, or username in your search to check for data breaches.
                   </div>
