@@ -5,3 +5,9 @@ verify_jwt = true
 
 [functions.analyze-investigation]
 verify_jwt = true
+
+[functions.check-breach-monitoring]
+verify_jwt = false
+
+[functions.send-breach-alert-email]
+verify_jwt = false
