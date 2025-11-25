@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { SearchHelpModal } from "./SearchHelpModal";
 
 interface SearchData {
   fullName?: string;
@@ -183,10 +184,13 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
       <TooltipProvider>
         <div className="space-y-6">
           <div>
-            <h2 className="text-xl font-bold flex items-center gap-2 mb-2">
-              <Search className="w-5 h-5 text-primary" />
-              Comprehensive Person Investigation
-            </h2>
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xl font-bold flex items-center gap-2">
+                <Search className="w-5 h-5 text-primary" />
+                Comprehensive Person Investigation
+              </h2>
+              <SearchHelpModal />
+            </div>
             <p className="text-sm text-muted-foreground">
               Enter at least one search parameter. More data points = higher accuracy and confidence scores.
             </p>
