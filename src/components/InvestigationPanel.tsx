@@ -323,6 +323,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   const socialLogs = filteredLogs.filter(log => log.agent_type === 'Social' || log.agent_type === 'Sherlock' || log.agent_type === 'Holehe');
   const addressLogs = filteredLogs.filter(log => log.agent_type === 'Address');
   const contactLogs = filteredLogs.filter(log => log.agent_type === 'Email' || log.agent_type === 'Phone');
+  const breachLogs = filteredLogs.filter(log => log.agent_type === 'Leakcheck');
 
   const renderWebResults = (filteredLogs: LogEntry[]) => (
     <>
@@ -692,7 +693,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               </TabsTrigger>
               <TabsTrigger value="breaches" className="text-xs">
                 <Shield className="h-3 w-3 mr-1" />
-                Breaches
+                Breaches ({breachLogs.length})
               </TabsTrigger>
             </TabsList>
           </div>
