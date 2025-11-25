@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 interface SearchData {
-  fullName: string;
+  fullName?: string;
   address?: string;
   email?: string;
   phone?: string;
@@ -34,12 +34,29 @@ Deno.serve(async (req) => {
     const searchData: SearchData = await req.json();
     console.log('Starting comprehensive investigation:', searchData);
 
+    // Validate that at least one search parameter is provided
+    const hasAtLeastOneParam = searchData.fullName || searchData.email || 
+                                 searchData.phone || searchData.username || 
+                                 searchData.address;
+    
+    if (!hasAtLeastOneParam) {
+      throw new Error('At least one search parameter is required');
+    }
+
+    // Determine the investigation target (use the first available parameter)
+    const target = searchData.fullName || 
+                   searchData.email || 
+                   searchData.phone || 
+                   searchData.username || 
+                   searchData.address || 
+                   'Unknown';
+
     // Create investigation record
     const { data: investigation, error: invError } = await supabaseClient
       .from('investigations')
       .insert({
         user_id: user.id,
-        target: searchData.fullName,
+        target: target,
         status: 'active'
       })
       .select()
@@ -57,20 +74,24 @@ Deno.serve(async (req) => {
       ? searchData.keywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k.length > 0)
       : [];
 
-    // Always run web search with full name + keywords + Google Dork operators
-    const webSearchQuery = keywords.length > 0 
-      ? `${searchData.fullName} ${keywords.join(' ')}`
-      : searchData.fullName;
-    
-    searchPromises.push(
-      supabaseClient.functions.invoke('osint-web-search', {
-        body: { 
-          target: webSearchQuery,
-          searchData: searchData // Pass full context for Google Dork enhancement
-        }
-      })
-    );
-    searchTypes.push('web');
+    // Always run web search if we have full name or keywords
+    if (searchData.fullName || keywords.length > 0) {
+      const webSearchQuery = searchData.fullName
+        ? (keywords.length > 0 
+            ? `${searchData.fullName} ${keywords.join(' ')}`
+            : searchData.fullName)
+        : keywords.join(' ');
+      
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-web-search', {
+          body: { 
+            target: webSearchQuery,
+            searchData: searchData // Pass full context for Google Dork enhancement
+          }
+        })
+      );
+      searchTypes.push('web');
+    }
 
     // Email enumeration
     if (searchData.email) {
@@ -254,7 +275,7 @@ Deno.serve(async (req) => {
         const enrichedData = {
           ...findingData,
           searchContext: {
-            fullName: searchData.fullName,
+            fullName: searchData.fullName || null,
             hasEmail: !!searchData.email,
             hasPhone: !!searchData.phone,
             hasUsername: !!searchData.username,
