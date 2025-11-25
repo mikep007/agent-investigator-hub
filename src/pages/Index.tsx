@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Brain, Network, LogOut, FileText, Activity, CheckCircle2, Search } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import AgentGraph from "@/components/AgentGraph";
+import InvestigationAnalysis from "@/components/InvestigationAnalysis";
 import InvestigationPanel from "@/components/InvestigationPanel";
 import ReportDisplay from "@/components/ReportDisplay";
 import ComprehensiveSearchForm from "@/components/ComprehensiveSearchForm";
@@ -178,20 +178,23 @@ const Index = () => {
                 </div>
               )}
 
-              <Tabs defaultValue="relationship" className="w-full">
+              <Tabs defaultValue="timeline" className="w-full">
                 <TabsList className="grid w-full grid-cols-2 mb-4">
-                  <TabsTrigger value="relationship">Relationship Graph</TabsTrigger>
-                  <TabsTrigger value="workflow">Workflow Graph</TabsTrigger>
+                  <TabsTrigger value="timeline">Digital Footprint Timeline</TabsTrigger>
+                  <TabsTrigger value="analysis">AI Investigation Analysis</TabsTrigger>
                 </TabsList>
-                <TabsContent value="relationship" className="min-h-[600px]">
+                <TabsContent value="timeline" className="min-h-[600px]">
                   <RelationshipGraph 
                     active={activeInvestigation} 
                     investigationId={currentInvestigationId}
                     targetName={targetName}
                   />
                 </TabsContent>
-                <TabsContent value="workflow" className="min-h-[600px]">
-                  <AgentGraph active={activeInvestigation} investigationId={currentInvestigationId} />
+                <TabsContent value="analysis" className="min-h-[600px]">
+                  <InvestigationAnalysis 
+                    active={activeInvestigation} 
+                    investigationId={currentInvestigationId}
+                  />
                 </TabsContent>
               </Tabs>
             </Card>
