@@ -8,6 +8,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/comp
 import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SearchHelpModal } from "./SearchHelpModal";
+import AddressAutocomplete from "./AddressAutocomplete";
 
 interface SearchData {
   fullName?: string;
@@ -336,13 +337,11 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
               <MapPin className="w-4 h-4 text-muted-foreground" />
               Address / Location
             </Label>
-            <Input
-              id="address"
-              placeholder="123 Main St, City, State"
+            <AddressAutocomplete
               value={searchData.address}
-              onChange={(e) => handleChange("address", e.target.value)}
+              onChange={(value) => handleChange("address", value)}
               onKeyDown={handleKeyPress}
-              className="bg-background/50"
+              placeholder="Start typing an address..."
               maxLength={255}
               disabled={loading}
             />

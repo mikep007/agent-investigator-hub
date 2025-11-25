@@ -38,9 +38,10 @@ Deno.serve(async (req) => {
       const lat = parseFloat(location.lat);
       const lon = parseFloat(location.lon);
       
-      // Google Street View Static API URL
-      streetViewUrl = `https://maps.googleapis.com/maps/api/streetview?size=600x400&location=${lat},${lon}&key=${GOOGLE_API_KEY}`;
+      // Google Street View Static API URL with enhanced parameters
+      streetViewUrl = `https://maps.googleapis.com/maps/api/streetview?size=800x600&location=${lat},${lon}&fov=80&heading=0&pitch=0&key=${GOOGLE_API_KEY}`;
       console.log('Generated Street View URL for location:', lat, lon);
+      console.log('Street View URL:', streetViewUrl);
     }
 
     const results = {
