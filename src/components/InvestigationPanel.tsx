@@ -683,69 +683,69 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         </div>
 
         <Tabs defaultValue="all" className="flex-1 flex flex-col">
-          <div className="border-b">
-            <TabsList className="w-full h-auto justify-start gap-1 bg-muted/30 rounded-none p-1">
-              <TabsTrigger 
-                value="all" 
-                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-              >
-                All
-                <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                  {filteredLogs.length}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="web" 
-                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-              >
-                <Globe className="h-4 w-4 mr-2" />
-                Web
-                <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                  {webLogs.length}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="social" 
-                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-              >
-                <User className="h-4 w-4 mr-2" />
-                Social
-                <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                  {socialLogs.length}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="address" 
-                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-              >
-                <MapPin className="h-4 w-4 mr-2" />
-                Address
-                <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                  {addressLogs.length}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="contact" 
-                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-              >
-                <Mail className="h-4 w-4 mr-2" />
-                Contact
-                <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                  {contactLogs.length}
-                </span>
-              </TabsTrigger>
-              <TabsTrigger 
-                value="breaches" 
-                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-              >
-                <Shield className="h-4 w-4 mr-2" />
-                Breaches
-                <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                  {breachLogs.length}
-                </span>
-              </TabsTrigger>
-            </TabsList>
-          </div>
+          <div className="px-6 pt-3 pb-2 border-b bg-muted/30">
+            <TabsList className="inline-flex h-auto w-full justify-start gap-2 bg-transparent p-0">
+               <TabsTrigger 
+                 value="all" 
+                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
+               >
+                 All
+                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                   {filteredLogs.length}
+                 </span>
+               </TabsTrigger>
+               <TabsTrigger 
+                 value="web" 
+                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
+               >
+                 <Globe className="h-4 w-4 mr-2" />
+                 Web
+                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                   {webLogs.length}
+                 </span>
+               </TabsTrigger>
+               <TabsTrigger 
+                 value="social" 
+                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
+               >
+                 <User className="h-4 w-4 mr-2" />
+                 Social
+                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                   {socialLogs.length}
+                 </span>
+               </TabsTrigger>
+               <TabsTrigger 
+                 value="address" 
+                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
+               >
+                 <MapPin className="h-4 w-4 mr-2" />
+                 Address
+                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                   {addressLogs.length}
+                 </span>
+               </TabsTrigger>
+               <TabsTrigger 
+                 value="contact" 
+                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
+               >
+                 <Mail className="h-4 w-4 mr-2" />
+                 Contact
+                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                   {contactLogs.length}
+                 </span>
+               </TabsTrigger>
+               <TabsTrigger 
+                 value="breaches" 
+                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
+               >
+                 <Shield className="h-4 w-4 mr-2" />
+                 Breaches
+                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                   {breachLogs.length}
+                 </span>
+               </TabsTrigger>
+             </TabsList>
+           </div>
 
           <TabsContent value="all" className="flex-1">
             <ScrollArea className="h-[550px]">
