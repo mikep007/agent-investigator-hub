@@ -184,6 +184,9 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
               maxLength={255}
               disabled={loading}
             />
+            <p className="text-xs text-muted-foreground">
+              Format: username@domain.com (e.g., john.doe@gmail.com)
+            </p>
           </div>
 
           {/* Phone - Optional */}
@@ -203,6 +206,9 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
               maxLength={20}
               disabled={loading}
             />
+            <p className="text-xs text-muted-foreground">
+              Minimum 10 digits. May include +, -, (), and spaces
+            </p>
           </div>
 
           {/* Username - Optional */}
