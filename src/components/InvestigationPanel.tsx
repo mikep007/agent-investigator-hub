@@ -323,7 +323,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   const socialLogs = filteredLogs.filter(log => log.agent_type === 'Social' || log.agent_type === 'Sherlock' || log.agent_type === 'Holehe');
   const addressLogs = filteredLogs.filter(log => log.agent_type === 'Address');
   const contactLogs = filteredLogs.filter(log => log.agent_type === 'Email' || log.agent_type === 'Phone');
-  const breachLogs = filteredLogs.filter(log => log.agent_type === 'Leakcheck');
+  const breachLogs = filteredLogs.filter(log => log.agent_type?.toLowerCase().startsWith('leakcheck'));
 
   const renderWebResults = (filteredLogs: LogEntry[]) => (
     <>
@@ -774,12 +774,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           <TabsContent value="breaches" className="flex-1">
             <ScrollArea className="h-[550px]">
               <div className="space-y-6 px-6 pb-4">
-                {filteredLogs
-                  .filter((log) => log.agent_type === 'Leakcheck')
-                  .map((log) => (
-                    <BreachResults key={log.id} data={log.data} />
-                  ))}
-                {filteredLogs.filter((log) => log.agent_type === 'Leakcheck').length === 0 && (
+                {breachLogs.map((log) => (
+                  <BreachResults key={log.id} data={log.data} />
+                ))}
+                {breachLogs.length === 0 && (
                   <div className="text-center text-muted-foreground py-8">
                     No breach data available. Include an email address, phone number, or username in your search to check for data breaches.
                   </div>
