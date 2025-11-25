@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Activity, User, Mail, Phone, MapPin, Tag } from "lucide-react";
+import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface SearchData {
@@ -14,6 +14,12 @@ interface SearchData {
   phone?: string;
   username?: string;
   keywords?: string;
+}
+
+interface ValidationState {
+  email: 'valid' | 'invalid' | 'empty';
+  phone: 'valid' | 'invalid' | 'empty';
+  username: 'valid' | 'invalid' | 'empty';
 }
 
 interface ComprehensiveSearchFormProps {
@@ -30,10 +36,46 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
     username: "",
     keywords: "",
   });
+  
+  const [validation, setValidation] = useState<ValidationState>({
+    email: 'empty',
+    phone: 'empty',
+    username: 'empty',
+  });
+  
   const { toast } = useToast();
+
+  const validateEmail = (email: string): 'valid' | 'invalid' | 'empty' => {
+    if (!email.trim()) return 'empty';
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    return emailRegex.test(email.trim()) ? 'valid' : 'invalid';
+  };
+
+  const validatePhone = (phone: string): 'valid' | 'invalid' | 'empty' => {
+    if (!phone.trim()) return 'empty';
+    const phoneRegex = /^[\d\s\-\+\(\)]{10,}$/;
+    return phoneRegex.test(phone.trim()) ? 'valid' : 'invalid';
+  };
+
+  const validateUsername = (username: string): 'valid' | 'invalid' | 'empty' => {
+    if (!username.trim()) return 'empty';
+    const usernameRegex = /^[a-zA-Z0-9._-]+$/;
+    if (!usernameRegex.test(username.trim())) return 'invalid';
+    if (username.trim().length < 3 || username.trim().length > 30) return 'invalid';
+    return 'valid';
+  };
 
   const handleChange = (field: keyof SearchData, value: string) => {
     setSearchData(prev => ({ ...prev, [field]: value }));
+    
+    // Update validation state for validated fields
+    if (field === 'email') {
+      setValidation(prev => ({ ...prev, email: validateEmail(value) }));
+    } else if (field === 'phone') {
+      setValidation(prev => ({ ...prev, phone: validatePhone(value) }));
+    } else if (field === 'username') {
+      setValidation(prev => ({ ...prev, username: validateUsername(value) }));
+    }
   };
 
   const validateAndSubmit = () => {
@@ -173,17 +215,28 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
               <Mail className="w-4 h-4 text-muted-foreground" />
               Email Address
             </Label>
-            <Input
-              id="email"
-              type="email"
-              placeholder="john@example.com"
-              value={searchData.email}
-              onChange={(e) => handleChange("email", e.target.value)}
-              onKeyDown={handleKeyPress}
-              className="bg-background/50"
-              maxLength={255}
-              disabled={loading}
-            />
+            <div className="relative">
+              <Input
+                id="email"
+                type="email"
+                placeholder="john@example.com"
+                value={searchData.email}
+                onChange={(e) => handleChange("email", e.target.value)}
+                onKeyDown={handleKeyPress}
+                className={`bg-background/50 pr-10 ${
+                  validation.email === 'invalid' ? 'border-destructive' : 
+                  validation.email === 'valid' ? 'border-green-500' : ''
+                }`}
+                maxLength={255}
+                disabled={loading}
+              />
+              {validation.email === 'valid' && (
+                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
+              )}
+              {validation.email === 'invalid' && (
+                <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-destructive" />
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               Format: username@domain.com (e.g., john.doe@gmail.com)
             </p>
@@ -195,17 +248,28 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
               <Phone className="w-4 h-4 text-muted-foreground" />
               Phone Number
             </Label>
-            <Input
-              id="phone"
-              type="tel"
-              placeholder="+1 555-0123"
-              value={searchData.phone}
-              onChange={(e) => handleChange("phone", e.target.value)}
-              onKeyDown={handleKeyPress}
-              className="bg-background/50"
-              maxLength={20}
-              disabled={loading}
-            />
+            <div className="relative">
+              <Input
+                id="phone"
+                type="tel"
+                placeholder="+1 555-0123"
+                value={searchData.phone}
+                onChange={(e) => handleChange("phone", e.target.value)}
+                onKeyDown={handleKeyPress}
+                className={`bg-background/50 pr-10 ${
+                  validation.phone === 'invalid' ? 'border-destructive' : 
+                  validation.phone === 'valid' ? 'border-green-500' : ''
+                }`}
+                maxLength={20}
+                disabled={loading}
+              />
+              {validation.phone === 'valid' && (
+                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
+              )}
+              {validation.phone === 'invalid' && (
+                <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-destructive" />
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               Minimum 10 digits. May include +, -, (), and spaces
             </p>
@@ -217,16 +281,27 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
               <User className="w-4 h-4 text-muted-foreground" />
               Username
             </Label>
-            <Input
-              id="username"
-              placeholder="johnsmith007"
-              value={searchData.username}
-              onChange={(e) => handleChange("username", e.target.value)}
-              onKeyDown={handleKeyPress}
-              className="bg-background/50"
-              maxLength={30}
-              disabled={loading}
-            />
+            <div className="relative">
+              <Input
+                id="username"
+                placeholder="johnsmith007"
+                value={searchData.username}
+                onChange={(e) => handleChange("username", e.target.value)}
+                onKeyDown={handleKeyPress}
+                className={`bg-background/50 pr-10 ${
+                  validation.username === 'invalid' ? 'border-destructive' : 
+                  validation.username === 'valid' ? 'border-green-500' : ''
+                }`}
+                maxLength={30}
+                disabled={loading}
+              />
+              {validation.username === 'valid' && (
+                <CheckCircle2 className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-green-500" />
+              )}
+              {validation.username === 'invalid' && (
+                <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-destructive" />
+              )}
+            </div>
             <p className="text-xs text-muted-foreground">
               3-30 characters: letters, numbers, dots, underscores, hyphens only
             </p>
