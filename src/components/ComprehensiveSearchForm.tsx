@@ -302,9 +302,16 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
                 <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-destructive" />
               )}
             </div>
-            <p className="text-xs text-muted-foreground">
-              3-30 characters: letters, numbers, dots, underscores, hyphens only
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                3-30 characters: letters, numbers, dots, underscores, hyphens only
+              </p>
+              <p className={`text-xs ${
+                searchData.username.length > 25 ? 'text-destructive' : 'text-muted-foreground'
+              }`}>
+                {searchData.username.length}/30
+              </p>
+            </div>
           </div>
 
           {/* Address - Optional */}
@@ -340,9 +347,16 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
               maxLength={500}
               disabled={loading}
             />
-            <p className="text-xs text-muted-foreground">
-              Add keywords to improve matching accuracy and boost confidence scores when found across platforms
-            </p>
+            <div className="flex items-center justify-between">
+              <p className="text-xs text-muted-foreground">
+                Add keywords to improve matching accuracy and boost confidence scores when found across platforms
+              </p>
+              <p className={`text-xs ${
+                searchData.keywords.length > 450 ? 'text-destructive' : 'text-muted-foreground'
+              }`}>
+                {searchData.keywords.length}/500
+              </p>
+            </div>
           </div>
         </div>
 
