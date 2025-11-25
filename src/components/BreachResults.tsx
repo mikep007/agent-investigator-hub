@@ -9,6 +9,14 @@ interface BreachSource {
   name: string;
   date: string;
   line?: string;
+  record?: {
+    source: {
+      name: string;
+      breach_date: string;
+    };
+    fields: string[];
+    [key: string]: any;
+  };
 }
 
 interface BreachData {
@@ -105,15 +113,15 @@ const BreachResults = ({ data }: BreachResultsProps) => {
       )}
 
       <CardContent className="space-y-4">
-        {/* Breach Sources - Compact List */}
+        {/* Breach Sources - Detailed Records */}
         {data.sources && data.sources.length > 0 && (
           <div className="space-y-2">
             <h4 className="text-sm font-semibold">All Breach Sources ({data.sources.length})</h4>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
+            <div className="space-y-3 max-h-96 overflow-y-auto">
               {data.sources.map((source, index) => (
                 <div
                   key={index}
-                  className="p-3 rounded-lg border border-border/50 bg-background/50 space-y-1"
+                  className="p-4 rounded-lg border border-destructive/30 bg-destructive/5 space-y-3"
                 >
                   <div className="flex items-center justify-between">
                     <p className="font-medium text-sm">{source.name}</p>
@@ -124,8 +132,34 @@ const BreachResults = ({ data }: BreachResultsProps) => {
                       </Badge>
                     )}
                   </div>
-                  {source.line && (
-                    <p className="text-xs text-muted-foreground font-mono truncate">
+                  
+                  {/* Display detailed breach data fields */}
+                  {source.record && source.record.fields && source.record.fields.length > 0 && (
+                    <div className="space-y-2 pt-2 border-t border-destructive/20">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase">Leaked Data:</p>
+                      <div className="grid grid-cols-1 gap-2">
+                        {source.record.fields.map((field, idx) => {
+                          const value = source.record![field];
+                          if (!value) return null;
+                          
+                          return (
+                            <div key={idx} className="flex items-start gap-2 text-xs">
+                              <span className="font-medium text-destructive min-w-[100px]">
+                                {field}:
+                              </span>
+                              <span className="font-mono text-foreground break-all">
+                                {String(value)}
+                              </span>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Fallback to line display if no record */}
+                  {!source.record && source.line && (
+                    <p className="text-xs text-muted-foreground font-mono pt-2 border-t border-destructive/20">
                       {source.line}
                     </p>
                   )}
