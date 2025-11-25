@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { MapPin } from "lucide-react";
 import { Badge } from "./ui/badge";
 
@@ -7,6 +8,8 @@ interface AddressResultsProps {
 }
 
 const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
+  const [streetViewError, setStreetViewError] = useState(false);
+
   if (!data || !data.found) {
     return (
       <div className="text-muted-foreground text-sm">
@@ -18,36 +21,38 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
   return (
     <div className="space-y-4">
       {/* Street View Photo */}
-      {data.streetViewUrl && (
-        <div className="mb-4">
-          <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
-            <MapPin className="h-4 w-4 text-primary" />
-            Street View
-          </h4>
+      <div className="mb-4">
+        <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
+          <MapPin className="h-4 w-4 text-primary" />
+          Street View
+        </h4>
+        {data.streetViewUrl ? (
           <div className="relative">
             <img
               src={data.streetViewUrl}
-              alt="Street View"
+              alt="Street View of investigated address"
               className="w-full rounded-lg border border-border shadow-md"
-              onLoad={(e) => {
-                console.log('Street View image loaded successfully');
+              loading="lazy"
+              onLoad={() => {
+                console.log("Street View image loaded successfully", data.streetViewUrl);
               }}
-              onError={(e) => {
-                console.error('Street View image failed to load:', data.streetViewUrl);
-                e.currentTarget.style.display = 'none';
-                const errorDiv = e.currentTarget.nextSibling as HTMLElement;
-                if (errorDiv) errorDiv.style.display = 'block';
+              onError={() => {
+                console.error("Street View image failed to load:", data.streetViewUrl);
+                setStreetViewError(true);
               }}
             />
-            <div 
-              className="hidden p-4 rounded-lg border border-border bg-muted text-sm text-muted-foreground"
-              style={{ display: 'none' }}
-            >
-              Street View not available for this location
-            </div>
+            {streetViewError && (
+              <div className="mt-3 p-4 rounded-lg border border-border bg-muted text-sm text-muted-foreground">
+                Street View not available for this location.
+              </div>
+            )}
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="p-4 rounded-lg border border-border bg-muted text-sm text-muted-foreground">
+            Street View not available for this location.
+          </div>
+        )}
+      </div>
 
       {/* Debug info - show if geocoding source is available */}
       {data.geocodingSource && (
