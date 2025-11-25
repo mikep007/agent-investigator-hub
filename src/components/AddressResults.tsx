@@ -24,14 +24,35 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
             <MapPin className="h-4 w-4 text-primary" />
             Street View
           </h4>
-          <img
-            src={data.streetViewUrl}
-            alt="Street View"
-            className="w-full rounded-lg border border-border shadow-md"
-            onError={(e) => {
-              e.currentTarget.style.display = 'none';
-            }}
-          />
+          <div className="relative">
+            <img
+              src={data.streetViewUrl}
+              alt="Street View"
+              className="w-full rounded-lg border border-border shadow-md"
+              onLoad={(e) => {
+                console.log('Street View image loaded successfully');
+              }}
+              onError={(e) => {
+                console.error('Street View image failed to load:', data.streetViewUrl);
+                e.currentTarget.style.display = 'none';
+                const errorDiv = e.currentTarget.nextSibling as HTMLElement;
+                if (errorDiv) errorDiv.style.display = 'block';
+              }}
+            />
+            <div 
+              className="hidden p-4 rounded-lg border border-border bg-muted text-sm text-muted-foreground"
+              style={{ display: 'none' }}
+            >
+              Street View not available for this location
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Debug info - show if geocoding source is available */}
+      {data.geocodingSource && (
+        <div className="text-xs text-muted-foreground mb-2">
+          Geocoded via: {data.geocodingSource}
         </div>
       )}
 
