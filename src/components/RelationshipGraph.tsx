@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { supabase } from "@/integrations/supabase/client";
-import { Globe } from "lucide-react";
+import { Globe, Calendar, MapPin, Users, Mail, Phone } from "lucide-react";
+import PlatformLogo from "@/components/PlatformLogo";
+import { Badge } from "@/components/ui/badge";
 
 interface RelationshipGraphProps {
   active: boolean;
@@ -8,28 +10,49 @@ interface RelationshipGraphProps {
   targetName?: string;
 }
 
-interface InvestigationNode {
-  id: string;
-  label: string;
+interface PlatformActivity {
+  platform: string;
+  timestamp: string;
+  type: 'account_creation' | 'latest_activity' | 'breach' | 'mention';
   description: string;
-  type: 'target' | 'investigation';
-  agentType?: string;
-  layer: number;
-  count?: number;
+  url?: string;
+  source: string;
+}
+
+interface InvestigationStats {
+  sourcesScanned: number;
+  emailsFound: number;
+  usernamesFound: number;
+  phonesFound: number;
+  addressesFound: number;
+  firstSeen: string | null;
+  lastSeen: string | null;
 }
 
 const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: RelationshipGraphProps) => {
-  const [nodes, setNodes] = useState<InvestigationNode[]>([]);
-
-  // Generate curved path between two points
-  const generateCurvedPath = (x1: number, y1: number, x2: number, y2: number) => {
-    const midY = y1 + (y2 - y1) * 0.3;
-    return `M ${x1} ${y1} Q ${x1} ${midY}, ${(x1 + x2) / 2} ${(y1 + y2) / 2} T ${x2} ${y2}`;
-  };
+  const [activities, setActivities] = useState<PlatformActivity[]>([]);
+  const [stats, setStats] = useState<InvestigationStats>({
+    sourcesScanned: 0,
+    emailsFound: 0,
+    usernamesFound: 0,
+    phonesFound: 0,
+    addressesFound: 0,
+    firstSeen: null,
+    lastSeen: null,
+  });
 
   useEffect(() => {
     if (!active || !investigationId) {
-      setNodes([]);
+      setActivities([]);
+      setStats({
+        sourcesScanned: 0,
+        emailsFound: 0,
+        usernamesFound: 0,
+        phonesFound: 0,
+        addressesFound: 0,
+        firstSeen: null,
+        lastSeen: null,
+      });
       return;
     }
 
@@ -41,79 +64,111 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
         .order("created_at", { ascending: true });
 
       if (data && data.length > 0) {
-        const newNodes: InvestigationNode[] = [];
-        
-        // Add target node at the top
-        newNodes.push({
-          id: 'target',
-          label: targetName,
-          description: 'OSINT Investigation',
-          type: 'target',
-          layer: 0,
-        });
+        const newActivities: PlatformActivity[] = [];
+        let emailCount = 0;
+        let usernameCount = 0;
+        let phoneCount = 0;
+        let addressCount = 0;
+        let earliestDate: string | null = null;
+        let latestDate: string | null = null;
 
-        // Count findings by agent type
-        const agentCounts: { [key: string]: number } = {};
         data.forEach((finding) => {
-          const agentType = finding.agent_type;
-          agentCounts[agentType] = (agentCounts[agentType] || 0) + 1;
-        });
+          const findingData = finding.data as any;
+          const timestamp = finding.created_at;
 
-        // Create investigation step nodes for each agent type found
-        const agentDescriptions: { [key: string]: { label: string; description: string; layer: number } } = {
-          'Holehe': { 
-            label: 'Email Account Discovery', 
-            description: 'Identify all linked accounts and services associated with the email address',
-            layer: 1 
-          },
-          'OSINT Industries': { 
-            label: 'Email Intelligence Report', 
-            description: 'Comprehensive email intelligence including breach data and metadata',
-            layer: 1 
-          },
-          'Web': { 
-            label: 'Web Search Analysis', 
-            description: 'Search the web for exact matches and public mentions',
-            layer: 1 
-          },
-          'Sherlock': { 
-            label: 'Username Enumeration', 
-            description: 'Discover usernames across multiple platforms and social networks',
-            layer: 1 
-          },
-          'Phone': { 
-            label: 'Phone Number Lookup', 
-            description: 'Verify and gather intelligence on phone numbers',
-            layer: 2 
-          },
-          'Address': { 
-            label: 'Location Investigation', 
-            description: 'Research physical addresses and location data',
-            layer: 2 
-          },
-          'LeakCheck': { 
-            label: 'Breach Database Search', 
-            description: 'Check for leaked credentials and compromised accounts',
-            layer: 2 
-          },
-        };
+          // Update earliest/latest dates
+          if (!earliestDate || timestamp < earliestDate) earliestDate = timestamp;
+          if (!latestDate || timestamp > latestDate) latestDate = timestamp;
 
-        Object.keys(agentCounts).forEach((agentType) => {
-          const agentInfo = agentDescriptions[agentType];
-          if (agentInfo) {
-            newNodes.push({
-              id: `agent-${agentType}`,
-              label: agentInfo.label,
-              description: agentInfo.description,
-              type: 'investigation',
-              agentType: agentType,
-              layer: agentInfo.layer,
-              count: agentCounts[agentType],
+          // Process Holehe (email accounts)
+          if (finding.agent_type === "Holehe" && findingData.results) {
+            findingData.results.forEach((result: any) => {
+              if (result.exists && result.platform) {
+                emailCount++;
+                newActivities.push({
+                  platform: result.platform,
+                  timestamp: finding.created_at,
+                  type: 'account_creation',
+                  description: `Account found on ${result.platform}`,
+                  source: 'Email Enumeration',
+                });
+              }
             });
           }
+
+          // Process Sherlock (usernames)
+          if (finding.agent_type === "Sherlock" && findingData.profileLinks) {
+            findingData.profileLinks.forEach((profile: any) => {
+              usernameCount++;
+              newActivities.push({
+                platform: profile.platform,
+                timestamp: finding.created_at,
+                type: 'account_creation',
+                description: `Username found on ${profile.platform}`,
+                url: profile.url,
+                source: 'Username Search',
+              });
+            });
+          }
+
+          // Process Social profiles
+          if (finding.agent_type === "Social" && findingData.profiles) {
+            findingData.profiles.forEach((profile: any) => {
+              if (profile.exists) {
+                newActivities.push({
+                  platform: profile.platform,
+                  timestamp: finding.created_at,
+                  type: 'account_creation',
+                  description: `Social profile found on ${profile.platform}`,
+                  url: profile.url,
+                  source: 'Social Search',
+                });
+              }
+            });
+          }
+
+          // Process LeakCheck breaches
+          if (finding.agent_type === "LeakCheck" && findingData.sources) {
+            findingData.sources.forEach((breach: any) => {
+              newActivities.push({
+                platform: breach.name || 'Unknown',
+                timestamp: finding.created_at,
+                type: 'breach',
+                description: `Data breach: ${breach.name}`,
+                source: 'Breach Database',
+              });
+            });
+          }
+
+          // Process Web mentions
+          if (finding.agent_type === "Web" && findingData.items) {
+            findingData.items.slice(0, 3).forEach((item: any) => {
+              newActivities.push({
+                platform: new URL(item.link).hostname.replace('www.', ''),
+                timestamp: finding.created_at,
+                type: 'mention',
+                description: item.title || 'Web mention',
+                url: item.link,
+                source: 'Web Search',
+              });
+            });
+          }
+
+          // Count phones and addresses
+          if (finding.agent_type === "Phone") phoneCount++;
+          if (finding.agent_type === "Address") addressCount++;
         });
 
-        setNodes(newNodes);
+        setActivities(newActivities);
+        setStats({
+          sourcesScanned: data.length,
+          emailsFound: emailCount,
+          usernamesFound: usernameCount,
+          phonesFound: phoneCount,
+          addressesFound: addressCount,
+          firstSeen: earliestDate,
+          lastSeen: latestDate,
+        });
       }
     };
 
@@ -140,189 +195,185 @@ const RelationshipGraph = ({ active, investigationId, targetName = "Target" }: R
     };
   }, [active, investigationId, targetName]);
 
-  if (!active || nodes.length === 0) {
+  if (!active || activities.length === 0) {
     return (
       <div className="flex items-center justify-center h-full text-muted-foreground">
         <div className="text-center space-y-2">
           <Globe className="w-12 h-12 mx-auto opacity-50" />
-          <p>Start an investigation to see the workflow graph</p>
+          <p>Start an investigation to see the digital footprint timeline</p>
         </div>
       </div>
     );
   }
 
-  // Calculate layout positions
-  const targetNode = nodes.find(n => n.type === 'target');
-  const layer1Nodes = nodes.filter(n => n.layer === 1);
-  const layer2Nodes = nodes.filter(n => n.layer === 2);
+  // Sort activities by timestamp for timeline
+  const sortedActivities = [...activities].sort((a, b) => 
+    new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
+  );
 
-  const svgWidth = 1200;
-  const svgHeight = 700;
-  const nodeWidth = 280;
-  const nodeHeight = 100;
-  const targetY = 80;
-  const layer1Y = 240;
-  const layer2Y = 450;
+  // Get unique years for timeline
+  const years = Array.from(new Set(sortedActivities.map(a => 
+    new Date(a.timestamp).getFullYear()
+  ))).sort();
 
-  // Position nodes
-  const positions: { [key: string]: { x: number; y: number } } = {};
-  
-  if (targetNode) {
-    positions[targetNode.id] = { x: svgWidth / 2, y: targetY };
-  }
-
-  layer1Nodes.forEach((node, i) => {
-    const spacing = Math.min(nodeWidth + 60, (svgWidth - 100) / layer1Nodes.length);
-    const startX = (svgWidth - (layer1Nodes.length - 1) * spacing) / 2;
-    positions[node.id] = { x: startX + i * spacing, y: layer1Y };
-  });
-
-  layer2Nodes.forEach((node, i) => {
-    const spacing = Math.min(nodeWidth + 60, (svgWidth - 100) / layer2Nodes.length);
-    const startX = (svgWidth - (layer2Nodes.length - 1) * spacing) / 2;
-    positions[node.id] = { x: startX + i * spacing, y: layer2Y };
-  });
+  const formatDate = (dateStr: string) => {
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
 
   return (
-    <div className="relative w-full h-full bg-gradient-to-br from-slate-950 via-slate-900 to-slate-950 rounded-lg border border-border overflow-auto">
-      <svg
-        width={svgWidth}
-        height={svgHeight}
-        className="w-full"
-        style={{ minHeight: '700px' }}
-      >
-        {/* Draw curved connections from target to layer 1 */}
-        {targetNode && layer1Nodes.map((node) => {
-          const startPos = positions[targetNode.id];
-          const endPos = positions[node.id];
-          if (!startPos || !endPos) return null;
+    <div className="relative w-full h-full bg-background rounded-lg border border-border overflow-auto">
+      {/* Stats Summary Bar */}
+      <div className="flex flex-wrap items-center gap-3 p-4 border-b border-border bg-muted/30">
+        <Badge variant="outline" className="flex items-center gap-2 px-3 py-1.5">
+          <Globe className="w-4 h-4" />
+          <span className="font-semibold">{stats.sourcesScanned}</span>
+          <span className="text-muted-foreground">Sources Scanned</span>
+        </Badge>
+        <Badge variant="outline" className="flex items-center gap-2 px-3 py-1.5">
+          <Mail className="w-4 h-4" />
+          <span className="font-semibold">{stats.emailsFound}</span>
+          <span className="text-muted-foreground">Emails</span>
+        </Badge>
+        <Badge variant="outline" className="flex items-center gap-2 px-3 py-1.5">
+          <Users className="w-4 h-4" />
+          <span className="font-semibold">{stats.usernamesFound}</span>
+          <span className="text-muted-foreground">Usernames</span>
+        </Badge>
+        <Badge variant="outline" className="flex items-center gap-2 px-3 py-1.5">
+          <Phone className="w-4 h-4" />
+          <span className="font-semibold">{stats.phonesFound}</span>
+          <span className="text-muted-foreground">Phones</span>
+        </Badge>
+        <Badge variant="outline" className="flex items-center gap-2 px-3 py-1.5">
+          <MapPin className="w-4 h-4" />
+          <span className="font-semibold">{stats.addressesFound}</span>
+          <span className="text-muted-foreground">Locations</span>
+        </Badge>
+        {stats.firstSeen && (
+          <Badge variant="outline" className="flex items-center gap-2 px-3 py-1.5">
+            <Calendar className="w-4 h-4" />
+            <span className="text-muted-foreground">First Seen:</span>
+            <span className="font-semibold">{formatDate(stats.firstSeen)}</span>
+          </Badge>
+        )}
+      </div>
 
-          return (
-            <path
-              key={`link-${targetNode.id}-${node.id}`}
-              d={generateCurvedPath(startPos.x, startPos.y + 40, endPos.x, endPos.y - 10)}
-              stroke="hsl(210, 80%, 60%)"
-              strokeWidth="2"
-              fill="none"
-              opacity={0.6}
-            />
-          );
-        })}
+      {/* Timeline View */}
+      <div className="p-6">
+        <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+          <Calendar className="w-5 h-5" />
+          Digital Footprint Timeline
+        </h3>
 
-        {/* Draw curved connections from layer 1 to layer 2 */}
-        {layer1Nodes.map((layer1Node) => {
-          return layer2Nodes.map((layer2Node) => {
-            const startPos = positions[layer1Node.id];
-            const endPos = positions[layer2Node.id];
-            if (!startPos || !endPos) return null;
-
-            return (
-              <path
-                key={`link-${layer1Node.id}-${layer2Node.id}`}
-                d={generateCurvedPath(startPos.x, startPos.y + nodeHeight/2 + 10, endPos.x, endPos.y - 10)}
-                stroke="hsl(210, 60%, 50%)"
-                strokeWidth="1.5"
-                fill="none"
-                opacity={0.4}
-              />
-            );
-          });
-        })}
-
-        {/* Draw nodes */}
-        {nodes.map((node) => {
-          const pos = positions[node.id];
-          if (!pos) return null;
-
-          const isTarget = node.type === 'target';
-          const boxWidth = isTarget ? 260 : nodeWidth;
-          const boxHeight = isTarget ? 70 : nodeHeight;
-          const x = pos.x - boxWidth / 2;
-          const y = pos.y - boxHeight / 2;
-
-          return (
-            <g key={node.id}>
-              {/* Node box */}
-              <rect
-                x={x}
-                y={y}
-                width={boxWidth}
-                height={boxHeight}
-                rx={8}
-                fill={isTarget ? "hsl(220, 50%, 25%)" : "hsl(210, 70%, 45%)"}
-                stroke={isTarget ? "hsl(210, 80%, 60%)" : "hsl(210, 80%, 55%)"}
-                strokeWidth={isTarget ? 3 : 2}
-                className="drop-shadow-lg"
-              />
-
-              {/* Node label */}
-              <text
-                x={pos.x}
-                y={pos.y - (isTarget ? 12 : 20)}
-                textAnchor="middle"
-                fill="white"
-                fontSize={isTarget ? "16" : "14"}
-                fontWeight="600"
-                className="pointer-events-none select-none"
-              >
-                {node.label}
-              </text>
-
-              {/* Node description */}
-              {!isTarget && (
-                <foreignObject
-                  x={x + 10}
-                  y={y + 30}
-                  width={boxWidth - 20}
-                  height={boxHeight - 35}
-                >
-                  <div className="text-white/80 text-xs leading-tight px-1">
-                    {node.description}
-                  </div>
-                </foreignObject>
-              )}
-
-              {/* Target subtitle */}
-              {isTarget && (
-                <text
-                  x={pos.x}
-                  y={pos.y + 12}
-                  textAnchor="middle"
-                  fill="hsl(210, 80%, 70%)"
-                  fontSize="13"
-                  className="pointer-events-none select-none"
-                >
-                  {node.description}
-                </text>
-              )}
-
-              {/* Count badge */}
-              {node.count && node.count > 0 && (
-                <g>
-                  <circle
-                    cx={x + boxWidth - 15}
-                    cy={y + 15}
-                    r="12"
-                    fill="hsl(140, 70%, 45%)"
-                    className="drop-shadow-md"
-                  />
-                  <text
-                    x={x + boxWidth - 15}
-                    y={y + 19}
-                    textAnchor="middle"
-                    fill="white"
-                    fontSize="11"
-                    fontWeight="700"
-                    className="pointer-events-none select-none"
+        {/* Activity Timeline - scrollable horizontal */}
+        <div className="relative overflow-x-auto pb-4">
+          <div className="min-w-[800px]">
+            {/* Timeline axis */}
+            <div className="relative h-32 mb-8">
+              {/* Timeline line */}
+              <div className="absolute top-16 left-0 right-0 h-0.5 bg-border" />
+              
+              {/* Platform icons on timeline */}
+              {sortedActivities.map((activity, index) => {
+                const leftPosition = (index / Math.max(sortedActivities.length - 1, 1)) * 100;
+                const isCreation = activity.type === 'account_creation';
+                const isBreach = activity.type === 'breach';
+                
+                return (
+                  <div
+                    key={`${activity.platform}-${index}`}
+                    className="absolute"
+                    style={{ left: `${leftPosition}%`, top: isCreation ? '10px' : '60px' }}
                   >
-                    {node.count}
-                  </text>
-                </g>
-              )}
-            </g>
-          );
-        })}
-      </svg>
+                    {/* Platform icon */}
+                    <div
+                      className="relative group cursor-pointer"
+                      onClick={() => activity.url && window.open(activity.url, '_blank')}
+                    >
+                      <div className={`w-10 h-10 rounded-lg border-2 flex items-center justify-center bg-background shadow-lg ${
+                        isBreach ? 'border-red-500' : 'border-primary'
+                      }`}>
+                        <PlatformLogo platform={activity.platform} className="w-6 h-6" />
+                      </div>
+                      
+                      {/* Tooltip */}
+                      <div className="absolute bottom-full mb-2 left-1/2 -translate-x-1/2 hidden group-hover:block z-10">
+                        <div className="bg-popover border border-border rounded-lg shadow-lg p-3 min-w-[200px] text-sm">
+                          <div className="font-semibold text-foreground mb-1">{activity.platform}</div>
+                          <div className="text-muted-foreground text-xs mb-2">{activity.description}</div>
+                          <div className="text-xs text-muted-foreground">
+                            {formatDate(activity.timestamp)}
+                          </div>
+                          <div className="text-xs text-primary mt-1">{activity.source}</div>
+                          {activity.url && (
+                            <div className="text-xs text-muted-foreground mt-1 italic">Click to open</div>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Connector line */}
+                      <div className={`absolute left-1/2 -translate-x-1/2 w-0.5 ${
+                        isCreation ? 'top-full h-6 bg-primary' : 'bottom-full h-6 bg-primary'
+                      }`} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Labels */}
+            <div className="flex justify-between text-xs text-muted-foreground mb-6">
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-sm bg-primary border-2 border-primary" />
+                <span>Account Creation</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-3 h-3 rounded-sm bg-background border-2 border-red-500" />
+                <span>Breach / Activity</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Activity Table */}
+        <div className="mt-8">
+          <h4 className="text-sm font-semibold mb-3">Platform Details</h4>
+          <div className="border border-border rounded-lg overflow-hidden">
+            <table className="w-full text-sm">
+              <thead className="bg-muted">
+                <tr>
+                  <th className="text-left p-3 font-medium">Platform</th>
+                  <th className="text-left p-3 font-medium">Description</th>
+                  <th className="text-left p-3 font-medium">Source</th>
+                  <th className="text-left p-3 font-medium">Timestamp</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-border">
+                {sortedActivities.map((activity, index) => (
+                  <tr 
+                    key={`row-${activity.platform}-${index}`}
+                    className={`hover:bg-muted/50 transition-colors ${activity.url ? 'cursor-pointer' : ''}`}
+                    onClick={() => activity.url && window.open(activity.url, '_blank')}
+                  >
+                    <td className="p-3">
+                      <div className="flex items-center gap-2">
+                        <PlatformLogo platform={activity.platform} className="w-5 h-5" />
+                        <span className="font-medium">{activity.platform}</span>
+                      </div>
+                    </td>
+                    <td className="p-3 text-muted-foreground">{activity.description}</td>
+                    <td className="p-3">
+                      <Badge variant="secondary" className="text-xs">{activity.source}</Badge>
+                    </td>
+                    <td className="p-3 text-muted-foreground">{formatDate(activity.timestamp)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
     </div>
   );
 };
