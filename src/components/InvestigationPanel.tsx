@@ -683,11 +683,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         </div>
 
         <Tabs defaultValue="all" className="flex-1 flex flex-col">
-          <div className="px-6 pt-4 pb-2 border-b bg-muted/30">
-            <TabsList className="inline-flex h-auto w-full justify-start gap-2 bg-transparent p-0">
+          <div className="border-b">
+            <TabsList className="w-full h-auto justify-start gap-1 bg-muted/30 rounded-none p-1">
               <TabsTrigger 
                 value="all" 
-                className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md px-4 py-2.5 text-sm font-medium"
+                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
               >
                 All
                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
@@ -696,7 +696,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               </TabsTrigger>
               <TabsTrigger 
                 value="web" 
-                className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md px-4 py-2.5 text-sm font-medium"
+                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
               >
                 <Globe className="h-4 w-4 mr-2" />
                 Web
@@ -706,7 +706,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               </TabsTrigger>
               <TabsTrigger 
                 value="social" 
-                className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md px-4 py-2.5 text-sm font-medium"
+                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
               >
                 <User className="h-4 w-4 mr-2" />
                 Social
@@ -716,7 +716,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               </TabsTrigger>
               <TabsTrigger 
                 value="address" 
-                className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md px-4 py-2.5 text-sm font-medium"
+                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
               >
                 <MapPin className="h-4 w-4 mr-2" />
                 Address
@@ -726,7 +726,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               </TabsTrigger>
               <TabsTrigger 
                 value="contact" 
-                className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md px-4 py-2.5 text-sm font-medium"
+                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
               >
                 <Mail className="h-4 w-4 mr-2" />
                 Contact
@@ -736,7 +736,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               </TabsTrigger>
               <TabsTrigger 
                 value="breaches" 
-                className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded-md px-4 py-2.5 text-sm font-medium"
+                className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
               >
                 <Shield className="h-4 w-4 mr-2" />
                 Breaches
