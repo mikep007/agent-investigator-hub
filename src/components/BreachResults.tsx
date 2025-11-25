@@ -3,6 +3,7 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Shield, AlertTriangle, Calendar, Database } from "lucide-react";
 import { format } from "date-fns";
+import { BreachTimeline } from "./BreachTimeline";
 
 interface BreachSource {
   name: string;
@@ -94,12 +95,21 @@ const BreachResults = ({ data }: BreachResultsProps) => {
             </div>
           </div>
         )}
+      </CardContent>
 
-        {/* Breach Sources */}
+      {/* Breach Timeline */}
+      {hasBreaches && data.sources && data.sources.length > 0 && (
+        <div className="px-6 pb-6">
+          <BreachTimeline sources={data.sources} />
+        </div>
+      )}
+
+      <CardContent className="space-y-4">
+        {/* Breach Sources - Compact List */}
         {data.sources && data.sources.length > 0 && (
           <div className="space-y-2">
-            <h4 className="text-sm font-semibold">Breach Sources</h4>
-            <div className="space-y-2">
+            <h4 className="text-sm font-semibold">All Breach Sources ({data.sources.length})</h4>
+            <div className="space-y-2 max-h-64 overflow-y-auto">
               {data.sources.map((source, index) => (
                 <div
                   key={index}
