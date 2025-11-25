@@ -4,7 +4,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle } from "lucide-react";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle, Info } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface SearchData {
@@ -179,35 +180,46 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
 
   return (
     <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
-      <div className="space-y-6">
-        <div>
-          <h2 className="text-xl font-bold flex items-center gap-2 mb-2">
-            <Search className="w-5 h-5 text-primary" />
-            Comprehensive Person Investigation
-          </h2>
-          <p className="text-sm text-muted-foreground">
-            Enter at least one search parameter. More data points = higher accuracy and confidence scores.
-          </p>
-        </div>
-
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Full Name - Optional */}
-          <div className="space-y-2 md:col-span-2">
-            <Label htmlFor="fullName" className="flex items-center gap-2">
-              <User className="w-4 h-4 text-muted-foreground" />
-              Full Name
-            </Label>
-            <Input
-              id="fullName"
-              placeholder="John Smith"
-              value={searchData.fullName}
-              onChange={(e) => handleChange("fullName", e.target.value)}
-              onKeyDown={handleKeyPress}
-              className="bg-background/50"
-              maxLength={100}
-              disabled={loading}
-            />
+      <TooltipProvider>
+        <div className="space-y-6">
+          <div>
+            <h2 className="text-xl font-bold flex items-center gap-2 mb-2">
+              <Search className="w-5 h-5 text-primary" />
+              Comprehensive Person Investigation
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Enter at least one search parameter. More data points = higher accuracy and confidence scores.
+            </p>
           </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Full Name - Optional */}
+            <div className="space-y-2 md:col-span-2">
+              <Label htmlFor="fullName" className="flex items-center gap-2">
+                <User className="w-4 h-4 text-muted-foreground" />
+                Full Name
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Info className="w-4 h-4 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent className="max-w-xs">
+                    <p className="text-sm">
+                      Our system automatically uses advanced Google Dork techniques including exact phrase matching and location correlation to find highly relevant results. Just enter the name normally - no quotes needed!
+                    </p>
+                  </TooltipContent>
+                </Tooltip>
+              </Label>
+              <Input
+                id="fullName"
+                placeholder="John Smith"
+                value={searchData.fullName}
+                onChange={(e) => handleChange("fullName", e.target.value)}
+                onKeyDown={handleKeyPress}
+                className="bg-background/50"
+                maxLength={100}
+                disabled={loading}
+              />
+            </div>
 
           {/* Email - Optional */}
           <div className="space-y-2">
@@ -383,6 +395,7 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
           <span className="text-destructive">*</span> Required field • All other fields optional but recommended for better accuracy
         </div>
       </div>
+      </TooltipProvider>
     </Card>
   );
 };
