@@ -115,16 +115,16 @@ const BreachResults = ({ data }: BreachResultsProps) => {
       <CardContent className="space-y-4">
         {/* Breach Sources - Detailed Records */}
         {data.sources && data.sources.length > 0 && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <h4 className="text-sm font-semibold">All Breach Sources ({data.sources.length})</h4>
-            <div className="space-y-3 max-h-96 overflow-y-auto">
+            <div className="space-y-4">
               {data.sources.map((source, index) => (
                 <div
                   key={index}
-                  className="p-4 rounded-lg border border-destructive/30 bg-destructive/5 space-y-3"
+                  className="p-5 rounded-lg border border-destructive/30 bg-destructive/5 space-y-4"
                 >
-                  <div className="flex items-center justify-between">
-                    <p className="font-medium text-sm">{source.name}</p>
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <p className="font-semibold text-base">{source.name}</p>
                     {source.date && (
                       <Badge variant="secondary" className="text-xs">
                         <Calendar className="w-3 h-3 mr-1" />
@@ -135,19 +135,19 @@ const BreachResults = ({ data }: BreachResultsProps) => {
                   
                   {/* Display detailed breach data fields */}
                   {source.record && source.record.fields && source.record.fields.length > 0 && (
-                    <div className="space-y-2 pt-2 border-t border-destructive/20">
-                      <p className="text-xs font-semibold text-muted-foreground uppercase">Leaked Data:</p>
-                      <div className="grid grid-cols-1 gap-2">
+                    <div className="space-y-3 pt-3 border-t border-destructive/20">
+                      <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Leaked Data:</p>
+                      <div className="space-y-2.5">
                         {source.record.fields.map((field, idx) => {
                           const value = source.record![field];
                           if (!value) return null;
                           
                           return (
-                            <div key={idx} className="flex items-start gap-2 text-xs">
-                              <span className="font-medium text-destructive min-w-[100px]">
-                                {field}:
+                            <div key={idx} className="flex flex-col gap-1 p-3 rounded-md bg-background/50 border border-destructive/10">
+                              <span className="text-xs font-semibold text-destructive uppercase tracking-wide">
+                                {field.replace(/_/g, ' ')}
                               </span>
-                              <span className="font-mono text-foreground break-all">
+                              <span className="font-mono text-sm text-foreground break-all">
                                 {String(value)}
                               </span>
                             </div>
@@ -159,9 +159,11 @@ const BreachResults = ({ data }: BreachResultsProps) => {
                   
                   {/* Fallback to line display if no record */}
                   {!source.record && source.line && (
-                    <p className="text-xs text-muted-foreground font-mono pt-2 border-t border-destructive/20">
-                      {source.line}
-                    </p>
+                    <div className="pt-3 border-t border-destructive/20">
+                      <p className="text-sm text-muted-foreground font-mono break-all p-3 rounded-md bg-background/50">
+                        {source.line}
+                      </p>
+                    </div>
                   )}
                 </div>
               ))}
