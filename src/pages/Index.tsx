@@ -126,6 +126,15 @@ const Index = () => {
               <div className="flex items-center gap-3">
                 <Tooltip>
                   <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={() => navigate('/breach-monitoring')}>
+                      <Activity className="w-4 h-4 mr-2" />
+                      Breach Monitor
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Monitor subjects for data breaches</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
                     <Button variant="ghost" size="sm" onClick={handleSignOut}>
                       <LogOut className="w-4 h-4 mr-2" />
                       Sign Out

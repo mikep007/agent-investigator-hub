@@ -14,6 +14,47 @@ export type Database = {
   }
   public: {
     Tables: {
+      breach_alerts: {
+        Row: {
+          breach_data: Json
+          breach_date: string | null
+          breach_source: string
+          created_at: string
+          id: string
+          is_read: boolean
+          monitored_subject_id: string
+          user_id: string
+        }
+        Insert: {
+          breach_data: Json
+          breach_date?: string | null
+          breach_source: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          monitored_subject_id: string
+          user_id: string
+        }
+        Update: {
+          breach_data?: Json
+          breach_date?: string | null
+          breach_source?: string
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          monitored_subject_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "breach_alerts_monitored_subject_id_fkey"
+            columns: ["monitored_subject_id"]
+            isOneToOne: false
+            referencedRelation: "monitored_subjects"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       findings: {
         Row: {
           agent_type: string
@@ -78,6 +119,33 @@ export type Database = {
           status?: string
           target?: string
           updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      monitored_subjects: {
+        Row: {
+          created_at: string
+          id: string
+          last_checked_at: string | null
+          subject_type: string
+          subject_value: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          last_checked_at?: string | null
+          subject_type: string
+          subject_value: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          last_checked_at?: string | null
+          subject_type?: string
+          subject_value?: string
           user_id?: string
         }
         Relationships: []
