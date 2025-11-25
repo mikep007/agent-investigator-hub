@@ -137,19 +137,24 @@ const BreachResults = ({ data }: BreachResultsProps) => {
                   {source.record && source.record.fields && source.record.fields.length > 0 && (
                     <div className="space-y-3 pt-3 border-t border-destructive/20">
                       <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wide">Leaked Data:</p>
-                      <div className="space-y-2.5">
+                      <div className="space-y-3">
                         {source.record.fields.map((field, idx) => {
                           const value = source.record![field];
                           if (!value) return null;
                           
+                          const fieldLabel = field
+                            .split('_')
+                            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+                            .join(' ');
+                          
                           return (
-                            <div key={idx} className="flex flex-col gap-1 p-3 rounded-md bg-background/50 border border-destructive/10">
-                              <span className="text-xs font-semibold text-destructive uppercase tracking-wide">
-                                {field.replace(/_/g, ' ')}
-                              </span>
-                              <span className="font-mono text-sm text-foreground break-all">
+                            <div key={idx} className="p-3 rounded-md bg-background/50 border border-destructive/10">
+                              <div className="text-xs font-semibold text-destructive uppercase tracking-wide mb-1.5">
+                                {fieldLabel}
+                              </div>
+                              <div className="font-mono text-sm text-foreground break-all">
                                 {String(value)}
-                              </span>
+                              </div>
                             </div>
                           );
                         })}
