@@ -15,21 +15,81 @@ Deno.serve(async (req) => {
     console.log('Address search for:', target);
 
     const GOOGLE_API_KEY = Deno.env.get('GOOGLE_API_KEY');
+    let data: any[] = [];
+    let geocodingSource = 'nominatim';
 
-    // Use Nominatim (OpenStreetMap) for free geocoding
-    const searchUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(target)}&format=json&addressdetails=1&limit=5`;
-    
-    const response = await fetch(searchUrl, {
-      headers: {
-        'User-Agent': 'OSINT-Platform/1.0'
+    // Try Nominatim (OpenStreetMap) first for free geocoding
+    try {
+      const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(target)}&format=json&addressdetails=1&limit=5`;
+      
+      const nominatimResponse = await fetch(nominatimUrl, {
+        headers: {
+          'User-Agent': 'OSINT-Platform/1.0'
+        }
+      });
+
+      if (nominatimResponse.ok) {
+        data = await nominatimResponse.json();
+        console.log(`Nominatim found ${data.length} results`);
       }
-    });
-
-    if (!response.ok) {
-      throw new Error(`Geocoding API error: ${response.status}`);
+    } catch (error) {
+      console.error('Nominatim error:', error);
     }
 
-    const data = await response.json();
+    // If Nominatim returns no results and we have Google API key, try Google Geocoding
+    if (data.length === 0 && GOOGLE_API_KEY) {
+      console.log('Nominatim found no results, trying Google Geocoding API...');
+      try {
+        const googleGeoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(target)}&key=${GOOGLE_API_KEY}`;
+        
+        const googleResponse = await fetch(googleGeoUrl);
+        
+        if (googleResponse.ok) {
+          const googleData = await googleResponse.json();
+          console.log('Google Geocoding API response status:', googleData.status);
+          
+          if (googleData.status === 'OK' && googleData.results.length > 0) {
+            // Convert Google Geocoding format to Nominatim-like format
+            data = googleData.results.map((result: any) => {
+              const location = result.geometry.location;
+              const addressComponents = result.address_components;
+              
+              // Extract address components
+              const getComponent = (type: string) => 
+                addressComponents.find((c: any) => c.types.includes(type))?.long_name || '';
+              
+              return {
+                lat: location.lat.toString(),
+                lon: location.lng.toString(),
+                display_name: result.formatted_address,
+                type: result.types[0],
+                class: 'place',
+                address: {
+                  road: getComponent('route'),
+                  house_number: getComponent('street_number'),
+                  city: getComponent('locality') || getComponent('sublocality'),
+                  state: getComponent('administrative_area_level_1'),
+                  country: getComponent('country'),
+                  postcode: getComponent('postal_code'),
+                  county: getComponent('administrative_area_level_2')
+                },
+                importance: 0.9,
+                boundingbox: [
+                  (location.lat - 0.01).toString(),
+                  (location.lat + 0.01).toString(),
+                  (location.lng - 0.01).toString(),
+                  (location.lng + 0.01).toString()
+                ]
+              };
+            });
+            geocodingSource = 'google';
+            console.log(`Google Geocoding found ${data.length} results`);
+          }
+        }
+      } catch (error) {
+        console.error('Google Geocoding error:', error);
+      }
+    }
 
     // Get the first/best result for Street View
     let streetViewUrl = null;
@@ -48,6 +108,7 @@ Deno.serve(async (req) => {
       query: target,
       found: data.length > 0,
       streetViewUrl: streetViewUrl,
+      geocodingSource: geocodingSource,
       locations: data.map((location: any) => ({
         displayName: location.display_name,
         latitude: parseFloat(location.lat),
@@ -69,7 +130,7 @@ Deno.serve(async (req) => {
       count: data.length
     };
 
-    console.log('Address search results:', results.count, 'locations found');
+    console.log(`Address search results: ${results.count} locations found (via ${geocodingSource})`);
 
     return new Response(JSON.stringify(results), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
