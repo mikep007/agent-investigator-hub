@@ -140,6 +140,18 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
 
     fetchFindings();
 
+    // Polling fallback - check for new findings every 2 seconds for first 30 seconds
+    let pollCount = 0;
+    const maxPolls = 15;
+    const pollInterval = setInterval(() => {
+      pollCount++;
+      fetchFindings();
+      if (pollCount >= maxPolls) {
+        clearInterval(pollInterval);
+      }
+    }, 2000);
+
+    // Realtime subscription for ongoing updates
     const channel = supabase
       .channel(`findings-${investigationId}`)
       .on(
@@ -157,6 +169,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
       .subscribe();
 
     return () => {
+      clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
   }, [active, investigationId]);
