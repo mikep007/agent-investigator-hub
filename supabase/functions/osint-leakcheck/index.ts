@@ -5,17 +5,30 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
-interface LeakCheckResult {
+interface LeakCheckProResult {
   success: boolean;
   found: number;
+  quota: number;
+  result: BreachRecord[];
+}
+
+interface BreachRecord {
+  source: {
+    name: string;
+    breach_date: string;
+    unverified?: number;
+    passwordless?: number;
+    compilation?: number;
+  };
   fields: string[];
-  sources: BreachSource[];
+  [key: string]: any; // Allow any additional fields like email, username, password, etc.
 }
 
 interface BreachSource {
   name: string;
   date: string;
   line?: string;
+  record?: BreachRecord; // Add the full record data
 }
 
 Deno.serve(async (req) => {
@@ -33,8 +46,11 @@ Deno.serve(async (req) => {
       throw new Error('LEAKCHECK_API_KEY not configured');
     }
 
-    // Call LeakCheck.io API
-    const response = await fetch(`https://leakcheck.io/api/public?check=${encodeURIComponent(target)}`, {
+    // Call LeakCheck.io Pro API v2 for detailed breach data
+    const apiUrl = `https://leakcheck.io/api/v2/query/${encodeURIComponent(target)}?type=${searchType}`;
+    console.log('Calling LeakCheck Pro API v2:', apiUrl);
+    
+    const response = await fetch(apiUrl, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -57,18 +73,46 @@ Deno.serve(async (req) => {
       });
     }
 
-    const data: LeakCheckResult = await response.json();
-    console.log('LeakCheck results:', {
+    const data: LeakCheckProResult = await response.json();
+    console.log('LeakCheck Pro API v2 results:', {
       found: data.found,
-      sources: data.sources?.length || 0,
+      records: data.result?.length || 0,
+      quota: data.quota,
     });
+
+    // Extract all unique fields from all breach records
+    const allFields = new Set<string>();
+    data.result?.forEach(record => {
+      record.fields?.forEach(field => allFields.add(field));
+    });
+
+    // Convert breach records to sources format with detailed data
+    const sources: BreachSource[] = data.result?.map(record => {
+      // Build a line showing the leaked data
+      const dataLine = record.fields
+        ?.map(field => {
+          const value = record[field];
+          return value ? `${field}: ${value}` : null;
+        })
+        .filter(Boolean)
+        .join(' | ') || 'No data details available';
+
+      return {
+        name: record.source.name,
+        date: record.source.breach_date,
+        line: dataLine,
+        record: record, // Include the full record for detailed display
+      };
+    }) || [];
+
+    console.log('Processed breach sources:', sources.length);
 
     return new Response(JSON.stringify({
       target,
       type: searchType,
       found: data.found || 0,
-      fields: data.fields || [],
-      sources: data.sources || [],
+      fields: Array.from(allFields),
+      sources: sources,
       success: data.success,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
