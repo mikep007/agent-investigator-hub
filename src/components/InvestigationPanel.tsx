@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
@@ -429,19 +429,42 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-muted-foreground mb-1">{platform.name}</div>
-                      <a
-                        href={platform.url}
-                        target="_blank"
-                        rel="noopener noreferrer nofollow"
-                        className="block group-hover:underline"
-                      >
-                        <h3 className="text-xl text-primary line-clamp-1 mb-1">
-                          Profile on {platform.name}
-                        </h3>
-                      </a>
-                      <p className="text-sm text-muted-foreground truncate">
-                        {platform.url}
-                      </p>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <a
+                            href={platform.url}
+                            target="_blank"
+                            rel="noopener noreferrer nofollow"
+                            className="block group-hover:underline"
+                          >
+                            <h3 className="text-xl text-primary line-clamp-1 mb-1">
+                              Profile on {platform.name}
+                            </h3>
+                          </a>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="flex items-start gap-2 max-w-xs">
+                            <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                            <span>Click to open in new tab. Some platforms may require manual verification.</span>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-sm text-muted-foreground truncate flex-1">
+                          {platform.url}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2"
+                          onClick={() => {
+                            navigator.clipboard.writeText(platform.url);
+                            toast({ title: "Link copied to clipboard" });
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -513,19 +536,42 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                     </div>
                     <div className="flex-1 min-w-0">
                       <div className="text-sm text-muted-foreground mb-1">{profile.platform}</div>
-                      <a
-                        href={profile.url}
-                        target="_blank"
-                        rel="noopener noreferrer nofollow"
-                        className="block group-hover:underline"
-                      >
-                        <h3 className="text-xl text-primary line-clamp-1">
-                          Profile on {profile.platform}
-                        </h3>
-                      </a>
-                      <p className="text-sm text-muted-foreground truncate mt-1">
-                        {profile.url}
-                      </p>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <a
+                            href={profile.url}
+                            target="_blank"
+                            rel="noopener noreferrer nofollow"
+                            className="block group-hover:underline"
+                          >
+                            <h3 className="text-xl text-primary line-clamp-1">
+                              Profile on {profile.platform}
+                            </h3>
+                          </a>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="flex items-start gap-2 max-w-xs">
+                            <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                            <span>Click to open in new tab. Some platforms may require manual verification.</span>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                      <div className="flex items-center gap-2 mt-1">
+                        <p className="text-sm text-muted-foreground truncate flex-1">
+                          {profile.url}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2"
+                          onClick={() => {
+                            navigator.clipboard.writeText(profile.url);
+                            toast({ title: "Link copied to clipboard" });
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                   </div>
                 </div>
