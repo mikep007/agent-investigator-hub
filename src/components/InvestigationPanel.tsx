@@ -432,7 +432,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                       <a
                         href={platform.url}
                         target="_blank"
-                        rel="noopener noreferrer"
+                        rel="noopener noreferrer nofollow"
                         className="block group-hover:underline"
                       >
                         <h3 className="text-xl text-primary line-clamp-1 mb-1">
@@ -516,7 +516,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                       <a
                         href={profile.url}
                         target="_blank"
-                        rel="noopener noreferrer"
+                        rel="noopener noreferrer nofollow"
                         className="block group-hover:underline"
                       >
                         <h3 className="text-xl text-primary line-clamp-1">
