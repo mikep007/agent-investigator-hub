@@ -416,6 +416,12 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         {log.confidence_score !== undefined && (
                           <ConfidenceScoreBadge score={log.confidence_score} />
                         )}
+                        {item.confidenceBoost === 0.3 && (
+                          <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white">
+                            <MapPin className="h-3 w-3 mr-1" />
+                            Location Match
+                          </Badge>
+                        )}
                       </div>
                       <a
                         href={item.link}
