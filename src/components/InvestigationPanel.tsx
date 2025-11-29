@@ -202,6 +202,60 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
     }
   };
 
+  const updatePlatformVerification = async (
+    findingId: string, 
+    platformIdentifier: string, 
+    status: 'verified' | 'inaccurate',
+    platformType: 'sherlock' | 'holehe' | 'social'
+  ) => {
+    try {
+      // Find the current log
+      const log = logs.find(l => l.id === findingId);
+      if (!log) return;
+
+      const updatedData = { ...log.data };
+      
+      // Update the specific platform's verification status
+      if (platformType === 'sherlock' && updatedData.foundPlatforms) {
+        updatedData.foundPlatforms = updatedData.foundPlatforms.map((p: any) =>
+          p.url === platformIdentifier ? { ...p, verificationStatus: status } : p
+        );
+      } else if (platformType === 'holehe' && updatedData.allResults) {
+        updatedData.allResults = updatedData.allResults.map((r: any) =>
+          r.domain === platformIdentifier ? { ...r, verificationStatus: status } : r
+        );
+      } else if (platformType === 'social' && updatedData.profiles) {
+        updatedData.profiles = updatedData.profiles.map((p: any) =>
+          p.url === platformIdentifier ? { ...p, verificationStatus: status } : p
+        );
+      }
+
+      // Update in database
+      const { error } = await supabase
+        .from('findings')
+        .update({ data: updatedData })
+        .eq('id', findingId);
+
+      if (error) throw error;
+
+      // Update local state
+      setLogs(logs.map(l => 
+        l.id === findingId ? { ...l, data: updatedData } : l
+      ));
+
+      toast({
+        title: "Platform verified",
+        description: `Marked as ${status}`,
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to update verification",
+        variant: "destructive",
+      });
+    }
+  };
+
   const handleDeepDive = async (platform: string, findingId: string) => {
     setDeepDiveDialog({ open: true, platform, findingId });
     setDeepDiveLoading(true);
@@ -422,7 +476,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 <h3 className="text-base font-medium">Username found on {log.data.foundPlatforms.length} platforms</h3>
               </div>
               {log.data.foundPlatforms.map((platform: any, idx: number) => (
-                <div key={idx} className="group">
+                <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
                   <div className="flex items-start gap-2">
                     <div className="flex-shrink-0 mt-1">
                       {getPlatformIcon(platform.name)}
@@ -449,7 +503,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                           </div>
                         </TooltipContent>
                       </Tooltip>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 mb-2">
                         <p className="text-sm text-muted-foreground truncate flex-1">
                           {platform.url}
                         </p>
@@ -464,6 +518,36 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         >
                           <Copy className="h-3 w-3" />
                         </Button>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <Button
+                          size="sm"
+                          variant={platform.verificationStatus === 'verified' ? 'default' : 'ghost'}
+                          className="h-7 text-xs"
+                          onClick={() => updatePlatformVerification(log.id, platform.url, 'verified', 'sherlock')}
+                        >
+                          <Check className="h-3 w-3 mr-1" />
+                          Verified
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={platform.verificationStatus === 'inaccurate' ? 'destructive' : 'ghost'}
+                          className="h-7 text-xs"
+                          onClick={() => updatePlatformVerification(log.id, platform.url, 'inaccurate', 'sherlock')}
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          Inaccurate
+                        </Button>
+                        {platform.verificationStatus === 'verified' && (
+                          <Badge variant="default" className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50">
+                            Verified
+                          </Badge>
+                        )}
+                        {platform.verificationStatus === 'inaccurate' && (
+                          <Badge variant="destructive" className="bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/50">
+                            Inaccurate
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>
@@ -484,7 +568,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               {log.data.allResults
                 .filter((r: any) => r.exists)
                 .map((result: any, idx: number) => (
-                  <div key={idx} className="group">
+                  <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
                     <div className="flex items-start gap-2">
                       <div className="flex-shrink-0 mt-1">
                         <CheckCircle2 className="h-4 w-4 text-green-500" />
@@ -497,20 +581,50 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         <p className="text-sm text-muted-foreground mb-2">
                           Account registered on this platform
                         </p>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              className="h-8"
-                              onClick={() => handleDeepDive(result.name, log.id)}
-                            >
-                              <Sparkles className="h-3 w-3 mr-2" />
-                              Deep Dive
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Investigate this account in detail</TooltipContent>
-                        </Tooltip>
+                        <div className="flex gap-2 items-center flex-wrap">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8"
+                                onClick={() => handleDeepDive(result.name, log.id)}
+                              >
+                                <Sparkles className="h-3 w-3 mr-2" />
+                                Deep Dive
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Investigate this account in detail</TooltipContent>
+                          </Tooltip>
+                          <Button
+                            size="sm"
+                            variant={result.verificationStatus === 'verified' ? 'default' : 'ghost'}
+                            className="h-7 text-xs"
+                            onClick={() => updatePlatformVerification(log.id, result.domain, 'verified', 'holehe')}
+                          >
+                            <Check className="h-3 w-3 mr-1" />
+                            Verified
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={result.verificationStatus === 'inaccurate' ? 'destructive' : 'ghost'}
+                            className="h-7 text-xs"
+                            onClick={() => updatePlatformVerification(log.id, result.domain, 'inaccurate', 'holehe')}
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Inaccurate
+                          </Button>
+                          {result.verificationStatus === 'verified' && (
+                            <Badge variant="default" className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50">
+                              Verified
+                            </Badge>
+                          )}
+                          {result.verificationStatus === 'inaccurate' && (
+                            <Badge variant="destructive" className="bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/50">
+                              Inaccurate
+                            </Badge>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -529,7 +643,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 <h3 className="text-base font-medium">Social profiles found</h3>
               </div>
               {foundProfiles.map((profile: any, idx: number) => (
-                <div key={idx} className="group">
+                <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
                   <div className="flex items-start gap-2">
                     <div className="flex-shrink-0 mt-1">
                       <PlatformLogo platform={profile.platform} />
@@ -544,7 +658,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                             rel="noopener noreferrer nofollow"
                             className="block group-hover:underline"
                           >
-                            <h3 className="text-xl text-primary line-clamp-1">
+                            <h3 className="text-xl text-primary line-clamp-1 mb-1">
                               Profile on {profile.platform}
                             </h3>
                           </a>
@@ -556,7 +670,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                           </div>
                         </TooltipContent>
                       </Tooltip>
-                      <div className="flex items-center gap-2 mt-1">
+                      <div className="flex items-center gap-2 mt-1 mb-2">
                         <p className="text-sm text-muted-foreground truncate flex-1">
                           {profile.url}
                         </p>
@@ -571,6 +685,36 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         >
                           <Copy className="h-3 w-3" />
                         </Button>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <Button
+                          size="sm"
+                          variant={profile.verificationStatus === 'verified' ? 'default' : 'ghost'}
+                          className="h-7 text-xs"
+                          onClick={() => updatePlatformVerification(log.id, profile.url, 'verified', 'social')}
+                        >
+                          <Check className="h-3 w-3 mr-1" />
+                          Verified
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={profile.verificationStatus === 'inaccurate' ? 'destructive' : 'ghost'}
+                          className="h-7 text-xs"
+                          onClick={() => updatePlatformVerification(log.id, profile.url, 'inaccurate', 'social')}
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          Inaccurate
+                        </Button>
+                        {profile.verificationStatus === 'verified' && (
+                          <Badge variant="default" className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50">
+                            Verified
+                          </Badge>
+                        )}
+                        {profile.verificationStatus === 'inaccurate' && (
+                          <Badge variant="destructive" className="bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/50">
+                            Inaccurate
+                          </Badge>
+                        )}
                       </div>
                     </div>
                   </div>
