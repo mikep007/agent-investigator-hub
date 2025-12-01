@@ -13,43 +13,117 @@ function checkNameMatch(text: string, fullName: string): { exact: boolean; parti
   const textLower = text.toLowerCase();
   const nameLower = fullName.toLowerCase().trim();
   
-  // Check for exact phrase match
   if (textLower.includes(nameLower)) {
     return { exact: true, partial: true };
   }
   
-  // Check for name parts appearing adjacent (handles "Petrie, Michael" or "Michael Petrie")
   const nameParts = nameLower.split(/\s+/).filter(p => p.length > 1);
   if (nameParts.length >= 2) {
     const firstName = nameParts[0];
     const lastName = nameParts[nameParts.length - 1];
     
-    // Check "First Last" order
     const forwardPattern = new RegExp(`\\b${firstName}\\b[^a-z]{0,10}\\b${lastName}\\b`, 'i');
-    // Check "Last, First" order (common in bibliographies)
     const reversePattern = new RegExp(`\\b${lastName}\\b[,;]?\\s*\\b${firstName}\\b`, 'i');
     
     if (forwardPattern.test(text) || reversePattern.test(text)) {
       return { exact: true, partial: true };
     }
     
-    // Check if BOTH first and last name appear but not adjacent (partial match)
     const hasFirst = new RegExp(`\\b${firstName}\\b`, 'i').test(text);
     const hasLast = new RegExp(`\\b${lastName}\\b`, 'i').test(text);
     
     if (hasFirst && hasLast) {
-      // But verify they're not part of different names
-      // Look for patterns like "Michael Belgrave" or "Hazel Petrie" which indicate different people
-      const otherNamePattern = new RegExp(`\\b${firstName}\\b[^,;]{1,20}\\b(?!${lastName})\\w+\\b|\\b(?!${firstName})\\w+[^,;]{1,20}\\b${lastName}\\b`, 'i');
-      if (otherNamePattern.test(text)) {
-        // Found evidence of the names belonging to different people
-        return { exact: false, partial: true };
-      }
       return { exact: false, partial: true };
     }
   }
   
   return { exact: false, partial: false };
+}
+
+// Build Google Dork queries for comprehensive OSINT
+function buildDorkQueries(name: string, location?: string, email?: string): { query: string; type: string; priority: number }[] {
+  const queries: { query: string; type: string; priority: number }[] = [];
+  const quotedName = `"${name}"`;
+  
+  // 1. Social Media Profiles (highest priority)
+  queries.push({
+    query: `${quotedName} site:linkedin.com | site:facebook.com | site:twitter.com | site:instagram.com`,
+    type: 'social_media',
+    priority: 1
+  });
+  
+  // 2. Profile Pages
+  queries.push({
+    query: `${quotedName} inurl:profile | inurl:about | inurl:user`,
+    type: 'profiles',
+    priority: 2
+  });
+  
+  // 3. People Finder Sites
+  queries.push({
+    query: `${quotedName} site:whitepages.com | site:spokeo.com | site:beenverified.com | site:truepeoplesearch.com`,
+    type: 'people_finders',
+    priority: 3
+  });
+  
+  // 4. Documents (resumes, reports)
+  queries.push({
+    query: `${quotedName} filetype:pdf | filetype:doc | filetype:docx`,
+    type: 'documents',
+    priority: 4
+  });
+  
+  // 5. Location-specific search
+  if (location && location !== 'provided') {
+    const locationParts = location.split(',').map(p => p.trim()).filter(p => p.length > 2);
+    const city = locationParts[0];
+    if (city) {
+      queries.push({
+        query: `${quotedName} "${city}"`,
+        type: 'location_specific',
+        priority: 2
+      });
+    }
+  }
+  
+  // 6. Email-related search
+  if (email) {
+    queries.push({
+      query: `"${email}" | ${quotedName} email`,
+      type: 'email_mentions',
+      priority: 3
+    });
+  }
+  
+  // 7. Professional/Academic sites
+  queries.push({
+    query: `${quotedName} site:edu | site:gov | site:org`,
+    type: 'official_sources',
+    priority: 5
+  });
+  
+  // 8. Contact info patterns
+  queries.push({
+    query: `${quotedName} intext:"phone" | intext:"contact" | intext:"email"`,
+    type: 'contact_info',
+    priority: 4
+  });
+  
+  return queries;
+}
+
+async function executeSearch(query: string, apiKey: string, searchEngineId: string): Promise<any> {
+  const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(query)}&num=5`;
+  
+  const response = await fetch(searchUrl);
+  const data = await response.json();
+  
+  if (data.error) {
+    console.error(`Search error for query "${query}":`, data.error.message);
+    return null;
+  }
+  
+  return data;
 }
 
 Deno.serve(async (req) => {
@@ -60,118 +134,115 @@ Deno.serve(async (req) => {
   try {
     const { target, searchData } = await req.json();
     console.log('Web search for:', target);
-    console.log('Search context:', searchData);
 
     if (!GOOGLE_API_KEY || !GOOGLE_SEARCH_ENGINE_ID) {
       throw new Error('Google API credentials not configured');
     }
 
-    // Determine the actual search term - prefer fullName from searchData over combined target
     const searchName = searchData?.fullName || target;
+    const location = searchData?.address;
+    const email = searchData?.email;
     
-    // Build a more effective search query
-    // Use exact phrase for name only, not for keywords
-    let googleDorkQuery = `"${searchName}"`;
+    // Build targeted dork queries
+    const dorkQueries = buildDorkQueries(searchName, location, email);
     
-    // Add location context if available for higher precision
-    if (searchData?.address && searchData.address !== 'provided') {
-      const addressParts = searchData.address.split(',').map((p: string) => p.trim());
-      const city = addressParts.find((p: string) => p.length > 2 && !/^\d+/.test(p) && !/^[A-Z]{2}$/.test(p.trim()));
-      const state = addressParts.find((p: string) => /^[A-Z]{2}$/.test(p.trim()) || p.toLowerCase().includes('pa') || p.toLowerCase().includes('ny'));
-      
-      if (city || state) {
-        const locationParts = [city, state].filter(Boolean);
-        if (locationParts.length > 0) {
-          googleDorkQuery += ` ${locationParts.join(' ')}`;
-        }
-      }
-    }
+    // Execute top priority queries (limit to conserve API quota)
+    // Sort by priority and take top 3 different types
+    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 3);
     
-    // Add keywords as separate terms (not in exact phrase)
-    if (searchData?.keywords && typeof searchData.keywords === 'string' && searchData.keywords !== 'social detection') {
-      googleDorkQuery += ` ${searchData.keywords}`;
-    }
+    console.log('Executing dork queries:', sortedQueries.map(q => q.type));
     
-    console.log('Google Dork query:', googleDorkQuery);
+    const searchPromises = sortedQueries.map(q => 
+      executeSearch(q.query, GOOGLE_API_KEY!, GOOGLE_SEARCH_ENGINE_ID!)
+        .then(result => ({ ...result, queryType: q.type, queryUsed: q.query }))
+    );
     
-    // Using Google Custom Search API with enhanced query
-    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_SEARCH_ENGINE_ID}&q=${encodeURIComponent(googleDorkQuery)}`;
+    const searchResults = await Promise.all(searchPromises);
     
-    const response = await fetch(searchUrl);
-    const data = await response.json();
-
-    console.log('Google API response status:', response.status);
-
-    if (data.error) {
-      throw new Error(`Google API error: ${data.error.message}`);
-    }
-
+    // Deduplicate results by URL
+    const seenUrls = new Set<string>();
     const confirmedResults: any[] = [];
     const possibleResults: any[] = [];
-
-    (data.items || []).slice(0, 10).forEach((item: any) => {
-      const textToCheck = `${item.title} ${item.snippet}`;
+    
+    for (const result of searchResults) {
+      if (!result || !result.items) continue;
       
-      // Check name match quality
-      const nameMatch = checkNameMatch(textToCheck, searchName);
-      
-      // Check if address/location appears in same result
-      let locationPresent = false;
-      if (searchData?.address) {
-        const addressParts = searchData.address.toLowerCase().split(',').map((p: string) => p.trim());
-        locationPresent = addressParts.some((part: string) => 
-          part.length > 2 && textToCheck.toLowerCase().includes(part)
-        );
-      }
-      
-      // Calculate confidence score
-      let confidenceScore = 0.5; // Base score
-      
-      if (nameMatch.exact) {
-        confidenceScore = 0.75;
-        if (locationPresent) {
-          confidenceScore = 0.90; // High confidence: exact name + location
+      for (const item of result.items) {
+        if (seenUrls.has(item.link)) continue;
+        seenUrls.add(item.link);
+        
+        const textToCheck = `${item.title} ${item.snippet}`;
+        const nameMatch = checkNameMatch(textToCheck, searchName);
+        
+        // Check location presence
+        let locationPresent = false;
+        if (location && location !== 'provided') {
+          const locationParts = location.toLowerCase().split(',').map((p: string) => p.trim());
+          locationPresent = locationParts.some((part: string) => 
+            part.length > 2 && textToCheck.toLowerCase().includes(part)
+          );
         }
-      } else if (nameMatch.partial) {
-        confidenceScore = 0.35; // Low confidence: words present but not adjacent
+        
+        // Calculate confidence based on match quality and source type
+        let confidenceScore = 0.5;
+        
+        // Boost for exact name match
+        if (nameMatch.exact) {
+          confidenceScore = 0.75;
+        } else if (nameMatch.partial) {
+          confidenceScore = 0.35;
+        }
+        
+        // Boost for location co-occurrence
         if (locationPresent) {
-          confidenceScore = 0.50;
+          confidenceScore += 0.15;
+        }
+        
+        // Boost for high-value source types
+        if (result.queryType === 'social_media') {
+          confidenceScore += 0.10;
+        } else if (result.queryType === 'people_finders') {
+          confidenceScore += 0.05;
+        }
+        
+        // Cap at 0.95
+        confidenceScore = Math.min(0.95, confidenceScore);
+        
+        const processedItem = {
+          title: item.title || '',
+          link: item.link || '',
+          snippet: item.snippet || '',
+          displayLink: item.displayLink || '',
+          confidenceScore,
+          isExactMatch: nameMatch.exact,
+          hasLocation: locationPresent,
+          sourceType: result.queryType
+        };
+        
+        if (confidenceScore >= 0.6) {
+          confirmedResults.push(processedItem);
+        } else {
+          possibleResults.push(processedItem);
         }
       }
-      
-      const result = {
-        title: item.title || '',
-        link: item.link || '',
-        snippet: item.snippet || '',
-        displayLink: item.displayLink || '',
-        confidenceScore,
-        isExactMatch: nameMatch.exact,
-        hasLocation: locationPresent
-      };
-      
-      // Sort into confirmed vs possible based on confidence
-      if (confidenceScore >= 0.6) {
-        confirmedResults.push(result);
-      } else {
-        possibleResults.push(result);
-      }
-    });
-
+    }
+    
     // Sort by confidence
     confirmedResults.sort((a, b) => b.confidenceScore - a.confidenceScore);
     possibleResults.sort((a, b) => b.confidenceScore - a.confidenceScore);
-
+    
     const results = {
-      searchInformation: data.searchInformation || {},
+      searchInformation: {
+        totalResults: String(confirmedResults.length + possibleResults.length),
+        queriesExecuted: sortedQueries.map(q => q.type)
+      },
       confirmedItems: confirmedResults,
       possibleItems: possibleResults,
-      // Keep legacy items for backward compatibility
       items: [...confirmedResults, ...possibleResults],
-      totalResults: data.searchInformation?.totalResults || '0',
-      query: googleDorkQuery
+      queriesUsed: sortedQueries.map(q => ({ type: q.type, query: q.query }))
     };
-
-    console.log('Web search results: ', confirmedResults.length, 'confirmed,', possibleResults.length, 'possible');
+    
+    console.log('Web search complete:', confirmedResults.length, 'confirmed,', possibleResults.length, 'possible');
 
     return new Response(JSON.stringify(results), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
