@@ -877,7 +877,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 <div key={idx} className="border border-border rounded-lg p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <h4 className="font-medium text-foreground">{result.name}</h4>
-                    <Badge variant="outline" className="text-xs">{result.source}</Badge>
+                    <Badge variant="outline" className="text-xs">{result.sources || result.source}</Badge>
                   </div>
 
                   {/* Phone Numbers */}
@@ -887,11 +887,25 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         <Phone className="h-4 w-4" />
                         Phone Numbers:
                       </div>
-                      {result.phones.map((phone: string, pIdx: number) => (
-                        <div key={pIdx} className="pl-6 text-sm text-foreground">
-                          {phone}
-                        </div>
-                      ))}
+                      {result.phones.map((phone: any, pIdx: number) => {
+                        const phoneValue = typeof phone === 'string' ? phone : phone.value;
+                        const isVerified = typeof phone === 'object' && phone.verified;
+                        return (
+                          <div key={pIdx} className="pl-6 text-sm text-foreground flex items-center gap-2">
+                            {phoneValue}
+                            {isVerified && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs">Cross-referenced across multiple sources</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -902,11 +916,25 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         <Mail className="h-4 w-4" />
                         Email Addresses:
                       </div>
-                      {result.emails.map((email: string, eIdx: number) => (
-                        <div key={eIdx} className="pl-6 text-sm text-foreground">
-                          {email}
-                        </div>
-                      ))}
+                      {result.emails.map((email: any, eIdx: number) => {
+                        const emailValue = typeof email === 'string' ? email : email.value;
+                        const isVerified = typeof email === 'object' && email.verified;
+                        return (
+                          <div key={eIdx} className="pl-6 text-sm text-foreground flex items-center gap-2">
+                            {emailValue}
+                            {isVerified && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs">Cross-referenced across multiple sources</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -917,11 +945,25 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         <MapPin className="h-4 w-4" />
                         Addresses:
                       </div>
-                      {result.addresses.map((address: string, aIdx: number) => (
-                        <div key={aIdx} className="pl-6 text-sm text-foreground">
-                          {address}
-                        </div>
-                      ))}
+                      {result.addresses.map((address: any, aIdx: number) => {
+                        const addressValue = typeof address === 'string' ? address : address.value;
+                        const isVerified = typeof address === 'object' && address.verified;
+                        return (
+                          <div key={aIdx} className="pl-6 text-sm text-foreground flex items-center gap-2">
+                            {addressValue}
+                            {isVerified && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs">Cross-referenced across multiple sources</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -932,8 +974,27 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         <User className="h-4 w-4" />
                         Age:
                       </div>
-                      <div className="pl-6 text-sm text-foreground">
-                        {result.ages.join(', ')}
+                      <div className="pl-6 text-sm text-foreground flex items-center gap-2 flex-wrap">
+                        {result.ages.map((age: any, aIdx: number) => {
+                          const ageValue = typeof age === 'string' ? age : age.value;
+                          const isVerified = typeof age === 'object' && age.verified;
+                          return (
+                            <span key={aIdx} className="flex items-center gap-1">
+                              {ageValue}
+                              {isVerified && (
+                                <Tooltip>
+                                  <TooltipTrigger>
+                                    <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                  </TooltipTrigger>
+                                  <TooltipContent>
+                                    <p className="text-xs">Cross-referenced across multiple sources</p>
+                                  </TooltipContent>
+                                </Tooltip>
+                              )}
+                              {aIdx < result.ages.length - 1 && <span className="mr-1">,</span>}
+                            </span>
+                          );
+                        })}
                       </div>
                     </div>
                   )}
@@ -945,11 +1006,25 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                         <User className="h-4 w-4" />
                         Possible Relatives:
                       </div>
-                      {result.relatives.map((relative: string, rIdx: number) => (
-                        <div key={rIdx} className="pl-6 text-sm text-foreground">
-                          {relative}
-                        </div>
-                      ))}
+                      {result.relatives.map((relative: any, rIdx: number) => {
+                        const relativeName = typeof relative === 'string' ? relative : relative.value;
+                        const isVerified = typeof relative === 'object' && relative.verified;
+                        return (
+                          <div key={rIdx} className="pl-6 text-sm text-foreground flex items-center gap-2">
+                            {relativeName}
+                            {isVerified && (
+                              <Tooltip>
+                                <TooltipTrigger>
+                                  <CheckCircle2 className="h-3.5 w-3.5 text-green-500" />
+                                </TooltipTrigger>
+                                <TooltipContent>
+                                  <p className="text-xs">Cross-referenced across multiple sources</p>
+                                </TooltipContent>
+                              </Tooltip>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
