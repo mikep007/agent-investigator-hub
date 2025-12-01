@@ -482,8 +482,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
     });
   };
 
-  // Categorize logs
+  // Categorize logs - simplified for clarity
   const filteredLogs = filterLogsBySearch(logs);
+  
+  // Web search results
   const webLogs = filteredLogs.filter(log => 
     log.agent_type === 'Web' || 
     log.agent_type === 'Web_email_exact' ||
@@ -493,7 +495,15 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
       log.source.includes('web_search')
     ))
   );
-  const socialLogs = filteredLogs.filter(log => log.agent_type === 'Social' || log.agent_type === 'Sherlock' || log.agent_type === 'Holehe');
+  
+  // Account discovery - platforms where email/username was found registered
+  const accountLogs = filteredLogs.filter(log => 
+    log.agent_type === 'Holehe' || 
+    log.agent_type === 'Sherlock' ||
+    log.agent_type === 'Social'
+  );
+  
+  // Address/location data
   const addressLogs = filteredLogs.filter(log => 
     log.agent_type === 'Address' ||
     (log.source && (
@@ -501,11 +511,15 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
       log.source.includes('address_residents')
     ))
   );
-  const contactLogs = filteredLogs.filter(log => 
+  
+  // People search - public records, phone/email lookups
+  const peopleLogs = filteredLogs.filter(log => 
     log.agent_type === 'Email' || 
     log.agent_type === 'Phone' || 
     log.agent_type === 'People_search'
   );
+  
+  // Data breaches
   const breachLogs = filteredLogs.filter(log => log.agent_type?.toLowerCase().startsWith('leakcheck'));
 
   const renderWebResults = (filteredLogs: LogEntry[]) => (
@@ -1177,13 +1191,13 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                  </span>
                </TabsTrigger>
                <TabsTrigger 
-                 value="social" 
+                 value="accounts" 
                  className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
                >
                  <User className="h-4 w-4 mr-2" />
-                 Social
+                 Accounts
                  <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                   {socialLogs.length}
+                   {accountLogs.length}
                  </span>
                </TabsTrigger>
                <TabsTrigger 
@@ -1197,13 +1211,13 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                  </span>
                </TabsTrigger>
                <TabsTrigger 
-                 value="contact" 
+                 value="people" 
                  className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
                >
                  <Mail className="h-4 w-4 mr-2" />
-                 Contact
+                 People
                  <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                   {contactLogs.length}
+                   {peopleLogs.length}
                  </span>
                </TabsTrigger>
                <TabsTrigger 
@@ -1256,12 +1270,12 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="social" className="flex-1 mt-0 px-6">
+          <TabsContent value="accounts" className="flex-1 mt-0 px-6">
             <ScrollArea className="h-[550px]">
               <div className="space-y-6 pb-4 pr-4">
-                {socialLogs.length > 0 ? renderSocialResults(socialLogs) : (
+                {accountLogs.length > 0 ? renderSocialResults(accountLogs) : (
                   <div className="text-center text-muted-foreground py-8">
-                    {searchQuery ? "No social media results match your search" : "No social media results found"}
+                    {searchQuery ? "No account results match your search" : "No accounts found on platforms"}
                   </div>
                 )}
               </div>
@@ -1280,12 +1294,12 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="contact" className="flex-1 mt-0 px-6">
+          <TabsContent value="people" className="flex-1 mt-0 px-6">
             <ScrollArea className="h-[550px]">
               <div className="space-y-6 pb-4 pr-4">
-                {contactLogs.length > 0 ? renderContactResults(contactLogs) : (
+                {peopleLogs.length > 0 ? renderContactResults(peopleLogs) : (
                   <div className="text-center text-muted-foreground py-8">
-                    {searchQuery ? "No contact information matches your search" : "No contact information found"}
+                    {searchQuery ? "No people records match your search" : "No people records found"}
                   </div>
                 )}
               </div>
