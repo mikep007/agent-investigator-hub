@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
@@ -31,6 +31,15 @@ interface InvestigationPanelProps {
   investigationId: string | null;
 }
 
+interface SearchData {
+  fullName?: string;
+  address?: string;
+  email?: string;
+  phone?: string;
+  username?: string;
+  keywords?: string;
+}
+
 interface LogEntry {
   id: string;
   timestamp: string;
@@ -51,6 +60,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   const [deepDiveDialog, setDeepDiveDialog] = useState<{ open: boolean; platform: string; findingId: string } | null>(null);
   const [deepDiveLoading, setDeepDiveLoading] = useState(false);
   const [deepDiveResults, setDeepDiveResults] = useState<any>(null);
+  const [retrying, setRetrying] = useState<string | null>(null);
+  const [searchData, setSearchData] = useState<SearchData | null>(null);
+  const [failedAgents, setFailedAgents] = useState<string[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -73,6 +85,40 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         console.error('Error fetching findings:', error);
         setLoading(false);
         return;
+      }
+
+      // Extract search data and failed agents from diagnostic finding
+      const diagnosticFinding = findings?.find(f => f.agent_type === 'System');
+      if (diagnosticFinding?.data) {
+        const data = diagnosticFinding.data as any;
+        if (data.searchSummary) {
+          const summary = data.searchSummary;
+          const failed = summary
+            .filter((s: any) => s.status === 'error' || s.status === 'failed')
+            .map((s: any) => s.type);
+          setFailedAgents(failed);
+        }
+        
+        // Extract original search parameters if available
+        if (findings && findings.length > 0) {
+          const firstFinding = findings.find(f => {
+            const fData = f.data as any;
+            return fData?.searchContext;
+          });
+          if (firstFinding) {
+            const fData = firstFinding.data as any;
+            if (fData?.searchContext) {
+              setSearchData({
+                fullName: fData.searchContext.fullName,
+                email: fData.searchContext.hasEmail ? 'provided' : undefined,
+                phone: fData.searchContext.hasPhone ? 'provided' : undefined,
+                username: fData.searchContext.hasUsername ? 'provided' : undefined,
+                address: fData.searchContext.hasAddress ? 'provided' : undefined,
+                keywords: fData.searchContext.keywords?.join(', '),
+              });
+            }
+          }
+        }
       }
 
       if (findings) {
@@ -317,6 +363,50 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
     if (platformLower.includes('github')) return <Github className="h-4 w-4" />;
     if (platformLower.includes('linkedin')) return <Linkedin className="h-4 w-4" />;
     return <Shield className="h-4 w-4" />;
+  };
+
+  const handleRetryAgent = async (agentType: string) => {
+    if (!investigationId || !searchData) {
+      toast({
+        title: "Cannot Retry",
+        description: "Missing investigation data",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    setRetrying(agentType);
+
+    try {
+      const { data, error } = await supabase.functions.invoke('osint-retry-agent', {
+        body: {
+          investigationId,
+          agentType,
+          searchData
+        }
+      });
+
+      if (error) throw error;
+
+      if (data?.success) {
+        toast({
+          title: "Retry Successful",
+          description: `${agentType} search completed successfully`,
+        });
+        setFailedAgents(failedAgents.filter(a => a !== agentType));
+      } else {
+        throw new Error(data?.error || 'Retry failed');
+      }
+    } catch (error: any) {
+      console.error('Retry error:', error);
+      toast({
+        title: "Retry Failed",
+        description: error.message || `Failed to retry ${agentType}`,
+        variant: "destructive",
+      });
+    } finally {
+      setRetrying(null);
+    }
   };
 
   if (!active) {
@@ -1081,6 +1171,50 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             </div>
           )}
         </div>
+
+        {/* Failed Agents Alert */}
+        {failedAgents.length > 0 && (
+          <div className="px-6 py-3 bg-destructive/10 border-b">
+            <div className="flex items-start gap-3">
+              <AlertCircle className="h-5 w-5 text-destructive flex-shrink-0 mt-0.5" />
+              <div className="flex-1 space-y-2">
+                <div className="text-sm font-medium text-destructive">
+                  {failedAgents.length} search{failedAgents.length !== 1 ? 'es' : ''} failed
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {failedAgents.map(agent => (
+                    <Tooltip key={agent}>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-8 text-xs"
+                          onClick={() => handleRetryAgent(agent)}
+                          disabled={retrying === agent}
+                        >
+                          {retrying === agent ? (
+                            <>
+                              <Clock className="h-3 w-3 mr-1 animate-spin" />
+                              Retrying...
+                            </>
+                          ) : (
+                            <>
+                              <RefreshCw className="h-3 w-3 mr-1" />
+                              Retry {agent}
+                            </>
+                          )}
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        Re-run this search
+                      </TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         <Tabs defaultValue="all" className="flex-1 flex flex-col">
           <div className="px-6 pb-3 mb-4 border-b">
