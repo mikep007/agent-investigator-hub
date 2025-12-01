@@ -1083,8 +1083,8 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         </div>
 
         <Tabs defaultValue="all" className="flex-1 flex flex-col">
-          <div className="pb-3 mb-4 border-b">
-            <TabsList className="inline-flex h-auto w-full justify-start gap-2 bg-transparent p-0">
+          <div className="px-6 pb-3 mb-4 border-b">
+            <TabsList className="inline-flex h-auto w-full justify-start gap-2 bg-transparent p-0 flex-wrap">
                <TabsTrigger 
                  value="all" 
                  className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
@@ -1147,9 +1147,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
              </TabsList>
            </div>
 
-           <TabsContent value="all" className="flex-1 mt-0">
+          <TabsContent value="all" className="flex-1 mt-0 px-6">
             <ScrollArea className="h-[550px]">
-              <div className="space-y-6 pb-4">
+              <div className="space-y-6 pb-4 pr-4">
                 {/* AI Investigative Assistant */}
                 {filteredLogs.length > 0 && !searchQuery && (
                   <InvestigativeAssistant findings={logs} />
@@ -1172,9 +1172,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           </TabsContent>
 
 
-          <TabsContent value="web" className="flex-1 mt-0">
+          <TabsContent value="web" className="flex-1 mt-0 px-6">
             <ScrollArea className="h-[550px]">
-              <div className="space-y-6 pb-4">
+              <div className="space-y-6 pb-4 pr-4">
                 {webLogs.length > 0 ? renderWebResults(webLogs) : (
                   <div className="text-center text-muted-foreground py-8">
                     {searchQuery ? "No web results match your search" : "No web results found"}
@@ -1184,9 +1184,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="social" className="flex-1 mt-0">
+          <TabsContent value="social" className="flex-1 mt-0 px-6">
             <ScrollArea className="h-[550px]">
-              <div className="space-y-6 pb-4">
+              <div className="space-y-6 pb-4 pr-4">
                 {socialLogs.length > 0 ? renderSocialResults(socialLogs) : (
                   <div className="text-center text-muted-foreground py-8">
                     {searchQuery ? "No social media results match your search" : "No social media results found"}
@@ -1196,9 +1196,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="address" className="flex-1 mt-0">
+          <TabsContent value="address" className="flex-1 mt-0 px-6">
             <ScrollArea className="h-[550px]">
-              <div className="space-y-6 pb-4">
+              <div className="space-y-6 pb-4 pr-4">
                 {addressLogs.length > 0 ? renderAddressResults(addressLogs) : (
                   <div className="text-center text-muted-foreground py-8">
                     {searchQuery ? "No address results match your search" : "No address results found"}
@@ -1208,9 +1208,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="contact" className="flex-1 mt-0">
+          <TabsContent value="contact" className="flex-1 mt-0 px-6">
             <ScrollArea className="h-[550px]">
-              <div className="space-y-6 pb-4">
+              <div className="space-y-6 pb-4 pr-4">
                 {contactLogs.length > 0 ? renderContactResults(contactLogs) : (
                   <div className="text-center text-muted-foreground py-8">
                     {searchQuery ? "No contact information matches your search" : "No contact information found"}
@@ -1220,9 +1220,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="breaches" className="flex-1 mt-0">
+          <TabsContent value="breaches" className="flex-1 mt-0 px-6">
             <ScrollArea className="h-[550px]">
-              <div className="space-y-6 pb-4">
+              <div className="space-y-6 pb-4 pr-4">
                 {breachLogs.map((log) => (
                   <BreachResults key={log.id} data={log.data} />
                 ))}

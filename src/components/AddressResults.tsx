@@ -1,6 +1,6 @@
-import { useState } from "react";
 import { MapPin } from "lucide-react";
 import { Badge } from "./ui/badge";
+import StreetViewPanorama from "./StreetViewPanorama";
 
 interface AddressResultsProps {
   data: any;
@@ -8,8 +8,6 @@ interface AddressResultsProps {
 }
 
 const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
-  const [streetViewError, setStreetViewError] = useState(false);
-
   if (!data || !data.found) {
     return (
       <div className="text-muted-foreground text-sm">
@@ -20,37 +18,18 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
 
   return (
     <div className="space-y-4">
-      {/* Street View Photo */}
+      {/* Interactive Street View */}
       <div className="mb-4">
         <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
           <MapPin className="h-4 w-4 text-primary" />
           Street View
         </h4>
-        {data.streetViewUrl ? (
-          <div className="relative">
-            <img
-              src={data.streetViewUrl}
-              alt="Street View of investigated address"
-              className="w-full rounded-lg border border-border shadow-md"
-              loading="lazy"
-              onLoad={() => {
-                console.log("Street View image loaded successfully", data.streetViewUrl);
-              }}
-              onError={() => {
-                console.error("Street View image failed to load:", data.streetViewUrl);
-                setStreetViewError(true);
-              }}
-            />
-            {streetViewError && (
-              <div className="mt-3 p-4 rounded-lg border border-border bg-muted text-sm text-muted-foreground">
-                Street View not available for this location.
-              </div>
-            )}
-          </div>
-        ) : (
-          <div className="p-4 rounded-lg border border-border bg-muted text-sm text-muted-foreground">
-            Street View not available for this location.
-          </div>
+        {data.locations?.[0] && (
+          <StreetViewPanorama
+            latitude={data.locations[0].latitude}
+            longitude={data.locations[0].longitude}
+            staticImageUrl={data.streetViewUrl}
+          />
         )}
       </div>
 
