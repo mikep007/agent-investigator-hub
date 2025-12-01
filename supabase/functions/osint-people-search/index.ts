@@ -221,9 +221,53 @@ Deno.serve(async (req) => {
 function parseSearchResults(markdown: string, html: string, firstName: string, lastName: string, source: string) {
   const results: any[] = [];
   
-  // Extract phone numbers (various formats)
+  // Detect CAPTCHA or bot protection pages - return empty if blocked
+  const isCaptchaBlocked = 
+    markdown.toLowerCase().includes('captcha') ||
+    markdown.includes('geo.captcha-delivery') ||
+    markdown.includes('challenge-platform') ||
+    markdown.includes('cf-turnstile') ||
+    markdown.includes('hcaptcha') ||
+    markdown.includes('recaptcha') ||
+    markdown.includes('bot detection') ||
+    markdown.includes('access denied') ||
+    (markdown.length < 500 && markdown.includes('iframe'));
+  
+  if (isCaptchaBlocked) {
+    console.log(`${source}: CAPTCHA/bot protection detected, skipping extraction`);
+    return [{
+      name: `${firstName} ${lastName}`,
+      phones: [],
+      emails: [],
+      addresses: [],
+      ages: [],
+      relatives: [],
+      source: source,
+      note: 'Site blocked by CAPTCHA - manual verification required',
+      blocked: true,
+    }];
+  }
+  
+  // Extract phone numbers (various formats) - US numbers only
   const phoneRegex = /\(?\d{3}\)?[-.\s]?\d{3}[-.\s]?\d{4}/g;
-  const phones = [...new Set(markdown.match(phoneRegex) || [])];
+  const rawPhones = markdown.match(phoneRegex) || [];
+  
+  // Validate phone numbers - must be valid US format
+  const validPhones = rawPhones.filter(phone => {
+    const digits = phone.replace(/\D/g, '');
+    // Must be exactly 10 digits
+    if (digits.length !== 10) return false;
+    // First digit of area code must be 2-9 (valid US area codes)
+    if (digits[0] === '0' || digits[0] === '1') return false;
+    // First digit of exchange must be 2-9
+    if (digits[3] === '0' || digits[3] === '1') return false;
+    // Reject obviously fake patterns like 1234567890, 0000000000
+    if (/^(\d)\1{9}$/.test(digits)) return false;
+    if (digits === '1234567890' || digits === '0123456789') return false;
+    return true;
+  });
+  
+  const phones = [...new Set(validPhones)];
   
   // Extract email addresses
   const emailRegex = /[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}/g;
