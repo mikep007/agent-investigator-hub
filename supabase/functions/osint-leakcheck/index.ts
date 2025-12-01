@@ -38,7 +38,11 @@ Deno.serve(async (req) => {
 
   try {
     const { target, type } = await req.json(); // target can be email, phone, or username
-    const searchType = type || 'email'; // Default to email for backwards compatibility
+    // LeakCheck API v2 uses 'login' for username searches, not 'username'
+    let searchType = type || 'email';
+    if (searchType === 'username') {
+      searchType = 'login';
+    }
     console.log(`LeakCheck search for ${searchType}:`, target);
 
     const leakCheckApiKey = Deno.env.get('LEAKCHECK_API_KEY');
