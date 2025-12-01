@@ -227,20 +227,49 @@ function parseSearchResults(markdown: string, html: string, firstName: string, l
   const ageMatches = [...markdown.matchAll(ageRegex)];
   const ages = [...new Set(ageMatches.map(m => m[1]))];
   
-  // Extract relatives/associated names (simplified)
-  const relativeRegex = /(?:Relative|Related|Associate|Family)[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi;
-  const relativeMatches = [...markdown.matchAll(relativeRegex)];
-  const relatives = [...new Set(relativeMatches.map(m => m[1].trim()))];
+  // Extract relatives/associated names (multiple patterns)
+  const relatives: string[] = [];
+  
+  // Pattern 1: "Relatives: Name Name" or "Related To: Name"
+  const relativeRegex1 = /(?:Relative|Related\s*(?:To)?|Associate|Family|Known\s*Associate)[:\s]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi;
+  const relativeMatches1 = [...markdown.matchAll(relativeRegex1)];
+  relativeMatches1.forEach(m => relatives.push(m[1].trim()));
+  
+  // Pattern 2: Names in "Possible Relatives" or "May Know" sections
+  const relativeSection = markdown.match(/(?:Possible\s+Relatives|May\s+(?:Also\s+)?Know|Associated\s+With)[:\s]*([^\n]+(?:\n[^\n]+)*?)(?=\n\n|\n[A-Z]|\$)/gi);
+  if (relativeSection) {
+    relativeSection.forEach(section => {
+      const names = section.match(/[A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?/g);
+      if (names) {
+        names.forEach(name => {
+          // Filter out common non-name patterns
+          if (!name.match(/^(View|Show|See|More|Click|Phone|Email|Address|Current|Previous)/i)) {
+            relatives.push(name.trim());
+          }
+        });
+      }
+    });
+  }
+  
+  // Pattern 3: Names with relationship indicators
+  const relativeRegex3 = /([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*\((?:spouse|wife|husband|mother|father|son|daughter|brother|sister|sibling|parent|child|relative)\)/gi;
+  const relativeMatches3 = [...markdown.matchAll(relativeRegex3)];
+  relativeMatches3.forEach(m => relatives.push(m[1].trim()));
+  
+  // Deduplicate relatives and filter out the target name
+  const targetNameLower = `${firstName} ${lastName}`.toLowerCase();
+  const uniqueRelatives = [...new Set(relatives)]
+    .filter(r => r.toLowerCase() !== targetNameLower && r.length > 3);
   
   // Create result objects for each combination found
-  if (phones.length > 0 || emails.length > 0 || addresses.length > 0) {
+  if (phones.length > 0 || emails.length > 0 || addresses.length > 0 || uniqueRelatives.length > 0) {
     const result: any = {
       name: `${firstName} ${lastName}`,
       phones: phones.slice(0, 5), // Limit to 5
       emails: emails.slice(0, 5),
       addresses: addresses.slice(0, 3),
       ages: ages.slice(0, 3),
-      relatives: relatives.slice(0, 10),
+      relatives: uniqueRelatives.slice(0, 15), // Increased limit for relatives
       source: source,
     };
     

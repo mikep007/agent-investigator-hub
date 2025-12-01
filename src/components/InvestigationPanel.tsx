@@ -522,6 +522,13 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   // Data breaches
   const breachLogs = filteredLogs.filter(log => log.agent_type?.toLowerCase().startsWith('leakcheck'));
 
+  // Relatives - extract from People_search results
+  const relativesLogs = filteredLogs.filter(log => {
+    if (log.agent_type !== 'People_search') return false;
+    const results = log.data?.results || [];
+    return results.some((r: any) => r.relatives && r.relatives.length > 0);
+  });
+
   const renderWebResultItem = (item: any, log: LogEntry, idx: number | string) => (
     <div key={idx} className="group">
       <div className="flex items-start gap-1">
@@ -1280,6 +1287,19 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                    {breachLogs.length}
                  </span>
                </TabsTrigger>
+               <TabsTrigger 
+                 value="relatives" 
+                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
+               >
+                 <User className="h-4 w-4 mr-2" />
+                 Relatives
+                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                   {relativesLogs.reduce((acc, log) => {
+                     const results = log.data?.results || [];
+                     return acc + results.reduce((sum: number, r: any) => sum + (r.relatives?.length || 0), 0);
+                   }, 0)}
+                 </span>
+               </TabsTrigger>
              </TabsList>
            </div>
 
@@ -1365,6 +1385,73 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 {breachLogs.length === 0 && (
                   <div className="text-center text-muted-foreground py-8">
                     No breach data available. Include an email address, phone number, or username in your search to check for data breaches.
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="relatives" className="flex-1 mt-0 px-6">
+            <ScrollArea className="h-[550px]">
+              <div className="space-y-6 pb-4 pr-4">
+                {relativesLogs.length > 0 ? (
+                  relativesLogs.map((log) => {
+                    const results = log.data?.results || [];
+                    return results.map((result: any, resultIdx: number) => {
+                      if (!result.relatives || result.relatives.length === 0) return null;
+                      return (
+                        <div key={`${log.id}-${resultIdx}`} className="border border-border rounded-lg p-4 space-y-4">
+                          <div className="flex items-center gap-2 mb-3">
+                            <User className="h-5 w-5 text-primary" />
+                            <h3 className="text-base font-medium">
+                              Relatives & Associates for {result.name}
+                            </h3>
+                            <Badge variant="secondary" className="ml-auto">
+                              {result.relatives.length} found
+                            </Badge>
+                          </div>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                            {result.relatives.map((relative: any, rIdx: number) => {
+                              const relativeName = typeof relative === 'string' ? relative : relative.value;
+                              const isVerified = typeof relative === 'object' && relative.verified;
+                              return (
+                                <div 
+                                  key={rIdx} 
+                                  className="flex items-center gap-3 p-3 bg-muted/50 rounded-lg border border-border/50"
+                                >
+                                  <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                                    <User className="h-5 w-5 text-primary" />
+                                  </div>
+                                  <div className="flex-1 min-w-0">
+                                    <p className="font-medium text-foreground truncate">{relativeName}</p>
+                                    <p className="text-xs text-muted-foreground">
+                                      {isVerified ? 'Verified across sources' : 'Possible relative/associate'}
+                                    </p>
+                                  </div>
+                                  {isVerified && (
+                                    <Tooltip>
+                                      <TooltipTrigger>
+                                        <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                                      </TooltipTrigger>
+                                      <TooltipContent>
+                                        <p className="text-xs">Cross-referenced across multiple sources</p>
+                                      </TooltipContent>
+                                    </Tooltip>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                          <p className="text-xs text-muted-foreground pt-2 border-t">
+                            Source: {result.sources || log.source}
+                          </p>
+                        </div>
+                      );
+                    });
+                  })
+                ) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    {searchQuery ? "No relatives match your search" : "No relatives or associates found. Include a name in your search to discover related persons."}
                   </div>
                 )}
               </div>
