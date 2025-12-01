@@ -125,6 +125,20 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('people_search');
+
+      // Social search for Facebook profiles using Google (searches by name)
+      const locationForSocial = city && state ? `${city}, ${state}` : (searchData.address || '');
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-social-search', {
+          body: { 
+            target: searchData.fullName,
+            searchType: 'name',
+            fullName: searchData.fullName,
+            location: locationForSocial,
+          }
+        })
+      );
+      searchTypes.push('social_name');
     }
 
     // Email enumeration
