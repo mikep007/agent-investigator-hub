@@ -145,6 +145,32 @@ Deno.serve(async (req) => {
         functionBody = { target: searchData.address };
         break;
 
+      case 'court_records':
+        functionName = 'osint-court-records';
+        const courtNameParts = searchData.fullName?.trim().split(/\s+/) || [];
+        const courtFirstName = courtNameParts[0] || '';
+        const courtLastName = courtNameParts.slice(1).join(' ') || courtNameParts[0] || '';
+        let courtState, courtCounty;
+        if (searchData.address) {
+          const stateMatch = searchData.address.match(/,\s*([A-Z]{2})\s*\d{5}/i) || 
+                            searchData.address.match(/,\s*([A-Z]{2})$/i);
+          if (stateMatch) courtState = stateMatch[1].toUpperCase();
+          const countyMatch = searchData.address.match(/([^,]+)\s+County/i);
+          if (countyMatch) courtCounty = countyMatch[1].trim();
+        }
+        functionBody = { firstName: courtFirstName, lastName: courtLastName, state: courtState, county: courtCounty };
+        break;
+
+      case 'idcrawl':
+        functionName = 'osint-idcrawl';
+        functionBody = { fullName: searchData.fullName, location: searchData.address, keywords: searchData.keywords };
+        break;
+
+      case 'social_name':
+        functionName = 'osint-social-search';
+        functionBody = { target: searchData.fullName, type: 'name', fullName: searchData.fullName, location: searchData.address };
+        break;
+
       default:
         throw new Error(`Unknown agent type: ${agentType}`);
     }
