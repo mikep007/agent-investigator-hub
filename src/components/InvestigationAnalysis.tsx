@@ -155,25 +155,27 @@ const InvestigationAnalysis = ({ investigationId, active }: InvestigationAnalysi
           </Card>
 
           {/* Key Findings */}
-          <Card className="p-6">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <TrendingUp className="w-5 h-5 text-primary" />
-              Key Findings
-            </h3>
-            <div className="space-y-3">
-              {analysis.keyFindings.map((finding, index) => (
-                <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
-                  <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
-                    <span className="text-xs font-semibold text-primary">{index + 1}</span>
+          {analysis.keyFindings && analysis.keyFindings.length > 0 && (
+            <Card className="p-6">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <TrendingUp className="w-5 h-5 text-primary" />
+                Key Findings
+              </h3>
+              <div className="space-y-3">
+                {analysis.keyFindings.map((finding, index) => (
+                  <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                    <div className="w-6 h-6 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0 mt-0.5">
+                      <span className="text-xs font-semibold text-primary">{index + 1}</span>
+                    </div>
+                    <p className="text-sm leading-relaxed">{finding}</p>
                   </div>
-                  <p className="text-sm leading-relaxed">{finding}</p>
-                </div>
-              ))}
-            </div>
-          </Card>
+                ))}
+              </div>
+            </Card>
+          )}
 
           {/* Patterns Detected */}
-          {analysis.patterns.length > 0 && (
+          {analysis.patterns && analysis.patterns.length > 0 && (
             <Card className="p-6">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <LinkIcon className="w-5 h-5 text-primary" />
@@ -191,7 +193,7 @@ const InvestigationAnalysis = ({ investigationId, active }: InvestigationAnalysi
           )}
 
           {/* Related Persons */}
-          {analysis.relatedPersons.length > 0 && (
+          {analysis.relatedPersons && analysis.relatedPersons.length > 0 && (
             <Card className="p-6">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
                 <Users className="w-5 h-5 text-primary" />
@@ -211,7 +213,7 @@ const InvestigationAnalysis = ({ investigationId, active }: InvestigationAnalysi
           )}
 
           {/* Anomalies */}
-          {analysis.anomalies.length > 0 && (
+          {analysis.anomalies && analysis.anomalies.length > 0 && (
             <Card className="p-6 border-orange-200 bg-orange-50/50">
               <h3 className="text-lg font-semibold mb-4 flex items-center gap-2 text-orange-800">
                 <AlertTriangle className="w-5 h-5" />
@@ -229,22 +231,24 @@ const InvestigationAnalysis = ({ investigationId, active }: InvestigationAnalysi
           )}
 
           {/* Recommendations */}
-          <Card className="p-6 border-primary/30 bg-primary/5">
-            <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
-              <Search className="w-5 h-5 text-primary" />
-              Recommended Next Steps
-            </h3>
-            <div className="space-y-3">
-              {analysis.recommendations.map((rec, index) => (
-                <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-background border border-border">
-                  <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5">
-                    {index + 1}
+          {analysis.recommendations && analysis.recommendations.length > 0 && (
+            <Card className="p-6 border-primary/30 bg-primary/5">
+              <h3 className="text-lg font-semibold mb-4 flex items-center gap-2">
+                <Search className="w-5 h-5 text-primary" />
+                Recommended Next Steps
+              </h3>
+              <div className="space-y-3">
+                {analysis.recommendations.map((rec, index) => (
+                  <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-background border border-border">
+                    <div className="w-6 h-6 rounded-full bg-primary text-primary-foreground flex items-center justify-center flex-shrink-0 text-xs font-bold mt-0.5">
+                      {index + 1}
+                    </div>
+                    <p className="text-sm leading-relaxed">{rec}</p>
                   </div>
-                  <p className="text-sm leading-relaxed">{rec}</p>
-                </div>
-              ))}
-            </div>
-          </Card>
+                ))}
+              </div>
+            </Card>
+          )}
         </div>
       )}
     </div>
