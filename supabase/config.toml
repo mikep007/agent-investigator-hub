@@ -3,6 +3,9 @@ project_id = "sdzmanldgsiizjjffzoo"
 [functions.osint-comprehensive-investigation]
 verify_jwt = true
 
+[functions.osint-retry-agent]
+verify_jwt = true
+
 [functions.analyze-investigation]
 verify_jwt = true
 
