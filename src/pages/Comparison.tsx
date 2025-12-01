@@ -11,7 +11,6 @@ import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
 import { ComparisonCharts } from "@/components/ComparisonCharts";
 import { generateComparisonPDF } from "@/utils/pdfExport";
-import type { InvestigationStats } from "@/types/investigation";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +24,23 @@ interface Investigation {
   status: string;
   created_at: string;
   updated_at: string;
+}
+
+interface InvestigationStats {
+  id: string;
+  target: string;
+  status: string;
+  created_at: string;
+  totalFindings: number;
+  findingsByType: Record<string, number>;
+  platforms: string[];
+  breaches: number;
+  avgConfidence: number;
+  verificationStatus: {
+    verified: number;
+    needs_review: number;
+    inaccurate: number;
+  };
 }
 
 const Comparison = () => {
