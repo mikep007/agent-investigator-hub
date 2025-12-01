@@ -192,25 +192,110 @@ Deno.serve(async (req) => {
     const manualVerificationUrls = [];
     
     if (firstName && lastName) {
+      const fullNameEncoded = encodeURIComponent(`${firstName} ${lastName}`);
+      const firstNameLower = firstName.toLowerCase();
+      const lastNameLower = lastName.toLowerCase();
+      
+      // Primary people search sites
       manualVerificationUrls.push({
         name: 'TruePeopleSearch',
-        url: `https://www.truepeoplesearch.com/results?name=${encodeURIComponent(`${firstName} ${lastName}`)}${city ? `&citystatezip=${encodeURIComponent(`${city}, ${state || ''}`)}` : ''}`,
-        description: 'Search by name for phone, email, relatives, addresses'
+        url: `https://www.truepeoplesearch.com/results?name=${fullNameEncoded}${city ? `&citystatezip=${encodeURIComponent(`${city}, ${state || ''}`)}` : ''}`,
+        description: 'Search by name for phone, email, relatives, addresses',
+        category: 'people_search'
       });
       manualVerificationUrls.push({
         name: 'FastPeopleSearch',
         url: `https://www.fastpeoplesearch.com/name/${encodeURIComponent(firstName)}-${encodeURIComponent(lastName)}${city ? `_${encodeURIComponent(city)}` : ''}${state ? `-${encodeURIComponent(state)}` : ''}`,
-        description: 'Search by name for contact info and relatives'
+        description: 'Search by name for contact info and relatives',
+        category: 'people_search'
       });
       manualVerificationUrls.push({
         name: 'That\'s Them',
         url: `https://thatsthem.com/name/${encodeURIComponent(firstName)}-${encodeURIComponent(lastName)}${city && state ? `/${encodeURIComponent(city)}-${encodeURIComponent(state)}` : ''}`,
-        description: 'Reverse lookup for phone, email, address'
+        description: 'Reverse lookup for phone, email, address',
+        category: 'people_search'
       });
       manualVerificationUrls.push({
         name: 'Whitepages',
         url: `https://www.whitepages.com/name/${encodeURIComponent(firstName)}-${encodeURIComponent(lastName)}${city && state ? `/${encodeURIComponent(city)}-${encodeURIComponent(state)}` : ''}`,
-        description: 'Phone numbers, addresses, background info'
+        description: 'Phone numbers, addresses, background info',
+        category: 'people_search'
+      });
+      
+      // Relatives & Family search sites
+      manualVerificationUrls.push({
+        name: 'uFind.name',
+        url: `https://ufind.name/search?q=${fullNameEncoded}`,
+        description: 'Find relatives, family members, and associates',
+        category: 'relatives'
+      });
+      manualVerificationUrls.push({
+        name: 'FamilyTreeNow',
+        url: `https://www.familytreenow.com/search/people?first=${encodeURIComponent(firstName)}&last=${encodeURIComponent(lastName)}${state ? `&state=${encodeURIComponent(state)}` : ''}`,
+        description: 'Family tree, relatives, and genealogy records',
+        category: 'relatives'
+      });
+      manualVerificationUrls.push({
+        name: 'Nuwber',
+        url: `https://nuwber.com/search?name=${fullNameEncoded}${city && state ? `&location=${encodeURIComponent(`${city}, ${state}`)}` : ''}`,
+        description: 'People search with relatives and associates',
+        category: 'relatives'
+      });
+      
+      // Background check & intelligence sites
+      manualVerificationUrls.push({
+        name: 'Spokeo',
+        url: `https://www.spokeo.com/${firstNameLower}-${lastNameLower}${state ? `/${state.toLowerCase()}` : ''}`,
+        description: 'Social media, photos, contact info, background',
+        category: 'background'
+      });
+      manualVerificationUrls.push({
+        name: 'Radaris',
+        url: `https://radaris.com/p/${encodeURIComponent(firstName)}/${encodeURIComponent(lastName)}/`,
+        description: 'Public records, court records, property info',
+        category: 'background'
+      });
+      manualVerificationUrls.push({
+        name: 'PeopleFinders',
+        url: `https://www.peoplefinders.com/people/${firstNameLower}-${lastNameLower}${city && state ? `/${city.toLowerCase().replace(/\s+/g, '-')}-${state.toLowerCase()}` : ''}`,
+        description: 'Contact info, criminal records, property records',
+        category: 'background'
+      });
+      manualVerificationUrls.push({
+        name: 'Instant Checkmate',
+        url: `https://www.instantcheckmate.com/people/${firstNameLower}-${lastNameLower}/`,
+        description: 'Background checks, criminal records, addresses',
+        category: 'background'
+      });
+      
+      // Property & Address intelligence
+      manualVerificationUrls.push({
+        name: 'Melissa Lookups',
+        url: `https://lookups.melissa.com/home/personator?full=${fullNameEncoded}`,
+        description: 'Address verification, property records',
+        category: 'property'
+      });
+      
+      // Social media aggregators
+      manualVerificationUrls.push({
+        name: 'Social Searcher',
+        url: `https://www.social-searcher.com/google-social-search/?q=${fullNameEncoded}`,
+        description: 'Search across social media platforms',
+        category: 'social'
+      });
+      manualVerificationUrls.push({
+        name: 'PeekYou',
+        url: `https://www.peekyou.com/${firstNameLower}_${lastNameLower}${state ? `/${state.toLowerCase()}` : ''}`,
+        description: 'Social profiles, web presence, interests',
+        category: 'social'
+      });
+      
+      // Voter & public records
+      manualVerificationUrls.push({
+        name: 'VoterRecords',
+        url: `https://voterrecords.com/voters/${firstNameLower}-${lastNameLower}/${state ? state.toLowerCase() : '1'}`,
+        description: 'Voter registration, political party, address history',
+        category: 'public_records'
       });
     }
     
@@ -219,12 +304,56 @@ Deno.serve(async (req) => {
       manualVerificationUrls.push({
         name: 'TruePeopleSearch (Phone)',
         url: `https://www.truepeoplesearch.com/results?phoneno=${encodeURIComponent(cleanPhone)}`,
-        description: 'Reverse phone lookup'
+        description: 'Reverse phone lookup',
+        category: 'phone'
       });
       manualVerificationUrls.push({
         name: 'FastPeopleSearch (Phone)',
         url: `https://www.fastpeoplesearch.com/phone/${encodeURIComponent(cleanPhone)}`,
-        description: 'Reverse phone lookup'
+        description: 'Reverse phone lookup',
+        category: 'phone'
+      });
+      manualVerificationUrls.push({
+        name: 'Spy Dialer',
+        url: `https://www.spydialer.com/default.aspx?phone=${cleanPhone}`,
+        description: 'Reverse phone with voicemail lookup',
+        category: 'phone'
+      });
+      manualVerificationUrls.push({
+        name: 'NumLookup',
+        url: `https://www.numlookup.com/us/${cleanPhone}`,
+        description: 'Phone carrier and owner lookup',
+        category: 'phone'
+      });
+    }
+    
+    if (email) {
+      manualVerificationUrls.push({
+        name: 'Hunter.io',
+        url: `https://hunter.io/email-verifier/${encodeURIComponent(email)}`,
+        description: 'Email verification and deliverability',
+        category: 'email'
+      });
+      manualVerificationUrls.push({
+        name: 'That\'s Them (Email)',
+        url: `https://thatsthem.com/email/${encodeURIComponent(email)}`,
+        description: 'Reverse email lookup',
+        category: 'email'
+      });
+    }
+    
+    if (address) {
+      manualVerificationUrls.push({
+        name: 'That\'s Them (Address)',
+        url: `https://thatsthem.com/address/${encodeURIComponent(address.replace(/,/g, '').replace(/\s+/g, '-'))}`,
+        description: 'Find residents and property info by address',
+        category: 'address'
+      });
+      manualVerificationUrls.push({
+        name: 'Whitepages (Address)',
+        url: `https://www.whitepages.com/address/${encodeURIComponent(address.replace(/,/g, '').replace(/\s+/g, '-'))}`,
+        description: 'Address lookup - current and past residents',
+        category: 'address'
       });
     }
 
