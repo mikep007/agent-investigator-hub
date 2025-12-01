@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw, Scale } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
@@ -528,6 +528,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   
   // Data breaches
   const breachLogs = filteredLogs.filter(log => log.agent_type?.toLowerCase().startsWith('leakcheck'));
+
+  // Court records
+  const courtLogs = filteredLogs.filter(log => log.agent_type === 'Court_records');
 
   // Relatives - extract from People_search results
   const relativesLogs = filteredLogs.filter(log => {
@@ -1422,6 +1425,16 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                  </span>
                </TabsTrigger>
                <TabsTrigger 
+                 value="court" 
+                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
+               >
+                 <Scale className="h-4 w-4 mr-2" />
+                 Court Records
+                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
+                   {courtLogs.length}
+                 </span>
+               </TabsTrigger>
+               <TabsTrigger 
                  value="relatives" 
                  className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
                >
@@ -1519,6 +1532,184 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 {breachLogs.length === 0 && (
                   <div className="text-center text-muted-foreground py-8">
                     No breach data available. Include an email address, phone number, or username in your search to check for data breaches.
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="court" className="flex-1 mt-0 px-6">
+            <ScrollArea className="h-[550px]">
+              <div className="space-y-6 pb-4 pr-4">
+                {courtLogs.length > 0 ? (
+                  courtLogs.map((log) => {
+                    const data = log.data;
+                    const criminal = data?.criminal || [];
+                    const civil = data?.civil || [];
+                    const traffic = data?.traffic || [];
+                    const family = data?.family || [];
+                    const other = data?.other || [];
+                    const allResults = data?.allResults || [];
+
+                    if (allResults.length === 0) {
+                      return (
+                        <div key={log.id} className="text-center text-muted-foreground py-4">
+                          No court records found for this search.
+                        </div>
+                      );
+                    }
+
+                    const renderCourtResult = (result: any, idx: number) => (
+                      <div key={idx} className="border border-border rounded-lg p-4 hover:border-primary/50 transition-colors">
+                        <div className="flex items-start gap-3">
+                          <Scale className="h-5 w-5 text-primary flex-shrink-0 mt-0.5" />
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-2 mb-1 flex-wrap">
+                              <Badge variant={
+                                result.recordType === 'criminal' ? 'destructive' :
+                                result.recordType === 'civil' ? 'secondary' :
+                                result.recordType === 'traffic' ? 'outline' :
+                                result.recordType === 'family' ? 'default' : 'outline'
+                              }>
+                                {result.recordType?.charAt(0).toUpperCase() + result.recordType?.slice(1) || 'Unknown'}
+                              </Badge>
+                              {result.caseNumber && (
+                                <span className="text-xs text-muted-foreground">
+                                  Case #: {result.caseNumber}
+                                </span>
+                              )}
+                              {result.filedDate && (
+                                <span className="text-xs text-muted-foreground">
+                                  Filed: {result.filedDate}
+                                </span>
+                              )}
+                              {result.confidence && (
+                                <ConfidenceScoreBadge score={result.confidence * 100} />
+                              )}
+                            </div>
+                            <a
+                              href={result.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="block hover:underline"
+                            >
+                              <h3 className="text-lg text-primary mb-1 line-clamp-2">
+                                {result.title}
+                              </h3>
+                            </a>
+                            {result.snippet && (
+                              <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+                                {result.snippet}
+                              </p>
+                            )}
+                            {result.note && (
+                              <p className="text-xs text-yellow-500 italic mb-2">
+                                {result.note}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              <span>Source: {result.source}</span>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-6 px-2"
+                                onClick={() => {
+                                  navigator.clipboard.writeText(result.link);
+                                  toast({ title: "Link copied to clipboard" });
+                                }}
+                              >
+                                <Copy className="h-3 w-3 mr-1" />
+                                Copy
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+
+                    return (
+                      <div key={log.id} className="space-y-6">
+                        {/* Criminal Records */}
+                        {criminal.length > 0 && (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <AlertCircle className="h-5 w-5 text-red-500" />
+                              <h3 className="text-base font-medium text-red-400">
+                                Criminal Records ({criminal.length})
+                              </h3>
+                            </div>
+                            {criminal.map((r: any, i: number) => renderCourtResult(r, i))}
+                          </div>
+                        )}
+
+                        {/* Civil Records */}
+                        {civil.length > 0 && (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <Scale className="h-5 w-5 text-blue-500" />
+                              <h3 className="text-base font-medium text-blue-400">
+                                Civil Records ({civil.length})
+                              </h3>
+                            </div>
+                            {civil.map((r: any, i: number) => renderCourtResult(r, i))}
+                          </div>
+                        )}
+
+                        {/* Traffic Records */}
+                        {traffic.length > 0 && (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <AlertCircle className="h-5 w-5 text-yellow-500" />
+                              <h3 className="text-base font-medium text-yellow-400">
+                                Traffic Records ({traffic.length})
+                              </h3>
+                            </div>
+                            {traffic.map((r: any, i: number) => renderCourtResult(r, i))}
+                          </div>
+                        )}
+
+                        {/* Family Records */}
+                        {family.length > 0 && (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <User className="h-5 w-5 text-purple-500" />
+                              <h3 className="text-base font-medium text-purple-400">
+                                Family Records ({family.length})
+                              </h3>
+                            </div>
+                            {family.map((r: any, i: number) => renderCourtResult(r, i))}
+                          </div>
+                        )}
+
+                        {/* Other Records */}
+                        {other.length > 0 && (
+                          <div className="space-y-3">
+                            <div className="flex items-center gap-2">
+                              <Globe className="h-5 w-5 text-muted-foreground" />
+                              <h3 className="text-base font-medium text-muted-foreground">
+                                Other Court Results ({other.length})
+                              </h3>
+                            </div>
+                            {other.map((r: any, i: number) => renderCourtResult(r, i))}
+                          </div>
+                        )}
+
+                        {/* Sources summary */}
+                        {data?.sources && (
+                          <div className="text-xs text-muted-foreground border-t pt-3">
+                            Search sources: Google ({data.sources.google}), 
+                            Court Aggregators ({data.sources.aggregators}), 
+                            Court Portals ({data.sources.portals})
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    <Scale className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="mb-2">No court records found.</p>
+                    <p className="text-sm">Include a full name in your search to check criminal and civil court records.</p>
                   </div>
                 )}
               </div>
