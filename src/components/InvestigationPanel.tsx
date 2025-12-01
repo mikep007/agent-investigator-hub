@@ -397,15 +397,20 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   const webLogs = filteredLogs.filter(log => 
     log.agent_type === 'Web' || 
     log.agent_type === 'Web_email_exact' ||
+    log.agent_type === 'Web_phone_search' ||
     (log.source && (
       log.source.includes('OSINT-web') || 
-      log.source.includes('web_search') || 
+      log.source.includes('web_search')
+    ))
+  );
+  const socialLogs = filteredLogs.filter(log => log.agent_type === 'Social' || log.agent_type === 'Sherlock' || log.agent_type === 'Holehe');
+  const addressLogs = filteredLogs.filter(log => 
+    log.agent_type === 'Address' ||
+    (log.source && (
       log.source.includes('address_owner') || 
       log.source.includes('address_residents')
     ))
   );
-  const socialLogs = filteredLogs.filter(log => log.agent_type === 'Social' || log.agent_type === 'Sherlock' || log.agent_type === 'Holehe');
-  const addressLogs = filteredLogs.filter(log => log.agent_type === 'Address');
   const contactLogs = filteredLogs.filter(log => 
     log.agent_type === 'Email' || 
     log.agent_type === 'Phone' || 
@@ -1229,8 +1234,8 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
               </div>
             </ScrollArea>
           </TabsContent>
-        </Tabs>
-      </div>
+          </Tabs>
+        </div>
 
       {/* Deep Dive Dialog */}
       <Dialog open={deepDiveDialog?.open || false} onOpenChange={(open) => setDeepDiveDialog(deepDiveDialog ? { ...deepDiveDialog, open } : null)}>

@@ -6,10 +6,11 @@ const corsHeaders = {
 };
 
 interface SearchParams {
-  firstName: string;
-  lastName: string;
+  firstName?: string;
+  lastName?: string;
   city?: string;
   state?: string;
+  phone?: string;
 }
 
 Deno.serve(async (req) => {
@@ -18,8 +19,16 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { firstName, lastName, city, state } = await req.json() as SearchParams;
-    console.log('People search request:', { firstName, lastName, city, state });
+    const { firstName, lastName, city, state, phone } = await req.json() as SearchParams;
+    console.log('People search request:', { firstName, lastName, city, state, phone });
+
+    // Validate that at least firstName+lastName OR phone is provided
+    if ((!firstName || !lastName) && !phone) {
+      return new Response(
+        JSON.stringify({ error: 'Either (firstName and lastName) or phone is required' }),
+        { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
 
     // Get Firecrawl API key
     const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
@@ -27,15 +36,22 @@ Deno.serve(async (req) => {
       throw new Error('FIRECRAWL_API_KEY not configured');
     }
 
-    // Construct TruePeopleSearch URL
-    const searchName = `${firstName}-${lastName}`.toLowerCase().replace(/\s+/g, '-');
-    let searchUrl = `https://www.truepeoplesearch.com/results?name=${encodeURIComponent(firstName + ' ' + lastName)}`;
+    // Build search URLs based on whether we have name or phone
+    let truePeopleSearchUrl, fastPeopleSearchUrl;
     
-    if (city && state) {
-      searchUrl += `&citystatezip=${encodeURIComponent(`${city}, ${state}`)}`;
+    if (phone) {
+      // Phone number search
+      const cleanPhone = phone.replace(/\D/g, '');
+      truePeopleSearchUrl = `https://www.truepeoplesearch.com/results?phoneno=${encodeURIComponent(cleanPhone)}`;
+      fastPeopleSearchUrl = `https://www.fastpeoplesearch.com/phone/${encodeURIComponent(cleanPhone)}`;
+    } else {
+      // Name search
+      truePeopleSearchUrl = `https://www.truepeoplesearch.com/results?name=${encodeURIComponent(`${firstName} ${lastName}`)}${city ? `&citystatezip=${encodeURIComponent(`${city}, ${state || ''}`)}` : ''}`;
+      fastPeopleSearchUrl = `https://www.fastpeoplesearch.com/name/${encodeURIComponent(firstName!)}-${encodeURIComponent(lastName!)}${city ? `_${encodeURIComponent(city)}` : ''}${state ? `-${encodeURIComponent(state)}` : ''}`;
     }
-
-    console.log('Scraping URL:', searchUrl);
+    
+    console.log('TruePeopleSearch URL:', truePeopleSearchUrl);
+    console.log('FastPeopleSearch URL:', fastPeopleSearchUrl);
 
     // Scrape both TruePeopleSearch and FastPeopleSearch in parallel
     const [truePeopleResponse, fastPeopleResponse] = await Promise.allSettled([
@@ -46,7 +62,7 @@ Deno.serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          url: searchUrl,
+          url: truePeopleSearchUrl,
           formats: ['markdown', 'html'],
           onlyMainContent: true,
           waitFor: 3000,
@@ -59,7 +75,7 @@ Deno.serve(async (req) => {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          url: `https://www.fastpeoplesearch.com/name/${encodeURIComponent(firstName + '-' + lastName)}${city && state ? `_${encodeURIComponent(city + '-' + state)}` : ''}`,
+          url: fastPeopleSearchUrl,
           formats: ['markdown', 'html'],
           onlyMainContent: true,
           waitFor: 3000,
@@ -74,7 +90,7 @@ Deno.serve(async (req) => {
       const data = await truePeopleResponse.value.json();
       const markdown = data.data?.markdown || '';
       const html = data.data?.html || '';
-      const truePeopleResults = parseSearchResults(markdown, html, firstName, lastName, 'TruePeopleSearch');
+      const truePeopleResults = parseSearchResults(markdown, html, firstName || 'Unknown', lastName || 'Unknown', 'TruePeopleSearch');
       allResults = allResults.concat(truePeopleResults);
       console.log(`TruePeopleSearch: Found ${truePeopleResults.length} results`);
     } else {
@@ -86,7 +102,7 @@ Deno.serve(async (req) => {
       const data = await fastPeopleResponse.value.json();
       const markdown = data.data?.markdown || '';
       const html = data.data?.html || '';
-      const fastPeopleResults = parseSearchResults(markdown, html, firstName, lastName, 'FastPeopleSearch');
+      const fastPeopleResults = parseSearchResults(markdown, html, firstName || 'Unknown', lastName || 'Unknown', 'FastPeopleSearch');
       allResults = allResults.concat(fastPeopleResults);
       console.log(`FastPeopleSearch: Found ${fastPeopleResults.length} results`);
     } else {
@@ -102,7 +118,7 @@ Deno.serve(async (req) => {
         success: true,
         results,
         source: 'TruePeopleSearch',
-        searchParams: { firstName, lastName, city, state },
+        searchParams: phone ? { phone } : { firstName, lastName, city, state },
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

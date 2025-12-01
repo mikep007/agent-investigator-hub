@@ -219,6 +219,27 @@ Deno.serve(async (req) => {
       );
       searchTypes.push('phone');
 
+      // Run web search for phone number
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-web-search', {
+          body: { 
+            target: `"${searchData.phone}"`,
+            searchData: searchData
+          }
+        })
+      );
+      searchTypes.push('web_phone_search');
+
+      // Run people search for phone number (FastPeopleSearch & TruePeopleSearch)
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-people-search', {
+          body: { 
+            phone: searchData.phone
+          }
+        })
+      );
+      searchTypes.push('people_search_phone');
+
       // Run LeakCheck for phone number breaches
       searchPromises.push(
         supabaseClient.functions.invoke('osint-leakcheck', {

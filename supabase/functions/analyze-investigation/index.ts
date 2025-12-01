@@ -58,6 +58,27 @@ serve(async (req) => {
       throw new Error('Failed to fetch investigation details');
     }
 
+    // Extract original search parameters from the first finding's searchContext
+    let searchedParams = {
+      fullName: false,
+      email: false,
+      phone: false,
+      username: false,
+      address: false,
+      keywords: false
+    };
+    if (findings.length > 0 && findings[0].data?.searchContext) {
+      const ctx = findings[0].data.searchContext;
+      searchedParams = {
+        fullName: !!ctx.fullName,
+        email: !!ctx.hasEmail,
+        phone: !!ctx.hasPhone,
+        username: !!ctx.hasUsername,
+        address: !!ctx.hasAddress,
+        keywords: !!ctx.hasKeywords
+      };
+    }
+
     // Prepare data summary for AI analysis
     const dataSummary = {
       target: investigation.target,
@@ -138,6 +159,8 @@ serve(async (req) => {
 5. Anomalies or red flags
 6. Actionable recommendations for next investigation steps
 
+IMPORTANT: Do NOT recommend searching for data that was already provided as input (e.g., if email/phone/address was already searched, don't suggest searching for it again). Focus recommendations on new angles, related persons, or deeper investigation of discovered data.
+
 Be concise, professional, and focus on investigative value. Return a JSON object with this structure:
 {
   "riskLevel": "low|medium|high|critical",
@@ -152,6 +175,9 @@ Be concise, professional, and focus on investigative value. Return a JSON object
     const userPrompt = `Target: ${dataSummary.target}
 
 Total findings: ${dataSummary.totalFindings}
+
+ALREADY SEARCHED (do NOT recommend searching these again):
+${Object.entries(searchedParams).filter(([_, val]) => val).map(([key]) => `- ${key}`).join('\n') || '- None'}
 
 Findings by type:
 ${Object.entries(dataSummary.findingsByType).map(([type, count]) => `- ${type}: ${count}`).join('\n')}
