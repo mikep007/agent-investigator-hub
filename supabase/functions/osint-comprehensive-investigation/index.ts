@@ -139,6 +139,18 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('social_name');
+
+      // IDCrawl aggregator search - finds Facebook, LinkedIn, TikTok profiles and more
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-idcrawl', {
+          body: { 
+            fullName: searchData.fullName,
+            location: locationForSocial,
+            keywords: searchData.keywords,
+          }
+        })
+      );
+      searchTypes.push('idcrawl');
     }
 
     // Email enumeration

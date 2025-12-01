@@ -128,12 +128,17 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           let message = '';
           let status: "success" | "processing" | "pending" = "success";
 
-          if (finding.agent_type === 'Social') {
+          if (finding.agent_type === 'Social' || finding.agent_type === 'Social_name') {
             const profiles = data.profiles || [];
             const found = profiles.filter((p: any) => p.exists);
             message = found.length > 0 
               ? `Found ${found.length} profile match${found.length > 1 ? 'es' : ''}`
               : 'No profiles found';
+          } else if (finding.agent_type === 'Idcrawl') {
+            const profiles = data.profiles || [];
+            message = profiles.length > 0
+              ? `Found ${profiles.length} social profile${profiles.length > 1 ? 's' : ''} via IDCrawl`
+              : 'No profiles found on IDCrawl';
           } else if (finding.agent_type === 'Web') {
             const items = data.items || [];
             message = items.length > 0
@@ -500,7 +505,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   const accountLogs = filteredLogs.filter(log => 
     log.agent_type === 'Holehe' || 
     log.agent_type === 'Sherlock' ||
-    log.agent_type === 'Social'
+    log.agent_type === 'Social' ||
+    log.agent_type === 'Social_name' ||
+    log.agent_type === 'Idcrawl'
   );
   
   // Address/location data
@@ -852,7 +859,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                             className="block group-hover:underline"
                           >
                             <h3 className="text-xl text-primary line-clamp-1 mb-1">
-                              Profile on {profile.platform}
+                              {profile.name || `Profile on ${profile.platform}`}
                             </h3>
                           </a>
                         </TooltipTrigger>
@@ -860,6 +867,133 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                           <div className="flex items-start gap-2 max-w-xs">
                             <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
                             <span>Click to open in new tab. Some platforms may require manual verification.</span>
+                          </div>
+                        </TooltipContent>
+                      </Tooltip>
+                      {profile.snippet && (
+                        <p className="text-sm text-muted-foreground mb-1">{profile.snippet}</p>
+                      )}
+                      <div className="flex items-center gap-2 mt-1 mb-2">
+                        <p className="text-sm text-muted-foreground truncate flex-1">
+                          {profile.url}
+                        </p>
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          className="h-7 px-2"
+                          onClick={() => {
+                            navigator.clipboard.writeText(profile.url);
+                            toast({ title: "Link copied to clipboard" });
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </div>
+                      <div className="flex gap-2 items-center">
+                        <Button
+                          size="sm"
+                          variant={profile.verificationStatus === 'verified' ? 'default' : 'ghost'}
+                          className="h-7 text-xs"
+                          onClick={() => updatePlatformVerification(log.id, profile.url, 'verified', 'social')}
+                        >
+                          <Check className="h-3 w-3 mr-1" />
+                          Verified
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant={profile.verificationStatus === 'inaccurate' ? 'destructive' : 'ghost'}
+                          className="h-7 text-xs"
+                          onClick={() => updatePlatformVerification(log.id, profile.url, 'inaccurate', 'social')}
+                        >
+                          <X className="h-3 w-3 mr-1" />
+                          Inaccurate
+                        </Button>
+                        {profile.verificationStatus === 'verified' && (
+                          <Badge variant="default" className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50">
+                            Verified
+                          </Badge>
+                        )}
+                        {profile.verificationStatus === 'inaccurate' && (
+                          <Badge variant="destructive" className="bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/50">
+                            Inaccurate
+                          </Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          );
+        }
+
+        // IDCrawl Aggregator Results - Multiple Facebook, LinkedIn, TikTok profiles
+        if (log.agent_type === 'Idcrawl' && log.data?.profiles?.length > 0) {
+          const profiles = log.data.profiles;
+          const images = log.data.images || [];
+          return (
+            <div key={log.id} className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Globe className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-medium">
+                  IDCrawl found {profiles.length} profile{profiles.length > 1 ? 's' : ''} 
+                  {log.data.totalFound > 0 && ` (from ${log.data.totalFound} total matches)`}
+                </h3>
+              </div>
+              
+              {/* Display profile images if available */}
+              {images.length > 0 && (
+                <div className="flex flex-wrap gap-2 mb-4">
+                  {images.slice(0, 6).map((img: string, idx: number) => (
+                    <img 
+                      key={idx} 
+                      src={img} 
+                      alt={`Profile image ${idx + 1}`}
+                      className="w-16 h-16 rounded-lg object-cover border border-border"
+                      onError={(e) => (e.currentTarget.style.display = 'none')}
+                    />
+                  ))}
+                  {images.length > 6 && (
+                    <div className="w-16 h-16 rounded-lg bg-muted flex items-center justify-center text-sm text-muted-foreground">
+                      +{images.length - 6}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {profiles.map((profile: any, idx: number) => (
+                <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
+                  <div className="flex items-start gap-2">
+                    <div className="flex-shrink-0 mt-1">
+                      <PlatformLogo platform={profile.platform} />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className="text-sm text-muted-foreground">{profile.platform}</span>
+                        {profile.snippet?.includes('[Keyword match]') && (
+                          <Badge variant="secondary" className="text-xs">Keyword Match</Badge>
+                        )}
+                        {profile.snippet?.includes('[Location match]') && (
+                          <Badge variant="secondary" className="text-xs">Location Match</Badge>
+                        )}
+                      </div>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <a
+                            href={profile.url}
+                            target="_blank"
+                            rel="noopener noreferrer nofollow"
+                            className="block group-hover:underline"
+                          >
+                            <h3 className="text-xl text-primary line-clamp-1 mb-1">
+                              {profile.name || `Profile on ${profile.platform}`}
+                            </h3>
+                          </a>
+                        </TooltipTrigger>
+                        <TooltipContent>
+                          <div className="flex items-start gap-2 max-w-xs">
+                            <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
+                            <span>Click to open in new tab. Verify this is the correct person.</span>
                           </div>
                         </TooltipContent>
                       </Tooltip>
