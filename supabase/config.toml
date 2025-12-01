@@ -17,3 +17,6 @@ verify_jwt = false
 
 [functions.osint-people-search]
 verify_jwt = true
+
+[functions.osint-idcrawl]
+verify_jwt = true
