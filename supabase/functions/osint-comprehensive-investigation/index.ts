@@ -109,13 +109,18 @@ Deno.serve(async (req) => {
         }
       }
       
+      // Pass ALL available data for cross-validation
       searchPromises.push(
         supabaseClient.functions.invoke('osint-people-search', {
           body: { 
             firstName,
             lastName,
             city,
-            state
+            state,
+            phone: searchData.phone,
+            email: searchData.email,
+            address: searchData.address,
+            validateData: true, // Enable validation against provided data
           }
         })
       );
@@ -231,11 +236,19 @@ Deno.serve(async (req) => {
       searchTypes.push('web_phone_search');
 
       // Run people search for phone number (FastPeopleSearch & TruePeopleSearch)
+      // Include name context if available for better matching
+      const phoneSearchBody: any = { phone: searchData.phone };
+      if (searchData.fullName) {
+        const nameParts = searchData.fullName.trim().split(/\s+/);
+        phoneSearchBody.firstName = nameParts[0];
+        phoneSearchBody.lastName = nameParts.slice(1).join(' ') || nameParts[0];
+        phoneSearchBody.email = searchData.email;
+        phoneSearchBody.address = searchData.address;
+        phoneSearchBody.validateData = true;
+      }
       searchPromises.push(
         supabaseClient.functions.invoke('osint-people-search', {
-          body: { 
-            phone: searchData.phone
-          }
+          body: phoneSearchBody
         })
       );
       searchTypes.push('people_search_phone');
