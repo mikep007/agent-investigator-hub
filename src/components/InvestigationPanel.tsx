@@ -522,76 +522,126 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   // Data breaches
   const breachLogs = filteredLogs.filter(log => log.agent_type?.toLowerCase().startsWith('leakcheck'));
 
+  const renderWebResultItem = (item: any, log: LogEntry, idx: number | string) => (
+    <div key={idx} className="group">
+      <div className="flex items-start gap-1">
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2 text-sm mb-1">
+            <span className="text-muted-foreground truncate">{item.displayLink}</span>
+            {item.confidenceScore !== undefined && (
+              <ConfidenceScoreBadge score={item.confidenceScore} />
+            )}
+            {item.isExactMatch && item.hasLocation && (
+              <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white">
+                <MapPin className="h-3 w-3 mr-1" />
+                Location Match
+              </Badge>
+            )}
+            {item.isExactMatch && !item.hasLocation && (
+              <Badge variant="secondary" className="bg-blue-600/20 text-blue-400">
+                <Check className="h-3 w-3 mr-1" />
+                Name Match
+              </Badge>
+            )}
+          </div>
+          <a
+            href={item.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="block group-hover:underline"
+          >
+            <h3 className="text-xl text-primary mb-1 line-clamp-1">
+              {item.title}
+            </h3>
+          </a>
+          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+            {item.snippet}
+          </p>
+          <div className="flex gap-2 items-center">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant={log.verification_status === 'verified' ? 'default' : 'ghost'}
+                  className="h-7 text-xs"
+                  onClick={() => updateVerificationStatus(log.id, 'verified')}
+                >
+                  <Check className="h-3 w-3 mr-1" />
+                  Verified
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Mark as verified</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  size="sm"
+                  variant={log.verification_status === 'inaccurate' ? 'destructive' : 'ghost'}
+                  className="h-7 text-xs"
+                  onClick={() => updateVerificationStatus(log.id, 'inaccurate')}
+                >
+                  <X className="h-3 w-3 mr-1" />
+                  Inaccurate
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>Mark as inaccurate</TooltipContent>
+            </Tooltip>
+            {getVerificationBadge(log.verification_status)}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+
   const renderWebResults = (filteredLogs: LogEntry[]) => (
     <>
       {filteredLogs.map((log) => {
-        if (log.agent_type === 'Web' && log.data?.items?.length > 0) {
+        if (log.agent_type === 'Web') {
+          const confirmedItems = log.data?.confirmedItems || [];
+          const possibleItems = log.data?.possibleItems || [];
+          const legacyItems = !log.data?.confirmedItems && log.data?.items ? log.data.items : [];
+          
+          const hasConfirmed = confirmedItems.length > 0;
+          const hasPossible = possibleItems.length > 0;
+          const hasLegacy = legacyItems.length > 0;
+          
+          if (!hasConfirmed && !hasPossible && !hasLegacy) return null;
+          
           return (
-            <div key={log.id} className="space-y-4">
-              {log.data.items.slice(0, 10).map((item: any, idx: number) => (
-                <div key={idx} className="group">
-                  <div className="flex items-start gap-1">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2 text-sm mb-1">
-                        <span className="text-muted-foreground truncate">{item.displayLink}</span>
-                        {log.confidence_score !== undefined && (
-                          <ConfidenceScoreBadge score={log.confidence_score} />
-                        )}
-                        {item.confidenceBoost === 0.3 && (
-                          <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white">
-                            <MapPin className="h-3 w-3 mr-1" />
-                            Location Match
-                          </Badge>
-                        )}
-                      </div>
-                      <a
-                        href={item.link}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="block group-hover:underline"
-                      >
-                        <h3 className="text-xl text-primary mb-1 line-clamp-1">
-                          {item.title}
-                        </h3>
-                      </a>
-                      <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
-                        {item.snippet}
-                      </p>
-                      <div className="flex gap-2 items-center">
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant={log.verification_status === 'verified' ? 'default' : 'ghost'}
-                              className="h-7 text-xs"
-                              onClick={() => updateVerificationStatus(log.id, 'verified')}
-                            >
-                              <Check className="h-3 w-3 mr-1" />
-                              Verified
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Mark as verified</TooltipContent>
-                        </Tooltip>
-                        <Tooltip>
-                          <TooltipTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant={log.verification_status === 'inaccurate' ? 'destructive' : 'ghost'}
-                              className="h-7 text-xs"
-                              onClick={() => updateVerificationStatus(log.id, 'inaccurate')}
-                            >
-                              <X className="h-3 w-3 mr-1" />
-                              Inaccurate
-                            </Button>
-                          </TooltipTrigger>
-                          <TooltipContent>Mark as inaccurate</TooltipContent>
-                        </Tooltip>
-                        {getVerificationBadge(log.verification_status)}
-                      </div>
-                    </div>
+            <div key={log.id} className="space-y-6">
+              {/* Confirmed Results */}
+              {hasConfirmed && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <Shield className="h-5 w-5 text-green-500" />
+                    <h3 className="text-base font-medium text-green-400">Confirmed Matches ({confirmedItems.length})</h3>
+                  </div>
+                  <div className="space-y-4">
+                    {confirmedItems.map((item: any, idx: number) => renderWebResultItem(item, log, idx))}
                   </div>
                 </div>
-              ))}
+              )}
+              
+              {/* Possible Results */}
+              {hasPossible && (
+                <div className="space-y-4">
+                  <div className="flex items-center gap-2">
+                    <AlertCircle className="h-5 w-5 text-yellow-500" />
+                    <h3 className="text-base font-medium text-yellow-400">Possible Matches ({possibleItems.length})</h3>
+                    <span className="text-xs text-muted-foreground">— Requires manual verification</span>
+                  </div>
+                  <div className="space-y-4 opacity-80">
+                    {possibleItems.map((item: any, idx: number) => renderWebResultItem(item, log, `possible-${idx}`))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Legacy results (for backward compatibility) */}
+              {hasLegacy && (
+                <div className="space-y-4">
+                  {legacyItems.map((item: any, idx: number) => renderWebResultItem(item, log, idx))}
+                </div>
+              )}
             </div>
           );
         }

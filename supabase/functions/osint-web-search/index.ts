@@ -8,6 +8,50 @@ const corsHeaders = {
 const GOOGLE_API_KEY = Deno.env.get('GOOGLE_API_KEY');
 const GOOGLE_SEARCH_ENGINE_ID = Deno.env.get('GOOGLE_SEARCH_ENGINE_ID');
 
+// Check if full name appears as an exact phrase or adjacent words
+function checkNameMatch(text: string, fullName: string): { exact: boolean; partial: boolean } {
+  const textLower = text.toLowerCase();
+  const nameLower = fullName.toLowerCase().trim();
+  
+  // Check for exact phrase match
+  if (textLower.includes(nameLower)) {
+    return { exact: true, partial: true };
+  }
+  
+  // Check for name parts appearing adjacent (handles "Petrie, Michael" or "Michael Petrie")
+  const nameParts = nameLower.split(/\s+/).filter(p => p.length > 1);
+  if (nameParts.length >= 2) {
+    const firstName = nameParts[0];
+    const lastName = nameParts[nameParts.length - 1];
+    
+    // Check "First Last" order
+    const forwardPattern = new RegExp(`\\b${firstName}\\b[^a-z]{0,10}\\b${lastName}\\b`, 'i');
+    // Check "Last, First" order (common in bibliographies)
+    const reversePattern = new RegExp(`\\b${lastName}\\b[,;]?\\s*\\b${firstName}\\b`, 'i');
+    
+    if (forwardPattern.test(text) || reversePattern.test(text)) {
+      return { exact: true, partial: true };
+    }
+    
+    // Check if BOTH first and last name appear but not adjacent (partial match)
+    const hasFirst = new RegExp(`\\b${firstName}\\b`, 'i').test(text);
+    const hasLast = new RegExp(`\\b${lastName}\\b`, 'i').test(text);
+    
+    if (hasFirst && hasLast) {
+      // But verify they're not part of different names
+      // Look for patterns like "Michael Belgrave" or "Hazel Petrie" which indicate different people
+      const otherNamePattern = new RegExp(`\\b${firstName}\\b[^,;]{1,20}\\b(?!${lastName})\\w+\\b|\\b(?!${firstName})\\w+[^,;]{1,20}\\b${lastName}\\b`, 'i');
+      if (otherNamePattern.test(text)) {
+        // Found evidence of the names belonging to different people
+        return { exact: false, partial: true };
+      }
+      return { exact: false, partial: true };
+    }
+  }
+  
+  return { exact: false, partial: false };
+}
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -56,52 +100,78 @@ Deno.serve(async (req) => {
     const response = await fetch(searchUrl);
     const data = await response.json();
 
-    console.log('Google API response:', data);
+    console.log('Google API response status:', response.status);
 
     if (data.error) {
       throw new Error(`Google API error: ${data.error.message}`);
     }
 
+    const confirmedResults: any[] = [];
+    const possibleResults: any[] = [];
+
+    (data.items || []).slice(0, 10).forEach((item: any) => {
+      const textToCheck = `${item.title} ${item.snippet}`;
+      
+      // Check name match quality
+      const nameMatch = checkNameMatch(textToCheck, searchName);
+      
+      // Check if address/location appears in same result
+      let locationPresent = false;
+      if (searchData?.address) {
+        const addressParts = searchData.address.toLowerCase().split(',').map((p: string) => p.trim());
+        locationPresent = addressParts.some((part: string) => 
+          part.length > 2 && textToCheck.toLowerCase().includes(part)
+        );
+      }
+      
+      // Calculate confidence score
+      let confidenceScore = 0.5; // Base score
+      
+      if (nameMatch.exact) {
+        confidenceScore = 0.75;
+        if (locationPresent) {
+          confidenceScore = 0.90; // High confidence: exact name + location
+        }
+      } else if (nameMatch.partial) {
+        confidenceScore = 0.35; // Low confidence: words present but not adjacent
+        if (locationPresent) {
+          confidenceScore = 0.50;
+        }
+      }
+      
+      const result = {
+        title: item.title || '',
+        link: item.link || '',
+        snippet: item.snippet || '',
+        displayLink: item.displayLink || '',
+        confidenceScore,
+        isExactMatch: nameMatch.exact,
+        hasLocation: locationPresent
+      };
+      
+      // Sort into confirmed vs possible based on confidence
+      if (confidenceScore >= 0.6) {
+        confirmedResults.push(result);
+      } else {
+        possibleResults.push(result);
+      }
+    });
+
+    // Sort by confidence
+    confirmedResults.sort((a, b) => b.confidenceScore - a.confidenceScore);
+    possibleResults.sort((a, b) => b.confidenceScore - a.confidenceScore);
+
     const results = {
       searchInformation: data.searchInformation || {},
-      items: (data.items || []).slice(0, 10).map((item: any) => {
-        // Calculate enhanced confidence score based on co-occurrence
-        let confidenceBoost = 0;
-        const textToCheck = `${item.title} ${item.snippet}`.toLowerCase();
-        
-        // Check if name appears in result
-        const namePresent = target.toLowerCase().split(' ').every((word: string) => 
-          textToCheck.includes(word.toLowerCase())
-        );
-        
-        // Check if address/location appears in same result
-        let locationPresent = false;
-        if (searchData?.address) {
-          const addressParts = searchData.address.toLowerCase().split(',').map((p: string) => p.trim());
-          locationPresent = addressParts.some((part: string) => 
-            part.length > 2 && textToCheck.includes(part)
-          );
-        }
-        
-        // Boost confidence when name + location co-occur
-        if (namePresent && locationPresent) {
-          confidenceBoost = 0.3; // 30% boost for co-occurrence
-        } else if (namePresent) {
-          confidenceBoost = 0.1; // 10% boost for name match only
-        }
-        
-        return {
-          title: item.title || '',
-          link: item.link || '',
-          snippet: item.snippet || '',
-          displayLink: item.displayLink || '',
-          confidenceBoost // Pass boost to be used in comprehensive investigation
-        };
-      }),
-      totalResults: data.searchInformation?.totalResults || '0'
+      confirmedItems: confirmedResults,
+      possibleItems: possibleResults,
+      // Keep legacy items for backward compatibility
+      items: [...confirmedResults, ...possibleResults],
+      totalResults: data.searchInformation?.totalResults || '0',
+      query: googleDorkQuery
     };
 
-    console.log('Web search results found:', results.items.length, 'results');
+    console.log('Web search results: ', confirmedResults.length, 'confirmed,', possibleResults.length, 'possible');
 
     return new Response(JSON.stringify(results), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
