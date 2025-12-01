@@ -100,7 +100,13 @@ Deno.serve(async (req) => {
       const data = await truePeopleResponse.value.json();
       const markdown = data.data?.markdown || '';
       const html = data.data?.html || '';
+      
+      // Log first 2000 chars of scraped content to debug extraction
+      console.log('TruePeopleSearch markdown (first 2000 chars):', markdown.substring(0, 2000));
+      console.log('TruePeopleSearch HTML contains phone patterns:', (html.match(/\d{3}.*?\d{3}.*?\d{4}/g) || []).length);
+      
       const truePeopleResults = parseSearchResults(markdown, html, firstName || 'Unknown', lastName || 'Unknown', 'TruePeopleSearch');
+      console.log(`TruePeopleSearch extracted: phones=${truePeopleResults[0]?.phones?.length || 0}, emails=${truePeopleResults[0]?.emails?.length || 0}, relatives=${truePeopleResults[0]?.relatives?.length || 0}`);
       allResults = allResults.concat(truePeopleResults);
       console.log(`TruePeopleSearch: Found ${truePeopleResults.length} results`);
     } else {
@@ -112,7 +118,12 @@ Deno.serve(async (req) => {
       const data = await fastPeopleResponse.value.json();
       const markdown = data.data?.markdown || '';
       const html = data.data?.html || '';
+      
+      // Log first 2000 chars of scraped content to debug extraction
+      console.log('FastPeopleSearch markdown (first 2000 chars):', markdown.substring(0, 2000));
+      
       const fastPeopleResults = parseSearchResults(markdown, html, firstName || 'Unknown', lastName || 'Unknown', 'FastPeopleSearch');
+      console.log(`FastPeopleSearch extracted: phones=${fastPeopleResults[0]?.phones?.length || 0}, emails=${fastPeopleResults[0]?.emails?.length || 0}, relatives=${fastPeopleResults[0]?.relatives?.length || 0}`);
       allResults = allResults.concat(fastPeopleResults);
       console.log(`FastPeopleSearch: Found ${fastPeopleResults.length} results`);
     } else {
