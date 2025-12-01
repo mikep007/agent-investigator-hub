@@ -188,6 +188,46 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Build manual verification URLs
+    const manualVerificationUrls = [];
+    
+    if (firstName && lastName) {
+      manualVerificationUrls.push({
+        name: 'TruePeopleSearch',
+        url: `https://www.truepeoplesearch.com/results?name=${encodeURIComponent(`${firstName} ${lastName}`)}${city ? `&citystatezip=${encodeURIComponent(`${city}, ${state || ''}`)}` : ''}`,
+        description: 'Search by name for phone, email, relatives, addresses'
+      });
+      manualVerificationUrls.push({
+        name: 'FastPeopleSearch',
+        url: `https://www.fastpeoplesearch.com/name/${encodeURIComponent(firstName)}-${encodeURIComponent(lastName)}${city ? `_${encodeURIComponent(city)}` : ''}${state ? `-${encodeURIComponent(state)}` : ''}`,
+        description: 'Search by name for contact info and relatives'
+      });
+      manualVerificationUrls.push({
+        name: 'That\'s Them',
+        url: `https://thatsthem.com/name/${encodeURIComponent(firstName)}-${encodeURIComponent(lastName)}${city && state ? `/${encodeURIComponent(city)}-${encodeURIComponent(state)}` : ''}`,
+        description: 'Reverse lookup for phone, email, address'
+      });
+      manualVerificationUrls.push({
+        name: 'Whitepages',
+        url: `https://www.whitepages.com/name/${encodeURIComponent(firstName)}-${encodeURIComponent(lastName)}${city && state ? `/${encodeURIComponent(city)}-${encodeURIComponent(state)}` : ''}`,
+        description: 'Phone numbers, addresses, background info'
+      });
+    }
+    
+    if (phone) {
+      const cleanPhone = phone.replace(/\D/g, '');
+      manualVerificationUrls.push({
+        name: 'TruePeopleSearch (Phone)',
+        url: `https://www.truepeoplesearch.com/results?phoneno=${encodeURIComponent(cleanPhone)}`,
+        description: 'Reverse phone lookup'
+      });
+      manualVerificationUrls.push({
+        name: 'FastPeopleSearch (Phone)',
+        url: `https://www.fastpeoplesearch.com/phone/${encodeURIComponent(cleanPhone)}`,
+        description: 'Reverse phone lookup'
+      });
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
@@ -195,6 +235,8 @@ Deno.serve(async (req) => {
         validation: validateData ? validationResults : undefined,
         source: 'TruePeopleSearch',
         searchParams: { firstName, lastName, city, state, phone, email, address },
+        manualVerificationUrls,
+        note: allResults.some(r => r.blocked) ? 'Automated scraping blocked - use manual verification links below' : undefined,
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
