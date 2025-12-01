@@ -321,6 +321,44 @@ Deno.serve(async (req) => {
       searchTypes.push('address_residents_search');
     }
 
+    // Court Records search - criminal and civil records
+    if (searchData.fullName) {
+      const nameParts = searchData.fullName.trim().split(/\s+/);
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(' ') || nameParts[0];
+      
+      // Extract state from address if available
+      let state = 'PA'; // Default to PA
+      if (searchData.address) {
+        const stateMatch = searchData.address.match(/,\s*([A-Z]{2})\s*\d{5}/i) ||
+                          searchData.address.match(/,\s*([A-Z]{2})\s*$/i);
+        if (stateMatch) {
+          state = stateMatch[1].toUpperCase();
+        }
+      }
+      
+      // Extract county from address if available
+      let county;
+      if (searchData.address) {
+        const countyMatch = searchData.address.match(/([A-Za-z]+)\s+County/i);
+        if (countyMatch) {
+          county = countyMatch[1];
+        }
+      }
+      
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-court-records', {
+          body: { 
+            firstName,
+            lastName,
+            state,
+            county,
+          }
+        })
+      );
+      searchTypes.push('court_records');
+    }
+
     console.log(`Running ${searchPromises.length} OSINT searches...`);
     const results = await Promise.allSettled(searchPromises);
 
