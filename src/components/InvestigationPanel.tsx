@@ -1276,6 +1276,50 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                   )}
                 </div>
               ))}
+              
+              {/* Manual Verification Links */}
+              {log.data?.manualVerificationUrls && log.data.manualVerificationUrls.length > 0 && (
+                <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 mt-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Info className="h-4 w-4 text-amber-500" />
+                    <h4 className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                      Manual Verification Required
+                    </h4>
+                  </div>
+                  <p className="text-xs text-muted-foreground mb-3">
+                    {log.data?.note || 'For complete phone, email, address, and relatives data, verify manually on these sites:'}
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    {log.data.manualVerificationUrls.map((link: any, lIdx: number) => (
+                      <a
+                        key={lIdx}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 p-2 rounded border border-border hover:bg-accent/50 transition-colors group"
+                      >
+                        <Globe className="h-4 w-4 text-primary" />
+                        <div className="flex-1 min-w-0">
+                          <div className="text-sm font-medium truncate">{link.name}</div>
+                          <div className="text-xs text-muted-foreground truncate">{link.description}</div>
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            navigator.clipboard.writeText(link.url);
+                            toast({ title: "Link copied", description: "URL copied to clipboard" });
+                          }}
+                        >
+                          <Copy className="h-3 w-3" />
+                        </Button>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         }
