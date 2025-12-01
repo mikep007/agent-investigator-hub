@@ -43,7 +43,11 @@ Deno.serve(async (req) => {
     // Using Google Custom Search API with enhanced query
     const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${GOOGLE_API_KEY}&cx=${GOOGLE_SEARCH_ENGINE_ID}&q=${encodeURIComponent(googleDorkQuery)}`;
     
-    const response = await fetch(searchUrl);
+    const response = await fetch(searchUrl, {
+      headers: {
+        'Referer': 'https://lovableproject.com/'
+      }
+    });
     const data = await response.json();
 
     console.log('Google API response:', data);
