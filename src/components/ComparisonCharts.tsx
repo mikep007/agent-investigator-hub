@@ -1,6 +1,22 @@
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar } from 'recharts';
 import { Card } from '@/components/ui/card';
-import type { InvestigationStats } from '@/types/investigation';
+
+interface InvestigationStats {
+  id: string;
+  target: string;
+  status: string;
+  created_at: string;
+  totalFindings: number;
+  findingsByType: Record<string, number>;
+  platforms: string[];
+  breaches: number;
+  avgConfidence: number;
+  verificationStatus: {
+    verified: number;
+    needs_review: number;
+    inaccurate: number;
+  };
+}
 
 interface ComparisonChartsProps {
   data: InvestigationStats[];
