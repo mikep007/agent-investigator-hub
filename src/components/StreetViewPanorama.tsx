@@ -18,11 +18,13 @@ declare global {
 
 const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewPanoramaProps) => {
   const panoramaRef = useRef<HTMLDivElement>(null);
-  const [isInteractive, setIsInteractive] = useState(false);
+  // Default to interactive 360° view since Static API may not be enabled
+  const [isInteractive, setIsInteractive] = useState(true);
   const [panoramaInstance, setPanoramaInstance] = useState<google.maps.StreetViewPanorama | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
+  const [staticError, setStaticError] = useState(false);
 
   const loadGoogleMapsScript = () => {
     if (window.google && window.google.maps) {
@@ -83,11 +85,12 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
     }
   };
 
+  // Load script immediately since we default to interactive
   useEffect(() => {
-    if (isInteractive && !scriptLoaded) {
+    if (!scriptLoaded) {
       loadGoogleMapsScript();
     }
-  }, [isInteractive]);
+  }, []);
 
   useEffect(() => {
     if (isInteractive && scriptLoaded && !panoramaInstance) {
@@ -102,14 +105,18 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
   if (!isInteractive) {
     return (
       <div className="relative">
-        {staticImageUrl ? (
+        {staticImageUrl && !staticError ? (
           <>
             <img
               src={staticImageUrl}
               alt="Street View of investigated address"
               className="w-full rounded-lg border border-border shadow-md"
               loading="lazy"
-              onError={() => setError(true)}
+              onError={() => {
+                setStaticError(true);
+                // Auto-switch to 360° view on static image error
+                setIsInteractive(true);
+              }}
             />
             <Button
               onClick={toggleView}
@@ -122,13 +129,12 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
             </Button>
           </>
         ) : (
-          <div className="p-4 rounded-lg border border-border bg-muted text-sm text-muted-foreground">
-            Street View not available for this location.
-          </div>
-        )}
-        {error && staticImageUrl && (
-          <div className="mt-3 p-4 rounded-lg border border-border bg-muted text-sm text-muted-foreground">
-            Street View image failed to load.
+          <div className="p-4 rounded-lg border border-border bg-muted text-sm text-muted-foreground flex items-center justify-between">
+            <span>Static image not available.</span>
+            <Button onClick={toggleView} size="sm" variant="outline" className="ml-2">
+              <Maximize2 className="h-4 w-4 mr-2" />
+              Try 360° View
+            </Button>
           </div>
         )}
       </div>
