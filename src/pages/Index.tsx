@@ -218,8 +218,9 @@ const Index = () => {
             </Card>
 
             {/* Investigation Results Panel */}
-            <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
-              <div className="flex items-center justify-between mb-6">
+            <Card className="bg-card/80 backdrop-blur border-border/50 overflow-hidden">
+              <div className="px-6 pt-6">
+                <div className="flex items-center justify-between mb-6">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <Search className="w-5 h-5 text-primary" />
                   Investigation Log
@@ -249,6 +250,7 @@ const Index = () => {
                     <TooltipContent>Generate AI-powered investigation report</TooltipContent>
                   </Tooltip>
                 )}
+              </div>
               </div>
               <InvestigationPanel active={activeInvestigation} investigationId={currentInvestigationId} />
             </Card>
