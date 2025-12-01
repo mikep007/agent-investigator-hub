@@ -93,6 +93,35 @@ Deno.serve(async (req) => {
       searchTypes.push('web');
     }
 
+    // People search for structured data (phones, emails, addresses, relatives)
+    if (searchData.fullName) {
+      const nameParts = searchData.fullName.trim().split(/\s+/);
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(' ') || nameParts[0]; // Handle single names
+      
+      // Extract city/state from address if provided
+      let city, state;
+      if (searchData.address) {
+        const addressMatch = searchData.address.match(/,\s*([^,]+),\s*([A-Z]{2})/i);
+        if (addressMatch) {
+          city = addressMatch[1].trim();
+          state = addressMatch[2].trim().toUpperCase();
+        }
+      }
+      
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-people-search', {
+          body: { 
+            firstName,
+            lastName,
+            city,
+            state
+          }
+        })
+      );
+      searchTypes.push('people_search');
+    }
+
     // Email enumeration
     if (searchData.email) {
       // Run Holehe for platform enumeration

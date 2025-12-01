@@ -117,6 +117,14 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             message = data.foundPlatforms?.length > 0
               ? `Username found on ${data.foundPlatforms.length} platform${data.foundPlatforms.length > 1 ? 's' : ''}`
               : 'No accounts found for this username';
+          } else if (finding.agent_type === 'People_search') {
+            const results = data.results || [];
+            const totalContacts = results.reduce((acc: number, r: any) => 
+              acc + (r.phones?.length || 0) + (r.emails?.length || 0), 0
+            );
+            message = totalContacts > 0
+              ? `Found ${totalContacts} contact detail${totalContacts > 1 ? 's' : ''} from public records`
+              : 'No public records found';
           } else {
             message = finding.source;
           }
@@ -398,7 +406,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   );
   const socialLogs = filteredLogs.filter(log => log.agent_type === 'Social' || log.agent_type === 'Sherlock' || log.agent_type === 'Holehe');
   const addressLogs = filteredLogs.filter(log => log.agent_type === 'Address');
-  const contactLogs = filteredLogs.filter(log => log.agent_type === 'Email' || log.agent_type === 'Phone');
+  const contactLogs = filteredLogs.filter(log => 
+    log.agent_type === 'Email' || 
+    log.agent_type === 'Phone' || 
+    log.agent_type === 'People_search'
+  );
   const breachLogs = filteredLogs.filter(log => log.agent_type?.toLowerCase().startsWith('leakcheck'));
 
   const renderWebResults = (filteredLogs: LogEntry[]) => (
@@ -849,6 +861,109 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             </div>
           );
         }
+
+        // People Search Results
+        if (log.agent_type === 'People_search' && log.data?.results?.length > 0) {
+          return (
+            <div key={log.id} className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <User className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-medium">Public Records Found</h3>
+                {log.confidence_score !== undefined && (
+                  <ConfidenceScoreBadge score={log.confidence_score} />
+                )}
+              </div>
+              {log.data.results.map((result: any, idx: number) => (
+                <div key={idx} className="border border-border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <h4 className="font-medium text-foreground">{result.name}</h4>
+                    <Badge variant="outline" className="text-xs">{result.source}</Badge>
+                  </div>
+
+                  {/* Phone Numbers */}
+                  {result.phones && result.phones.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <Phone className="h-4 w-4" />
+                        Phone Numbers:
+                      </div>
+                      {result.phones.map((phone: string, pIdx: number) => (
+                        <div key={pIdx} className="pl-6 text-sm text-foreground">
+                          {phone}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Email Addresses */}
+                  {result.emails && result.emails.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <Mail className="h-4 w-4" />
+                        Email Addresses:
+                      </div>
+                      {result.emails.map((email: string, eIdx: number) => (
+                        <div key={eIdx} className="pl-6 text-sm text-foreground">
+                          {email}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Physical Addresses */}
+                  {result.addresses && result.addresses.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <MapPin className="h-4 w-4" />
+                        Addresses:
+                      </div>
+                      {result.addresses.map((address: string, aIdx: number) => (
+                        <div key={aIdx} className="pl-6 text-sm text-foreground">
+                          {address}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Ages */}
+                  {result.ages && result.ages.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <User className="h-4 w-4" />
+                        Age:
+                      </div>
+                      <div className="pl-6 text-sm text-foreground">
+                        {result.ages.join(', ')}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Relatives */}
+                  {result.relatives && result.relatives.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <User className="h-4 w-4" />
+                        Possible Relatives:
+                      </div>
+                      {result.relatives.map((relative: string, rIdx: number) => (
+                        <div key={rIdx} className="pl-6 text-sm text-foreground">
+                          {relative}
+                        </div>
+                      ))}
+                    </div>
+                  )}
+
+                  {result.note && (
+                    <div className="text-xs text-muted-foreground italic pt-2 border-t">
+                      {result.note}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          );
+        }
+        
         return null;
       })}
     </>
