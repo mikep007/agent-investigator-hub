@@ -11,6 +11,9 @@ interface SearchParams {
   city?: string;
   state?: string;
   phone?: string;
+  email?: string;
+  address?: string;
+  validateData?: boolean; // If true, check if provided phone/email/address appears in results
 }
 
 Deno.serve(async (req) => {
@@ -19,8 +22,8 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { firstName, lastName, city, state, phone } = await req.json() as SearchParams;
-    console.log('People search request:', { firstName, lastName, city, state, phone });
+    const { firstName, lastName, city, state, phone, email, address, validateData } = await req.json() as SearchParams;
+    console.log('People search request:', { firstName, lastName, city, state, phone, email, address, validateData });
 
     // Validate that at least firstName+lastName OR phone is provided
     if ((!firstName || !lastName) && !phone) {
@@ -29,6 +32,13 @@ Deno.serve(async (req) => {
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
+
+    // Store validation targets for cross-referencing
+    const validationTargets = {
+      phone: phone ? phone.replace(/\D/g, '') : null,
+      email: email ? email.toLowerCase() : null,
+      address: address ? address.toLowerCase() : null,
+    };
 
     // Get Firecrawl API key
     const firecrawlApiKey = Deno.env.get('FIRECRAWL_API_KEY');
@@ -113,12 +123,67 @@ Deno.serve(async (req) => {
     const results = crossReferenceResults(allResults);
     console.log(`Total combined results: ${results.length}`);
 
+    // If validation data was provided, check for matches
+    const validationResults = {
+      phoneFound: false,
+      emailFound: false,
+      addressFound: false,
+      matchScore: 0,
+    };
+
+    if (validateData && results.length > 0) {
+      const result = results[0];
+      
+      // Check if provided phone matches any found phone
+      if (validationTargets.phone) {
+        const foundPhones = result.phones?.map((p: any) => 
+          (typeof p === 'string' ? p : p.value).replace(/\D/g, '')
+        ) || [];
+        validationResults.phoneFound = foundPhones.some((p: string) => 
+          p.includes(validationTargets.phone!) || validationTargets.phone!.includes(p)
+        );
+        if (validationResults.phoneFound) {
+          validationResults.matchScore += 40;
+          console.log(`VALIDATED: Phone ${validationTargets.phone} found in results`);
+        }
+      }
+
+      // Check if provided email matches any found email
+      if (validationTargets.email) {
+        const foundEmails = result.emails?.map((e: any) => 
+          (typeof e === 'string' ? e : e.value).toLowerCase()
+        ) || [];
+        validationResults.emailFound = foundEmails.some((e: string) => 
+          e === validationTargets.email || e.includes(validationTargets.email!)
+        );
+        if (validationResults.emailFound) {
+          validationResults.matchScore += 30;
+          console.log(`VALIDATED: Email ${validationTargets.email} found in results`);
+        }
+      }
+
+      // Check if provided address matches any found address
+      if (validationTargets.address) {
+        const foundAddresses = result.addresses?.map((a: any) => 
+          (typeof a === 'string' ? a : a.value).toLowerCase()
+        ) || [];
+        validationResults.addressFound = foundAddresses.some((a: string) => 
+          a.includes(validationTargets.address!) || validationTargets.address!.includes(a)
+        );
+        if (validationResults.addressFound) {
+          validationResults.matchScore += 30;
+          console.log(`VALIDATED: Address found in results`);
+        }
+      }
+    }
+
     return new Response(
       JSON.stringify({
         success: true,
         results,
+        validation: validateData ? validationResults : undefined,
         source: 'TruePeopleSearch',
-        searchParams: phone ? { phone } : { firstName, lastName, city, state },
+        searchParams: { firstName, lastName, city, state, phone, email, address },
       }),
       { 
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
