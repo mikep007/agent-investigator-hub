@@ -15,93 +15,105 @@ Deno.serve(async (req) => {
     console.log('Address search for:', target);
 
     const GOOGLE_API_KEY = Deno.env.get('GOOGLE_API_KEY');
+    console.log('GOOGLE_API_KEY configured:', !!GOOGLE_API_KEY);
+    
     let data: any[] = [];
-    let geocodingSource = 'nominatim';
+    let geocodingSource = 'none';
 
-    // Try Nominatim (OpenStreetMap) first for free geocoding
-    try {
-      const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(target)}&format=json&addressdetails=1&limit=5`;
-      
-      const nominatimResponse = await fetch(nominatimUrl, {
-        headers: {
-          'User-Agent': 'OSINT-Platform/1.0'
-        }
-      });
-
-      if (nominatimResponse.ok) {
-        data = await nominatimResponse.json();
-        console.log(`Nominatim found ${data.length} results`);
-      }
-    } catch (error) {
-      console.error('Nominatim error:', error);
-    }
-
-    // If Nominatim returns no results and we have Google API key, try Google Geocoding
-    if (data.length === 0 && GOOGLE_API_KEY) {
-      console.log('Nominatim found no results, trying Google Geocoding API...');
+    // Try Google Geocoding API FIRST since it's more reliable for US addresses
+    if (GOOGLE_API_KEY) {
+      console.log('Trying Google Geocoding API first...');
       try {
         const googleGeoUrl = `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(target)}&key=${GOOGLE_API_KEY}`;
+        console.log('Google Geocoding URL:', googleGeoUrl.replace(GOOGLE_API_KEY, 'REDACTED'));
         
         const googleResponse = await fetch(googleGeoUrl);
+        const googleData = await googleResponse.json();
         
-        if (googleResponse.ok) {
-          const googleData = await googleResponse.json();
-          console.log('Google Geocoding API response status:', googleData.status);
-          
-          if (googleData.status === 'OK' && googleData.results.length > 0) {
-            // Convert Google Geocoding format to Nominatim-like format
-            data = googleData.results.map((result: any) => {
-              const location = result.geometry.location;
-              const addressComponents = result.address_components;
-              
-              // Extract address components
-              const getComponent = (type: string) => 
-                addressComponents.find((c: any) => c.types.includes(type))?.long_name || '';
-              
-              return {
-                lat: location.lat.toString(),
-                lon: location.lng.toString(),
-                display_name: result.formatted_address,
-                type: result.types[0],
-                class: 'place',
-                address: {
-                  road: getComponent('route'),
-                  house_number: getComponent('street_number'),
-                  city: getComponent('locality') || getComponent('sublocality'),
-                  state: getComponent('administrative_area_level_1'),
-                  country: getComponent('country'),
-                  postcode: getComponent('postal_code'),
-                  county: getComponent('administrative_area_level_2')
-                },
-                importance: 0.9,
-                boundingbox: [
-                  (location.lat - 0.01).toString(),
-                  (location.lat + 0.01).toString(),
-                  (location.lng - 0.01).toString(),
-                  (location.lng + 0.01).toString()
-                ]
-              };
-            });
-            geocodingSource = 'google';
-            console.log(`Google Geocoding found ${data.length} results`);
-          }
+        console.log('Google Geocoding API response status:', googleData.status);
+        console.log('Google Geocoding API error_message:', googleData.error_message || 'none');
+        
+        if (googleData.status === 'OK' && googleData.results && googleData.results.length > 0) {
+          // Convert Google Geocoding format to our standard format
+          data = googleData.results.map((result: any) => {
+            const location = result.geometry.location;
+            const addressComponents = result.address_components || [];
+            
+            // Extract address components
+            const getComponent = (type: string) => 
+              addressComponents.find((c: any) => c.types.includes(type))?.long_name || '';
+            
+            return {
+              lat: location.lat.toString(),
+              lon: location.lng.toString(),
+              display_name: result.formatted_address,
+              type: result.types?.[0] || 'address',
+              class: 'place',
+              address: {
+                road: getComponent('route'),
+                house_number: getComponent('street_number'),
+                city: getComponent('locality') || getComponent('sublocality') || getComponent('neighborhood'),
+                state: getComponent('administrative_area_level_1'),
+                country: getComponent('country'),
+                postcode: getComponent('postal_code'),
+                county: getComponent('administrative_area_level_2')
+              },
+              importance: 0.9,
+              boundingbox: result.geometry.viewport ? [
+                result.geometry.viewport.southwest.lat.toString(),
+                result.geometry.viewport.northeast.lat.toString(),
+                result.geometry.viewport.southwest.lng.toString(),
+                result.geometry.viewport.northeast.lng.toString()
+              ] : null
+            };
+          });
+          geocodingSource = 'google';
+          console.log(`Google Geocoding found ${data.length} results`);
+        } else {
+          console.log('Google Geocoding returned no valid results, status:', googleData.status);
         }
       } catch (error) {
         console.error('Google Geocoding error:', error);
       }
     }
 
-    // Get the first/best result for Street View
+    // Fallback to Nominatim if Google didn't work
+    if (data.length === 0) {
+      console.log('Trying Nominatim as fallback...');
+      try {
+        const nominatimUrl = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(target)}&format=json&addressdetails=1&limit=5`;
+        
+        const nominatimResponse = await fetch(nominatimUrl, {
+          headers: {
+            'User-Agent': 'OSINT-Platform/1.0'
+          }
+        });
+
+        if (nominatimResponse.ok) {
+          const nominatimData = await nominatimResponse.json();
+          if (nominatimData.length > 0) {
+            data = nominatimData;
+            geocodingSource = 'nominatim';
+            console.log(`Nominatim found ${data.length} results`);
+          } else {
+            console.log('Nominatim returned 0 results');
+          }
+        }
+      } catch (error) {
+        console.error('Nominatim error:', error);
+      }
+    }
+
+    // Generate Street View URL if we have location data
     let streetViewUrl = null;
     if (data.length > 0 && GOOGLE_API_KEY) {
       const location = data[0];
       const lat = parseFloat(location.lat);
       const lon = parseFloat(location.lon);
       
-      // Google Street View Static API URL with enhanced parameters
-      streetViewUrl = `https://maps.googleapis.com/maps/api/streetview?size=800x600&location=${lat},${lon}&fov=80&heading=0&pitch=0&key=${GOOGLE_API_KEY}`;
-      console.log('Generated Street View URL for location:', lat, lon);
-      console.log('Street View URL:', streetViewUrl);
+      // Google Street View Static API URL
+      streetViewUrl = `https://maps.googleapis.com/maps/api/streetview?size=800x600&location=${lat},${lon}&fov=90&heading=0&pitch=0&key=${GOOGLE_API_KEY}`;
+      console.log('Generated Street View URL for coordinates:', lat, lon);
     }
 
     const results = {
@@ -130,7 +142,7 @@ Deno.serve(async (req) => {
       count: data.length
     };
 
-    console.log(`Address search results: ${results.count} locations found (via ${geocodingSource})`);
+    console.log(`Address search complete: ${results.count} locations found via ${geocodingSource}`);
 
     return new Response(JSON.stringify(results), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -138,7 +150,7 @@ Deno.serve(async (req) => {
   } catch (error) {
     console.error('Error in osint-address-search:', error);
     const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    return new Response(JSON.stringify({ error: errorMessage }), {
+    return new Response(JSON.stringify({ error: errorMessage, found: false, locations: [] }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
