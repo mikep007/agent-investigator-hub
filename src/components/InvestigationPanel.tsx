@@ -1277,49 +1277,96 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 </div>
               ))}
               
-              {/* Manual Verification Links */}
-              {log.data?.manualVerificationUrls && log.data.manualVerificationUrls.length > 0 && (
-                <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 mt-4">
-                  <div className="flex items-center gap-2 mb-3">
-                    <Info className="h-4 w-4 text-amber-500" />
-                    <h4 className="text-sm font-medium text-amber-600 dark:text-amber-400">
-                      Manual Verification Required
-                    </h4>
-                  </div>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    {log.data?.note || 'For complete phone, email, address, and relatives data, verify manually on these sites:'}
-                  </p>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                    {log.data.manualVerificationUrls.map((link: any, lIdx: number) => (
-                      <a
-                        key={lIdx}
-                        href={link.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex items-center gap-2 p-2 rounded border border-border hover:bg-accent/50 transition-colors group"
-                      >
-                        <Globe className="h-4 w-4 text-primary" />
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm font-medium truncate">{link.name}</div>
-                          <div className="text-xs text-muted-foreground truncate">{link.description}</div>
+              {/* Manual Verification Links - Organized by Category */}
+              {log.data?.manualVerificationUrls && log.data.manualVerificationUrls.length > 0 && (() => {
+                const links = log.data.manualVerificationUrls;
+                
+                // Categorize links
+                const categories: Record<string, { title: string; icon: string; links: any[] }> = {
+                  people_search: { title: 'People Search', icon: 'user', links: [] },
+                  relatives: { title: 'Relatives & Family', icon: 'users', links: [] },
+                  background: { title: 'Background & Intelligence', icon: 'shield', links: [] },
+                  social: { title: 'Social Media', icon: 'globe', links: [] },
+                  public_records: { title: 'Public Records', icon: 'file', links: [] },
+                  phone: { title: 'Phone Lookup', icon: 'phone', links: [] },
+                  email: { title: 'Email Lookup', icon: 'mail', links: [] },
+                  address: { title: 'Address Lookup', icon: 'map', links: [] },
+                  property: { title: 'Property Records', icon: 'home', links: [] },
+                  other: { title: 'Other Resources', icon: 'link', links: [] },
+                };
+                
+                links.forEach((link: any) => {
+                  const cat = link.category || 'other';
+                  if (categories[cat]) {
+                    categories[cat].links.push(link);
+                  } else {
+                    categories.other.links.push(link);
+                  }
+                });
+                
+                // Filter out empty categories
+                const activeCategories = Object.entries(categories).filter(([_, cat]) => cat.links.length > 0);
+                
+                return (
+                  <div className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4 mt-4">
+                    <div className="flex items-center gap-2 mb-3">
+                      <Info className="h-4 w-4 text-amber-500" />
+                      <h4 className="text-sm font-medium text-amber-600 dark:text-amber-400">
+                        Additional Intelligence Sources
+                      </h4>
+                    </div>
+                    <p className="text-xs text-muted-foreground mb-4">
+                      {log.data?.note || 'Expand your investigation with these verified OSINT sources:'}
+                    </p>
+                    
+                    <div className="space-y-4">
+                      {activeCategories.map(([catKey, category]) => (
+                        <div key={catKey}>
+                          <h5 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 flex items-center gap-2">
+                            {catKey === 'relatives' && <User className="h-3 w-3" />}
+                            {catKey === 'background' && <Shield className="h-3 w-3" />}
+                            {catKey === 'phone' && <Phone className="h-3 w-3" />}
+                            {catKey === 'email' && <Mail className="h-3 w-3" />}
+                            {catKey === 'address' && <MapPin className="h-3 w-3" />}
+                            {catKey === 'social' && <Globe className="h-3 w-3" />}
+                            {(catKey === 'people_search' || catKey === 'public_records' || catKey === 'property' || catKey === 'other') && <User className="h-3 w-3" />}
+                            {category.title}
+                          </h5>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            {category.links.map((link: any, lIdx: number) => (
+                              <a
+                                key={lIdx}
+                                href={link.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="flex items-center gap-2 p-2 rounded border border-border hover:bg-accent/50 transition-colors group"
+                              >
+                                <Globe className="h-4 w-4 text-primary flex-shrink-0" />
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium truncate">{link.name}</div>
+                                  <div className="text-xs text-muted-foreground truncate">{link.description}</div>
+                                </div>
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 flex-shrink-0"
+                                  onClick={(e) => {
+                                    e.preventDefault();
+                                    navigator.clipboard.writeText(link.url);
+                                    toast({ title: "Link copied", description: "URL copied to clipboard" });
+                                  }}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </a>
+                            ))}
+                          </div>
                         </div>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100"
-                          onClick={(e) => {
-                            e.preventDefault();
-                            navigator.clipboard.writeText(link.url);
-                            toast({ title: "Link copied", description: "URL copied to clipboard" });
-                          }}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
-                      </a>
-                    ))}
+                      ))}
+                    </div>
                   </div>
-                </div>
-              )}
+                );
+              })()}
             </div>
           );
         }
