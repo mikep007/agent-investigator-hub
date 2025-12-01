@@ -862,72 +862,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 <h3 className="text-base font-medium">Address Information</h3>
               </div>
               
-              {/* Street View Photo */}
-              {log.data.streetViewUrl && (
-                <div className="mb-4">
-                  <h4 className="text-sm font-medium mb-2">Street View</h4>
-                  <img
-                    src={log.data.streetViewUrl}
-                    alt="Street View"
-                    className="w-full rounded-lg border border-border shadow-md"
-                    onError={(e) => {
-                      e.currentTarget.style.display = 'none';
-                    }}
-                  />
-                </div>
-              )}
-
-              {/* Location Details */}
-              {log.data.locations?.map((location: any, idx: number) => (
-                <div key={idx} className="border border-border rounded-lg p-4 space-y-2">
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <h4 className="font-medium text-foreground mb-1">
-                        {location.displayName}
-                      </h4>
-                      {log.confidence_score !== undefined && (
-                        <ConfidenceScoreBadge score={log.confidence_score} />
-                      )}
-                    </div>
-                  </div>
-
-                  {location.address && (
-                    <div className="text-sm space-y-1 text-muted-foreground">
-                      {location.address.houseNumber && location.address.road && (
-                        <div>{location.address.houseNumber} {location.address.road}</div>
-                      )}
-                      {!location.address.houseNumber && location.address.road && (
-                        <div>{location.address.road}</div>
-                      )}
-                      <div>
-                        {location.address.city && `${location.address.city}, `}
-                        {location.address.state && `${location.address.state} `}
-                        {location.address.postcode}
-                      </div>
-                      {location.address.country && (
-                        <div>{location.address.country}</div>
-                      )}
-                    </div>
-                  )}
-
-                  <div className="flex gap-2 text-xs text-muted-foreground pt-2 border-t border-border/50">
-                    <span>Lat: {location.latitude.toFixed(6)}</span>
-                    <span>•</span>
-                    <span>Lon: {location.longitude.toFixed(6)}</span>
-                  </div>
-
-                  <div className="flex gap-2 pt-2">
-                    <a
-                      href={`https://www.google.com/maps?q=${location.latitude},${location.longitude}`}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-xs text-primary hover:underline"
-                    >
-                      View on Google Maps
-                    </a>
-                  </div>
-                </div>
-              ))}
+              <AddressResults 
+                data={log.data} 
+                confidenceScore={log.confidence_score} 
+              />
             </div>
           );
         }
