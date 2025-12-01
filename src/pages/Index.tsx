@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Brain, Network, LogOut, FileText, Activity, CheckCircle2, Search } from "lucide-react";
+import { Brain, Network, LogOut, FileText, Activity, CheckCircle2, Search, GitCompare } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import InvestigationAnalysis from "@/components/InvestigationAnalysis";
@@ -124,6 +124,15 @@ const Index = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={() => navigate('/comparison')}>
+                      <GitCompare className="w-4 h-4 mr-2" />
+                      Compare
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Compare multiple investigations side-by-side</TooltipContent>
+                </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="outline" size="sm" onClick={() => navigate('/breach-monitoring')}>
