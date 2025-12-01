@@ -22,20 +22,30 @@ Deno.serve(async (req) => {
       throw new Error('Google API credentials not configured');
     }
 
-    // Build Google Dork query with advanced operators
-    let googleDorkQuery = `"${target}"`;
+    // Determine the actual search term - prefer fullName from searchData over combined target
+    const searchName = searchData?.fullName || target;
+    
+    // Build a more effective search query
+    // Use exact phrase for name only, not for keywords
+    let googleDorkQuery = `"${searchName}"`;
     
     // Add location context if available for higher precision
-    if (searchData?.address) {
+    if (searchData?.address && searchData.address !== 'provided') {
       const addressParts = searchData.address.split(',').map((p: string) => p.trim());
-      const city = addressParts[addressParts.length - 2] || '';
-      const state = addressParts[addressParts.length - 1] || '';
+      const city = addressParts.find((p: string) => p.length > 2 && !/^\d+/.test(p) && !/^[A-Z]{2}$/.test(p.trim()));
+      const state = addressParts.find((p: string) => /^[A-Z]{2}$/.test(p.trim()) || p.toLowerCase().includes('pa') || p.toLowerCase().includes('ny'));
       
-      if (city && state) {
-        googleDorkQuery += ` ("${city}" OR "${state}")`;
-      } else if (searchData.address) {
-        googleDorkQuery += ` "${searchData.address}"`;
+      if (city || state) {
+        const locationParts = [city, state].filter(Boolean);
+        if (locationParts.length > 0) {
+          googleDorkQuery += ` ${locationParts.join(' ')}`;
+        }
       }
+    }
+    
+    // Add keywords as separate terms (not in exact phrase)
+    if (searchData?.keywords && typeof searchData.keywords === 'string' && searchData.keywords !== 'social detection') {
+      googleDorkQuery += ` ${searchData.keywords}`;
     }
     
     console.log('Google Dork query:', googleDorkQuery);
