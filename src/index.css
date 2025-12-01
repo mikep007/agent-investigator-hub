@@ -96,3 +96,39 @@ All colors MUST be HSL.
     background-size: 50px 50px;
   }
 }
+
+/* Print styles for comparison reports */
+@media print {
+  body {
+    background: white !important;
+  }
+
+  .print\:hidden {
+    display: none !important;
+  }
+
+  .grid-bg {
+    background-image: none !important;
+  }
+
+  header {
+    display: none !important;
+  }
+
+  .comparison-report {
+    padding: 20px;
+  }
+
+  canvas {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  .comparison-report > * {
+    page-break-inside: avoid;
+  }
+
+  h2, h3 {
+    page-break-after: avoid;
+  }
+}

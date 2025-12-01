@@ -6,9 +6,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Brain, ArrowLeft, TrendingUp, Shield, Users, Globe, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
+import { Brain, ArrowLeft, TrendingUp, Shield, Users, Globe, AlertTriangle, CheckCircle2, Clock, FileDown, Printer } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Separator } from "@/components/ui/separator";
+import { ComparisonCharts } from "@/components/ComparisonCharts";
+import { generateComparisonPDF } from "@/utils/pdfExport";
+import type { InvestigationStats } from "@/types/investigation";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface Investigation {
   id: string;
@@ -16,23 +25,6 @@ interface Investigation {
   status: string;
   created_at: string;
   updated_at: string;
-}
-
-interface InvestigationStats {
-  id: string;
-  target: string;
-  status: string;
-  created_at: string;
-  totalFindings: number;
-  findingsByType: Record<string, number>;
-  platforms: string[];
-  breaches: number;
-  avgConfidence: number;
-  verificationStatus: {
-    verified: number;
-    needs_review: number;
-    inaccurate: number;
-  };
 }
 
 const Comparison = () => {
@@ -91,6 +83,30 @@ const Comparison = () => {
         return prev;
       }
     });
+  };
+
+  const handlePrint = () => {
+    window.print();
+  };
+
+  const handleExportPDF = async (includeCharts: boolean) => {
+    try {
+      toast({
+        title: "Generating PDF",
+        description: "Please wait while we create your report...",
+      });
+      await generateComparisonPDF(comparisonData, includeCharts);
+      toast({
+        title: "PDF Generated",
+        description: "Your comparison report has been downloaded",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Export Failed",
+        description: error.message || "Failed to generate PDF",
+        variant: "destructive",
+      });
+    }
   };
 
   const compareInvestigations = async () => {
@@ -293,14 +309,41 @@ const Comparison = () => {
             )}
           </Card>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-6 comparison-report">
             {/* Actions Bar */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between print:hidden">
               <h2 className="text-2xl font-bold">Comparison Results</h2>
-              <Button variant="outline" onClick={() => setComparisonData([])}>
-                Change Selection
-              </Button>
+              <div className="flex items-center gap-3">
+                <Button variant="outline" onClick={handlePrint}>
+                  <Printer className="w-4 h-4 mr-2" />
+                  Print
+                </Button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button>
+                      <FileDown className="w-4 h-4 mr-2" />
+                      Export PDF
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent>
+                    <DropdownMenuItem onClick={() => handleExportPDF(true)}>
+                      <TrendingUp className="w-4 h-4 mr-2" />
+                      With Charts
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => handleExportPDF(false)}>
+                      <FileDown className="w-4 h-4 mr-2" />
+                      Summary Only
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+                <Button variant="outline" onClick={() => setComparisonData([])}>
+                  Change Selection
+                </Button>
+              </div>
             </div>
+
+            {/* Charts Section */}
+            <ComparisonCharts data={comparisonData} />
 
             {/* Comparison Grid */}
             <div className={`grid grid-cols-1 gap-6 ${comparisonData.length === 2 ? 'md:grid-cols-2' : comparisonData.length === 3 ? 'md:grid-cols-3' : 'md:grid-cols-2 lg:grid-cols-4'}`}>
@@ -425,7 +468,7 @@ const Comparison = () => {
             </div>
 
             {/* Comparison Summary */}
-            <Card className="p-6">
+            <Card className="p-6" id="comparison-summary">
               <h3 className="text-lg font-bold mb-4 flex items-center gap-2">
                 <TrendingUp className="h-5 w-5 text-primary" />
                 Comparison Summary
