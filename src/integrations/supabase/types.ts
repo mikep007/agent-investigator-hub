@@ -62,6 +62,7 @@ export type Database = {
           created_at: string
           id: string
           item_type: string
+          screenshot_url: string | null
           source_investigation_id: string | null
           source_url: string | null
           tags: string[] | null
@@ -74,6 +75,7 @@ export type Database = {
           created_at?: string
           id?: string
           item_type: string
+          screenshot_url?: string | null
           source_investigation_id?: string | null
           source_url?: string | null
           tags?: string[] | null
@@ -86,6 +88,7 @@ export type Database = {
           created_at?: string
           id?: string
           item_type?: string
+          screenshot_url?: string | null
           source_investigation_id?: string | null
           source_url?: string | null
           tags?: string[] | null

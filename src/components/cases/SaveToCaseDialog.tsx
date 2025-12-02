@@ -1,10 +1,11 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import { Switch } from "@/components/ui/switch";
 import {
   Dialog,
   DialogContent,
@@ -19,9 +20,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { FolderPlus, Folder, Plus, BookmarkPlus, Tag } from "lucide-react";
+import { FolderPlus, Folder, Plus, BookmarkPlus, Tag, Camera, Loader2 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { captureScreenshot } from "@/utils/screenshotCapture";
 
 interface CaseItem {
   item_type: 'finding' | 'profile' | 'platform' | 'breach' | 'note';
@@ -36,6 +38,7 @@ interface SaveToCaseDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   item: CaseItem | null;
+  elementRef?: RefObject<HTMLElement>;
 }
 
 interface Case {
@@ -47,7 +50,7 @@ interface Case {
   item_count?: number;
 }
 
-const SaveToCaseDialog = ({ open, onOpenChange, item }: SaveToCaseDialogProps) => {
+const SaveToCaseDialog = ({ open, onOpenChange, item, elementRef }: SaveToCaseDialogProps) => {
   const [cases, setCases] = useState<Case[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedCaseId, setSelectedCaseId] = useState<string>("");
@@ -56,6 +59,8 @@ const SaveToCaseDialog = ({ open, onOpenChange, item }: SaveToCaseDialogProps) =
   const [newCaseDescription, setNewCaseDescription] = useState("");
   const [tags, setTags] = useState<string[]>(item?.tags || []);
   const [tagInput, setTagInput] = useState("");
+  const [captureScreenshotEnabled, setCaptureScreenshotEnabled] = useState(false);
+  const [isCapturingScreenshot, setIsCapturingScreenshot] = useState(false);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -138,9 +143,28 @@ const SaveToCaseDialog = ({ open, onOpenChange, item }: SaveToCaseDialogProps) =
     if (!selectedCaseId || !item) return;
 
     setLoading(true);
+    let screenshotUrl: string | undefined;
+
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) throw new Error('Not authenticated');
+
+      // Capture screenshot if enabled
+      if (captureScreenshotEnabled && elementRef?.current) {
+        setIsCapturingScreenshot(true);
+        const result = await captureScreenshot(
+          elementRef.current,
+          user.id,
+          item.title
+        );
+        setIsCapturingScreenshot(false);
+
+        if (result.success && result.url) {
+          screenshotUrl = result.url;
+        } else if (result.error) {
+          console.warn('Screenshot capture failed:', result.error);
+        }
+      }
 
       const { error } = await supabase
         .from('case_items')
@@ -153,6 +177,7 @@ const SaveToCaseDialog = ({ open, onOpenChange, item }: SaveToCaseDialogProps) =
           source_url: item.source_url,
           source_investigation_id: item.source_investigation_id,
           tags: tags.length > 0 ? tags : null,
+          screenshot_url: screenshotUrl || null,
         });
 
       if (error) throw error;
@@ -161,7 +186,9 @@ const SaveToCaseDialog = ({ open, onOpenChange, item }: SaveToCaseDialogProps) =
 
       toast({
         title: "Saved to Case",
-        description: `Item saved to "${selectedCase?.name}" case file`,
+        description: screenshotUrl 
+          ? `Item saved with screenshot to "${selectedCase?.name}"` 
+          : `Item saved to "${selectedCase?.name}" case file`,
       });
 
       onOpenChange(false);
@@ -173,6 +200,7 @@ const SaveToCaseDialog = ({ open, onOpenChange, item }: SaveToCaseDialogProps) =
       });
     } finally {
       setLoading(false);
+      setIsCapturingScreenshot(false);
     }
   };
 
@@ -305,6 +333,23 @@ const SaveToCaseDialog = ({ open, onOpenChange, item }: SaveToCaseDialogProps) =
             </div>
           )}
 
+          {/* Screenshot Capture */}
+          {elementRef && (
+            <div className="flex items-center justify-between p-3 rounded-lg border bg-muted/30">
+              <div className="flex items-center gap-2">
+                <Camera className="h-4 w-4 text-primary" />
+                <div>
+                  <Label className="text-sm font-medium">Capture Screenshot</Label>
+                  <p className="text-xs text-muted-foreground">Save visual evidence with this item</p>
+                </div>
+              </div>
+              <Switch
+                checked={captureScreenshotEnabled}
+                onCheckedChange={setCaptureScreenshotEnabled}
+              />
+            </div>
+          )}
+
           {/* Tags */}
           <div className="space-y-2">
             <Label>Tags (optional)</Label>
@@ -343,10 +388,19 @@ const SaveToCaseDialog = ({ open, onOpenChange, item }: SaveToCaseDialogProps) =
           </Button>
           <Button
             onClick={handleSaveToCase}
-            disabled={!selectedCaseId || loading}
+            disabled={!selectedCaseId || loading || isCapturingScreenshot}
           >
-            <BookmarkPlus className="h-4 w-4 mr-2" />
-            {loading ? 'Saving...' : 'Save to Case'}
+            {isCapturingScreenshot ? (
+              <>
+                <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                Capturing...
+              </>
+            ) : (
+              <>
+                <BookmarkPlus className="h-4 w-4 mr-2" />
+                {loading ? 'Saving...' : captureScreenshotEnabled ? 'Save with Screenshot' : 'Save to Case'}
+              </>
+            )}
           </Button>
         </div>
       </DialogContent>
