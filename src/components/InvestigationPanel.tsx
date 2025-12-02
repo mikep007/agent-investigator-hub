@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw, Scale } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw, Scale, LayoutDashboard } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
@@ -12,6 +12,7 @@ import PlatformLogo from "./PlatformLogo";
 import InvestigativeAssistant from "./InvestigativeAssistant";
 import AddressResults from "./AddressResults";
 import BreachResults from "./BreachResults";
+import { ResultsDisplay, FindingData } from "./results";
 import {
   Tooltip,
   TooltipContent,
@@ -1453,9 +1454,16 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           </div>
         )}
 
-        <Tabs defaultValue="all" className="flex-1 flex flex-col">
+        <Tabs defaultValue="summary" className="flex-1 flex flex-col">
           <div className="px-6 pb-3 mb-4 border-b">
             <TabsList className="inline-flex h-auto w-full justify-start gap-2 bg-transparent p-0 flex-wrap">
+               <TabsTrigger 
+                 value="summary" 
+                 className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-sm px-4 py-2.5 text-sm font-medium"
+               >
+                 <LayoutDashboard className="h-4 w-4 mr-2" />
+                 Summary
+               </TabsTrigger>
                <TabsTrigger 
                  value="all" 
                  className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
@@ -1540,6 +1548,43 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                </TabsTrigger>
              </TabsList>
            </div>
+
+          {/* Summary View - 4 View Modes */}
+          <TabsContent value="summary" className="flex-1 mt-0 px-6">
+            <div className="h-[600px]">
+              <ResultsDisplay
+                findings={logs.map(log => ({
+                  id: log.id,
+                  agent_type: log.agent_type || '',
+                  source: log.agent,
+                  data: log.data,
+                  confidence_score: log.confidence_score,
+                  verification_status: log.verification_status,
+                  created_at: log.timestamp,
+                }))}
+                targetName={searchData?.fullName}
+                investigationId={investigationId || undefined}
+                onVerifyPlatform={(url, status) => {
+                  // Find the log that contains this platform
+                  const log = logs.find(l => {
+                    if (l.data?.foundPlatforms) {
+                      return l.data.foundPlatforms.some((p: any) => p.url === url);
+                    }
+                    if (l.data?.allResults) {
+                      return l.data.allResults.some((r: any) => `https://${r.domain}` === url);
+                    }
+                    return false;
+                  });
+                  if (log) {
+                    const platformType = log.agent_type === 'Sherlock' ? 'sherlock' : 
+                                        log.agent_type === 'Holehe' ? 'holehe' : 'social';
+                    updatePlatformVerification(log.id, url, status, platformType);
+                  }
+                }}
+                onDeepDive={handleDeepDive}
+              />
+            </div>
+          </TabsContent>
 
           <TabsContent value="all" className="flex-1 mt-0 px-6">
             <ScrollArea className="h-[550px]">
