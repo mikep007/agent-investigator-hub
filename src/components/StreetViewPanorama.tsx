@@ -27,11 +27,30 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
   const [staticError, setStaticError] = useState(false);
 
   const loadGoogleMapsScript = () => {
+    // Check if Google Maps is already loaded (from index.html)
     if (window.google && window.google.maps) {
+      console.log("Google Maps already loaded, using existing instance");
       setScriptLoaded(true);
       return;
     }
 
+    // Check if script is already being loaded
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+    if (existingScript) {
+      console.log("Google Maps script found, waiting for load...");
+      // Wait for the existing script to load
+      const checkLoaded = setInterval(() => {
+        if (window.google && window.google.maps) {
+          clearInterval(checkLoaded);
+          setScriptLoaded(true);
+        }
+      }, 100);
+      // Timeout after 10 seconds
+      setTimeout(() => clearInterval(checkLoaded), 10000);
+      return;
+    }
+
+    // Only load if not already present
     const script = document.createElement("script");
     script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAbmCozXMINQ_7Z6avw9dfjbRXOkhcAOIs`;
     script.async = true;
@@ -45,12 +64,23 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
   };
 
   const initializePanorama = () => {
-    if (!panoramaRef.current || !window.google || !window.google.maps) return;
+    console.log("initializePanorama called", { 
+      hasRef: !!panoramaRef.current, 
+      hasGoogle: !!(window.google && window.google.maps),
+      latitude,
+      longitude
+    });
+    
+    if (!panoramaRef.current || !window.google || !window.google.maps) {
+      console.log("Missing requirements for panorama initialization");
+      return;
+    }
 
     setLoading(true);
     setError(false);
 
     try {
+      console.log("Creating StreetViewPanorama at", latitude, longitude);
       const panorama = new google.maps.StreetViewPanorama(panoramaRef.current, {
         position: { lat: latitude, lng: longitude },
         pov: { heading: 0, pitch: 0 },
@@ -66,15 +96,16 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
       // Check if Street View is available at this location
       const streetViewService = new google.maps.StreetViewService();
       streetViewService.getPanorama(
-        { location: { lat: latitude, lng: longitude }, radius: 50 },
+        { location: { lat: latitude, lng: longitude }, radius: 100 },
         (data, status) => {
+          console.log("StreetViewService response:", status);
           if (status === google.maps.StreetViewStatus.OK) {
             setPanoramaInstance(panorama);
             setLoading(false);
           } else {
+            console.error("Street View not available at this location:", status);
             setError(true);
             setLoading(false);
-            console.error("Street View not available at this location");
           }
         }
       );
