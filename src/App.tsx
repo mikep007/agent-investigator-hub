@@ -8,6 +8,8 @@ import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import BreachMonitoring from "./pages/BreachMonitoring";
 import Comparison from "./pages/Comparison";
+import Cases from "./pages/Cases";
+import CaseDetail from "./pages/CaseDetail";
 
 const queryClient = new QueryClient();
 
@@ -22,6 +24,8 @@ const App = () => (
           <Route path="/auth" element={<Auth />} />
           <Route path="/breach-monitoring" element={<BreachMonitoring />} />
           <Route path="/comparison" element={<Comparison />} />
+          <Route path="/cases" element={<Cases />} />
+          <Route path="/cases/:id" element={<CaseDetail />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>

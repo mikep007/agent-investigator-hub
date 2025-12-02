@@ -55,6 +55,90 @@ export type Database = {
           },
         ]
       }
+      case_items: {
+        Row: {
+          case_id: string
+          content: Json
+          created_at: string
+          id: string
+          item_type: string
+          source_investigation_id: string | null
+          source_url: string | null
+          tags: string[] | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          case_id: string
+          content: Json
+          created_at?: string
+          id?: string
+          item_type: string
+          source_investigation_id?: string | null
+          source_url?: string | null
+          tags?: string[] | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          case_id?: string
+          content?: Json
+          created_at?: string
+          id?: string
+          item_type?: string
+          source_investigation_id?: string | null
+          source_url?: string | null
+          tags?: string[] | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_items_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_items_source_investigation_id_fkey"
+            columns: ["source_investigation_id"]
+            isOneToOne: false
+            referencedRelation: "investigations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cases: {
+        Row: {
+          created_at: string
+          description: string | null
+          id: string
+          name: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          description?: string | null
+          id?: string
+          name?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       findings: {
         Row: {
           agent_type: string

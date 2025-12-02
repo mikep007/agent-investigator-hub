@@ -4,4 +4,5 @@ export { default as PersonProfileCard } from './PersonProfileCard';
 export { default as PlatformGrid } from './PlatformGrid';
 export { default as TimelineView } from './TimelineView';
 export { default as IntelligenceDossier } from './IntelligenceDossier';
+export { default as SaveToCaseButton } from './SaveToCaseButton';
 export * from './types';
