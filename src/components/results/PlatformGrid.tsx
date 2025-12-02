@@ -4,10 +4,11 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   ExternalLink, CheckCircle2, XCircle, HelpCircle, 
-  Download, Image, Video, FileText 
+  Download, Image, Video, FileText, BookmarkPlus
 } from "lucide-react";
 import { FindingData, PlatformAccount } from "./types";
 import PlatformLogo from "../PlatformLogo";
+import SaveToCaseButton from "./SaveToCaseButton";
 import {
   Tooltip,
   TooltipContent,
@@ -161,6 +162,23 @@ const PlatformGrid = ({ findings, onVerify, onDeepDive }: PlatformGridProps) => 
               </Tooltip>
             </TooltipProvider>
           )}
+
+          <SaveToCaseButton
+            item={{
+              item_type: 'platform',
+              title: `${platform.platform} - ${platform.username || 'Profile'}`,
+              content: {
+                platform: platform.platform,
+                url: platform.url,
+                username: platform.username,
+                verified: platform.verificationStatus === 'verified',
+              },
+              source_url: platform.url,
+              tags: [platform.platform.toLowerCase()],
+            }}
+            size="sm"
+            variant="ghost"
+          />
         </div>
 
         {/* Verification buttons */}
