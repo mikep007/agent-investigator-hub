@@ -17,11 +17,13 @@ declare global {
 }
 
 const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewPanoramaProps) => {
+  console.log("StreetViewPanorama rendered with:", { latitude, longitude, staticImageUrl });
+  
   const panoramaRef = useRef<HTMLDivElement>(null);
   // Default to interactive 360° view since Static API may not be enabled
   const [isInteractive, setIsInteractive] = useState(true);
   const [panoramaInstance, setPanoramaInstance] = useState<google.maps.StreetViewPanorama | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState(true); // Start with loading true
   const [error, setError] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [staticError, setStaticError] = useState(false);
@@ -118,16 +120,24 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
 
   // Load script immediately since we default to interactive
   useEffect(() => {
+    // Check if already loaded
+    if (window.google && window.google.maps) {
+      console.log("Google Maps already available on mount");
+      setScriptLoaded(true);
+      return;
+    }
+    
     if (!scriptLoaded) {
       loadGoogleMapsScript();
     }
   }, []);
 
   useEffect(() => {
-    if (isInteractive && scriptLoaded && !panoramaInstance) {
+    console.log("Street View useEffect triggered:", { isInteractive, scriptLoaded, hasPanorama: !!panoramaInstance, latitude, longitude });
+    if (isInteractive && scriptLoaded && latitude && longitude) {
       initializePanorama();
     }
-  }, [isInteractive, scriptLoaded]);
+  }, [isInteractive, scriptLoaded, latitude, longitude]);
 
   const toggleView = () => {
     setIsInteractive(!isInteractive);
