@@ -158,11 +158,19 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
       {error && (
         <div className="absolute inset-0 flex items-center justify-center bg-muted/80 rounded-lg">
           <div className="text-center p-4">
-            <p className="text-sm text-muted-foreground">360° Street View not available at this location</p>
-            <Button onClick={toggleView} size="sm" className="mt-2" variant="outline">
-              <ImageIcon className="h-4 w-4 mr-2" />
-              Show Static View
-            </Button>
+            <p className="text-sm text-muted-foreground mb-2">Street View not available</p>
+            <p className="text-xs text-muted-foreground mb-3">API key may need domain authorization in Google Cloud Console</p>
+            <div className="flex gap-2 justify-center">
+              <a
+                href={`https://www.google.com/maps/@${latitude},${longitude},3a,75y,0h,90t/data=!3m6!1e1!3m4!1s!2e0!7i16384!8i8192`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-2 px-3 py-2 text-sm bg-primary text-primary-foreground rounded-md hover:bg-primary/90"
+              >
+                <Maximize2 className="h-4 w-4" />
+                View on Google Maps
+              </a>
+            </div>
           </div>
         </div>
       )}
