@@ -33,7 +33,7 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
     }
 
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyCdY5QOf413_OYvYZeyDBdTMKwlklXkclU`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAbmCozXMINQ_7Z6avw9dfjbRXOkhcAOIs`;
     script.async = true;
     script.defer = true;
     script.onload = () => setScriptLoaded(true);

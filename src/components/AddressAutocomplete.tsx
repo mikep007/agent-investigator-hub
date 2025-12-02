@@ -131,7 +131,7 @@ const AddressAutocomplete = ({
   };
 
   const getStaticMapUrl = (lat: number, lng: number) => {
-    const apiKey = 'AIzaSyCdY5QOf413_OYvYZeyDBdTMKwlklXkclU';
+    const apiKey = 'AIzaSyAbmCozXMINQ_7Z6avw9dfjbRXOkhcAOIs';
     return `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=200x120&scale=2&maptype=roadmap&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
   };
 
