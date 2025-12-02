@@ -23,3 +23,6 @@ verify_jwt = true
 
 [functions.osint-court-records]
 verify_jwt = true
+
+[functions.sign-maps-url]
+verify_jwt = false
