@@ -1,11 +1,24 @@
-import { MapPin } from "lucide-react";
+import { MapPin, CheckCircle2, AlertCircle, Shield, Database } from "lucide-react";
 import { Badge } from "./ui/badge";
 import StreetViewPanorama from "./StreetViewPanorama";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
 
 interface AddressResultsProps {
   data: any;
   confidenceScore?: number;
 }
+
+const getVerificationStatus = (data: any) => {
+  const sources = [];
+  if (data.geocodingSource?.toLowerCase().includes('google')) sources.push('Google');
+  if (data.geocodingSource?.toLowerCase().includes('nominatim')) sources.push('Nominatim');
+  if (data.geocodingSource?.toLowerCase().includes('osm')) sources.push('OpenStreetMap');
+  
+  // Determine verification level
+  if (sources.length >= 2) return { level: 'verified', sources, color: 'text-green-500', bgColor: 'bg-green-500/10', label: 'Multi-Source Verified' };
+  if (sources.length === 1) return { level: 'single', sources, color: 'text-amber-500', bgColor: 'bg-amber-500/10', label: 'Single Source' };
+  return { level: 'unverified', sources: ['Unknown'], color: 'text-muted-foreground', bgColor: 'bg-muted', label: 'Unverified' };
+};
 
 const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
   if (!data || !data.found) {
@@ -16,8 +29,42 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
     );
   }
 
+  const verification = getVerificationStatus(data);
+
   return (
     <div className="space-y-4">
+      {/* Verification Status Banner */}
+      <div className={`flex items-center justify-between p-3 rounded-lg border ${verification.bgColor} border-border`}>
+        <div className="flex items-center gap-3">
+          {verification.level === 'verified' ? (
+            <CheckCircle2 className={`h-5 w-5 ${verification.color}`} />
+          ) : verification.level === 'single' ? (
+            <Shield className={`h-5 w-5 ${verification.color}`} />
+          ) : (
+            <AlertCircle className={`h-5 w-5 ${verification.color}`} />
+          )}
+          <div>
+            <p className={`text-sm font-medium ${verification.color}`}>{verification.label}</p>
+            <p className="text-xs text-muted-foreground">
+              Sources: {verification.sources.join(', ')}
+            </p>
+          </div>
+        </div>
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger>
+              <Badge variant="outline" className="text-xs">
+                <Database className="h-3 w-3 mr-1" />
+                {verification.sources.length} source{verification.sources.length !== 1 ? 's' : ''}
+              </Badge>
+            </TooltipTrigger>
+            <TooltipContent>
+              <p className="text-xs">Address validated via {verification.sources.join(' and ')}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+
       {/* Interactive Street View */}
       <div className="mb-4">
         <h4 className="text-sm font-medium mb-2 flex items-center gap-2">
@@ -32,13 +79,6 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
           />
         )}
       </div>
-
-      {/* Debug info - show if geocoding source is available */}
-      {data.geocodingSource && (
-        <div className="text-xs text-muted-foreground mb-2">
-          Geocoded via: {data.geocodingSource}
-        </div>
-      )}
 
       {/* Location Details */}
       {data.locations?.map((location: any, idx: number) => (
