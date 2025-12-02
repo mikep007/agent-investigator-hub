@@ -541,11 +541,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   });
 
   const renderWebResultItem = (item: any, log: LogEntry, idx: number | string) => (
-    <div key={idx} className="group">
+    <div key={idx} className="group overflow-hidden">
       <div className="flex items-start gap-1">
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 text-sm mb-1">
-            <span className="text-muted-foreground truncate">{item.displayLink}</span>
+        <div className="flex-1 min-w-0 overflow-hidden">
+          <div className="flex items-center gap-2 text-sm mb-1 flex-wrap">
+            <span className="text-muted-foreground truncate max-w-[200px]">{item.displayLink}</span>
             {item.confidenceScore !== undefined && (
               <ConfidenceScoreBadge score={item.confidenceScore} />
             )}
@@ -566,16 +566,16 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             href={item.link}
             target="_blank"
             rel="noopener noreferrer"
-            className="block group-hover:underline"
+            className="block group-hover:underline overflow-hidden"
           >
-            <h3 className="text-xl text-primary mb-1 line-clamp-1">
+            <h3 className="text-xl text-primary mb-1 line-clamp-1 break-words">
               {item.title}
             </h3>
           </a>
-          <p className="text-sm text-muted-foreground line-clamp-2 mb-2">
+          <p className="text-sm text-muted-foreground line-clamp-2 mb-2 break-words">
             {item.snippet}
           </p>
-          <div className="flex gap-2 items-center">
+          <div className="flex gap-2 items-center flex-wrap">
             <Tooltip>
               <TooltipTrigger asChild>
                 <Button
@@ -614,56 +614,61 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   const renderWebResults = (filteredLogs: LogEntry[]) => (
     <>
       {filteredLogs.map((log) => {
-        if (log.agent_type === 'Web') {
-          const confirmedItems = log.data?.confirmedItems || [];
-          const possibleItems = log.data?.possibleItems || [];
-          const legacyItems = !log.data?.confirmedItems && log.data?.items ? log.data.items : [];
-          
-          const hasConfirmed = confirmedItems.length > 0;
-          const hasPossible = possibleItems.length > 0;
-          const hasLegacy = legacyItems.length > 0;
-          
-          if (!hasConfirmed && !hasPossible && !hasLegacy) return null;
-          
-          return (
-            <div key={log.id} className="space-y-6">
-              {/* Confirmed Results */}
-              {hasConfirmed && (
-                <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-5 w-5 text-green-500" />
-                    <h3 className="text-base font-medium text-green-400">Confirmed Matches ({confirmedItems.length})</h3>
-                  </div>
-                  <div className="space-y-4">
-                    {confirmedItems.map((item: any, idx: number) => renderWebResultItem(item, log, idx))}
-                  </div>
+        // Handle all web-related agent types
+        const isWebType = log.agent_type === 'Web' || 
+                          log.agent_type === 'Web_email_exact' ||
+                          log.agent_type === 'Web_phone_search' ||
+                          (log.source && (log.source.includes('OSINT-web') || log.source.includes('web_search')));
+        
+        if (!isWebType) return null;
+        
+        const confirmedItems = log.data?.confirmedItems || [];
+        const possibleItems = log.data?.possibleItems || [];
+        const legacyItems = !log.data?.confirmedItems && log.data?.items ? log.data.items : [];
+        
+        const hasConfirmed = confirmedItems.length > 0;
+        const hasPossible = possibleItems.length > 0;
+        const hasLegacy = legacyItems.length > 0;
+        
+        if (!hasConfirmed && !hasPossible && !hasLegacy) return null;
+        
+        return (
+          <div key={log.id} className="space-y-6 overflow-hidden">
+            {/* Confirmed Results */}
+            {hasConfirmed && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2">
+                  <Shield className="h-5 w-5 text-green-500" />
+                  <h3 className="text-base font-medium text-green-400">Confirmed Matches ({confirmedItems.length})</h3>
                 </div>
-              )}
-              
-              {/* Possible Results */}
-              {hasPossible && (
                 <div className="space-y-4">
-                  <div className="flex items-center gap-2">
-                    <AlertCircle className="h-5 w-5 text-yellow-500" />
-                    <h3 className="text-base font-medium text-yellow-400">Possible Matches ({possibleItems.length})</h3>
-                    <span className="text-xs text-muted-foreground">— Requires manual verification</span>
-                  </div>
-                  <div className="space-y-4 opacity-80">
-                    {possibleItems.map((item: any, idx: number) => renderWebResultItem(item, log, `possible-${idx}`))}
-                  </div>
+                  {confirmedItems.map((item: any, idx: number) => renderWebResultItem(item, log, idx))}
                 </div>
-              )}
-              
-              {/* Legacy results (for backward compatibility) */}
-              {hasLegacy && (
-                <div className="space-y-4">
-                  {legacyItems.map((item: any, idx: number) => renderWebResultItem(item, log, idx))}
+              </div>
+            )}
+            
+            {/* Possible Results */}
+            {hasPossible && (
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <AlertCircle className="h-5 w-5 text-yellow-500" />
+                  <h3 className="text-base font-medium text-yellow-400">Possible Matches ({possibleItems.length})</h3>
+                  <span className="text-xs text-muted-foreground">— Requires manual verification</span>
                 </div>
-              )}
-            </div>
-          );
-        }
-        return null;
+                <div className="space-y-4 opacity-80">
+                  {possibleItems.map((item: any, idx: number) => renderWebResultItem(item, log, `possible-${idx}`))}
+                </div>
+              </div>
+            )}
+            
+            {/* Legacy results (for backward compatibility) */}
+            {hasLegacy && (
+              <div className="space-y-4">
+                {legacyItems.map((item: any, idx: number) => renderWebResultItem(item, log, idx))}
+              </div>
+            )}
+          </div>
+        );
       })}
     </>
   );
