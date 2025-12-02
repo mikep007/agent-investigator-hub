@@ -43,7 +43,22 @@ Deno.serve(async (req) => {
     if (searchType === 'username') {
       searchType = 'login';
     }
-    console.log(`LeakCheck search for ${searchType}:`, target);
+    
+    // Clean and format target based on type
+    let cleanTarget = target?.trim();
+    if (searchType === 'phone') {
+      // LeakCheck expects phone numbers without formatting - digits only
+      cleanTarget = cleanTarget.replace(/[\s\-\(\)\+\.]/g, '');
+      // If it starts with 1 and is 11 digits, it's likely US format - keep as is
+      // Otherwise ensure proper format
+      console.log(`Phone cleaned: ${target} -> ${cleanTarget}`);
+    }
+    
+    if (!cleanTarget) {
+      throw new Error('No target provided');
+    }
+    
+    console.log(`LeakCheck search for ${searchType}:`, cleanTarget);
 
     const leakCheckApiKey = Deno.env.get('LEAKCHECK_API_KEY');
     if (!leakCheckApiKey) {
@@ -51,7 +66,7 @@ Deno.serve(async (req) => {
     }
 
     // Call LeakCheck.io Pro API v2 for detailed breach data
-    const apiUrl = `https://leakcheck.io/api/v2/query/${encodeURIComponent(target)}?type=${searchType}`;
+    const apiUrl = `https://leakcheck.io/api/v2/query/${encodeURIComponent(cleanTarget)}?type=${searchType}`;
     console.log('Calling LeakCheck Pro API v2:', apiUrl);
     
     const response = await fetch(apiUrl, {
@@ -112,7 +127,7 @@ Deno.serve(async (req) => {
     console.log('Processed breach sources:', sources.length);
 
     return new Response(JSON.stringify({
-      target,
+      target: cleanTarget,
       type: searchType,
       found: data.found || 0,
       fields: Array.from(allFields),
