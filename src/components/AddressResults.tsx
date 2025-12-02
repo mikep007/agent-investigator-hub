@@ -1,4 +1,4 @@
-import { MapPin, CheckCircle2, AlertCircle, Shield, Database } from "lucide-react";
+import { MapPin, CheckCircle2, AlertCircle, Shield, Database, Layers } from "lucide-react";
 import { Badge } from "./ui/badge";
 import StreetViewPanorama from "./StreetViewPanorama";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
@@ -9,16 +9,53 @@ interface AddressResultsProps {
   confidenceScore?: number;
 }
 
-const getVerificationStatus = (data: any) => {
-  const sources = [];
+interface VerificationDisplay {
+  level: string;
+  sources: string[];
+  color: string;
+  bgColor: string;
+  label: string;
+  message: string;
+  confidence: number;
+  distance?: number;
+}
+
+const getVerificationStatus = (data: any): VerificationDisplay => {
+  // Use the new verification object from dual-source geocoding
+  const verification = data.verification;
+  
+  if (verification) {
+    const statusMap: Record<string, { color: string; bgColor: string; label: string }> = {
+      'verified': { color: 'text-green-500', bgColor: 'bg-green-500/10', label: 'Multi-Source Verified' },
+      'partial': { color: 'text-amber-500', bgColor: 'bg-amber-500/10', label: 'Partial Match' },
+      'discrepancy': { color: 'text-orange-500', bgColor: 'bg-orange-500/10', label: 'Sources Disagree' },
+      'single_source': { color: 'text-blue-500', bgColor: 'bg-blue-500/10', label: 'Single Source' },
+      'unverified': { color: 'text-muted-foreground', bgColor: 'bg-muted', label: 'Unverified' },
+      'error': { color: 'text-destructive', bgColor: 'bg-destructive/10', label: 'Error' }
+    };
+    
+    const display = statusMap[verification.status] || statusMap['unverified'];
+    
+    return {
+      level: verification.status,
+      sources: verification.sources || [],
+      color: display.color,
+      bgColor: display.bgColor,
+      label: display.label,
+      message: verification.message || '',
+      confidence: verification.confidence || 0,
+      distance: verification.distance
+    };
+  }
+  
+  // Fallback for legacy data format
+  const sources: string[] = [];
   if (data.geocodingSource?.toLowerCase().includes('google')) sources.push('Google');
   if (data.geocodingSource?.toLowerCase().includes('nominatim')) sources.push('Nominatim');
-  if (data.geocodingSource?.toLowerCase().includes('osm')) sources.push('OpenStreetMap');
   
-  // Determine verification level
-  if (sources.length >= 2) return { level: 'verified', sources, color: 'text-green-500', bgColor: 'bg-green-500/10', label: 'Multi-Source Verified' };
-  if (sources.length === 1) return { level: 'single', sources, color: 'text-amber-500', bgColor: 'bg-amber-500/10', label: 'Single Source' };
-  return { level: 'unverified', sources: ['Unknown'], color: 'text-muted-foreground', bgColor: 'bg-muted', label: 'Unverified' };
+  if (sources.length >= 2) return { level: 'verified', sources, color: 'text-green-500', bgColor: 'bg-green-500/10', label: 'Multi-Source Verified', message: '', confidence: 0.9 };
+  if (sources.length === 1) return { level: 'single', sources, color: 'text-amber-500', bgColor: 'bg-amber-500/10', label: 'Single Source', message: '', confidence: 0.6 };
+  return { level: 'unverified', sources: ['Unknown'], color: 'text-muted-foreground', bgColor: 'bg-muted', label: 'Unverified', message: '', confidence: 0 };
 };
 
 const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
@@ -39,7 +76,11 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
         <div className="flex items-center gap-3">
           {verification.level === 'verified' ? (
             <CheckCircle2 className={`h-5 w-5 ${verification.color}`} />
-          ) : verification.level === 'single' ? (
+          ) : verification.level === 'partial' ? (
+            <Layers className={`h-5 w-5 ${verification.color}`} />
+          ) : verification.level === 'discrepancy' ? (
+            <AlertCircle className={`h-5 w-5 ${verification.color}`} />
+          ) : verification.level === 'single_source' ? (
             <Shield className={`h-5 w-5 ${verification.color}`} />
           ) : (
             <AlertCircle className={`h-5 w-5 ${verification.color}`} />
@@ -47,23 +88,40 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
           <div>
             <p className={`text-sm font-medium ${verification.color}`}>{verification.label}</p>
             <p className="text-xs text-muted-foreground">
-              Sources: {verification.sources.join(', ')}
+              {verification.message || `Sources: ${verification.sources.join(', ')}`}
             </p>
           </div>
         </div>
-        <TooltipProvider>
-          <Tooltip>
-            <TooltipTrigger>
-              <Badge variant="outline" className="text-xs">
-                <Database className="h-3 w-3 mr-1" />
-                {verification.sources.length} source{verification.sources.length !== 1 ? 's' : ''}
-              </Badge>
-            </TooltipTrigger>
-            <TooltipContent>
-              <p className="text-xs">Address validated via {verification.sources.join(' and ')}</p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
+        <div className="flex items-center gap-2">
+          {verification.confidence > 0 && (
+            <Badge variant="secondary" className="text-xs">
+              {Math.round(verification.confidence * 100)}% confidence
+            </Badge>
+          )}
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger>
+                <Badge variant="outline" className="text-xs">
+                  <Database className="h-3 w-3 mr-1" />
+                  {verification.sources.length} source{verification.sources.length !== 1 ? 's' : ''}
+                </Badge>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-xs">
+                <div className="space-y-1">
+                  <p className="text-xs font-medium">Geocoding Sources:</p>
+                  {verification.sources.map((src, i) => (
+                    <p key={i} className="text-xs">• {src}</p>
+                  ))}
+                  {verification.distance !== undefined && (
+                    <p className="text-xs mt-2 text-muted-foreground">
+                      Source variance: {verification.distance.toFixed(0)}m
+                    </p>
+                  )}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
       </div>
 
       {/* Interactive Street View */}
