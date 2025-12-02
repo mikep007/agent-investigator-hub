@@ -141,10 +141,10 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
 
       {/* Location Details */}
       {data.locations?.map((location: any, idx: number) => (
-        <div key={idx} className="border border-border rounded-lg p-4 space-y-2">
-          <div className="flex items-start justify-between">
-            <div className="flex-1">
-              <h4 className="font-medium text-foreground mb-1">
+        <div key={idx} className="border border-border rounded-lg p-4 space-y-2 overflow-hidden">
+          <div className="flex items-start justify-between gap-2">
+            <div className="flex-1 min-w-0">
+              <h4 className="font-medium text-foreground mb-1 break-words">
                 {location.displayName}
               </h4>
               {confidenceScore !== undefined && (
@@ -156,7 +156,7 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
           </div>
 
           {location.address && (
-            <div className="text-sm space-y-1 text-muted-foreground">
+            <div className="text-sm space-y-1 text-muted-foreground break-words">
               {location.address.houseNumber && location.address.road && (
                 <div>{location.address.houseNumber} {location.address.road}</div>
               )}
@@ -174,7 +174,7 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
             </div>
           )}
 
-          <div className="flex gap-2 text-xs text-muted-foreground pt-2 border-t border-border/50">
+          <div className="flex flex-wrap gap-2 text-xs text-muted-foreground pt-2 border-t border-border/50">
             <span>Lat: {location.latitude.toFixed(6)}</span>
             <span>•</span>
             <span>Lon: {location.longitude.toFixed(6)}</span>
