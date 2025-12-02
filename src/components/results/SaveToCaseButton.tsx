@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useRef, RefObject } from "react";
 import { Button } from "@/components/ui/button";
 import { BookmarkPlus } from "lucide-react";
 import SaveToCaseDialog from "../cases/SaveToCaseDialog";
@@ -21,13 +21,15 @@ interface SaveToCaseButtonProps {
   variant?: "default" | "ghost" | "outline";
   size?: "default" | "sm" | "icon";
   showLabel?: boolean;
+  elementRef?: RefObject<HTMLElement>;
 }
 
 const SaveToCaseButton = ({ 
   item, 
   variant = "ghost", 
   size = "sm",
-  showLabel = false 
+  showLabel = false,
+  elementRef
 }: SaveToCaseButtonProps) => {
   const [dialogOpen, setDialogOpen] = useState(false);
 
@@ -50,7 +52,7 @@ const SaveToCaseButton = ({
             </Button>
           </TooltipTrigger>
           <TooltipContent>
-            <p>Save to case file</p>
+            <p>Save to case file (with screenshot option)</p>
           </TooltipContent>
         </Tooltip>
       </TooltipProvider>
@@ -59,6 +61,7 @@ const SaveToCaseButton = ({
         open={dialogOpen}
         onOpenChange={setDialogOpen}
         item={item}
+        elementRef={elementRef}
       />
     </>
   );

@@ -24,7 +24,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { 
   ArrowLeft, Search, MoreVertical, Trash2, Edit, 
   Download, ExternalLink, Tag, Calendar, User, Globe,
-  Shield, FileText, StickyNote, Plus, FolderOpen
+  Shield, FileText, StickyNote, Plus, FolderOpen, Image
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -38,6 +38,7 @@ interface CaseItem {
   source_url: string | null;
   tags: string[] | null;
   created_at: string;
+  screenshot_url?: string | null;
 }
 
 interface Case {
@@ -500,7 +501,29 @@ const CaseDetail = () => {
 
                     <Separator />
 
-                    <ScrollArea className="h-[300px]">
+                    {/* Screenshot Preview */}
+                    {selectedItem.screenshot_url && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                          <Image className="h-3 w-3" />
+                          Screenshot Evidence
+                        </div>
+                        <a 
+                          href={selectedItem.screenshot_url} 
+                          target="_blank" 
+                          rel="noopener noreferrer"
+                          className="block"
+                        >
+                          <img 
+                            src={selectedItem.screenshot_url} 
+                            alt="Screenshot evidence"
+                            className="rounded-md border w-full hover:opacity-90 transition-opacity cursor-pointer"
+                          />
+                        </a>
+                      </div>
+                    )}
+
+                    <ScrollArea className="h-[250px]">
                       <div className="text-sm space-y-2">
                         {selectedItem.item_type === 'note' ? (
                           <p className="whitespace-pre-wrap">{selectedItem.content.text}</p>
