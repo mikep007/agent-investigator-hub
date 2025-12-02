@@ -2,6 +2,7 @@ import { MapPin, CheckCircle2, AlertCircle, Shield, Database } from "lucide-reac
 import { Badge } from "./ui/badge";
 import StreetViewPanorama from "./StreetViewPanorama";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "./ui/tooltip";
+import AddressHistory from "./AddressHistory";
 
 interface AddressResultsProps {
   data: any;
@@ -133,6 +134,19 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
           </div>
         </div>
       ))}
+
+      {/* Address History & Property Records */}
+      <div className="mt-6 pt-4 border-t border-border">
+        <h4 className="text-sm font-medium mb-3 flex items-center gap-2">
+          <Database className="h-4 w-4 text-primary" />
+          Property History & Records
+        </h4>
+        <AddressHistory
+          residents={data.residents}
+          propertyRecords={data.propertyRecords}
+          manualVerificationLinks={data.propertyLinks}
+        />
+      </div>
     </div>
   );
 };

@@ -5,6 +5,27 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Generate manual verification links for property records
+const generatePropertyLinks = (address: string, city?: string, state?: string, county?: string) => {
+  const encodedAddress = encodeURIComponent(address);
+  const encodedCity = city ? encodeURIComponent(city) : '';
+  const encodedState = state ? encodeURIComponent(state) : '';
+  const encodedCounty = county ? encodeURIComponent(county) : '';
+  
+  const links = [
+    { name: 'Zillow', url: `https://www.zillow.com/homes/${encodedAddress}_rb/` },
+    { name: 'Realtor.com', url: `https://www.realtor.com/realestateandhomes-search/${encodedAddress.replace(/%20/g, '-')}` },
+    { name: 'Redfin', url: `https://www.redfin.com/search?search_input=${encodedAddress}` },
+    { name: 'TruePeopleSearch', url: `https://www.truepeoplesearch.com/results?streetaddress=${encodedAddress}&citystatezip=${encodedCity}%20${encodedState}` },
+    { name: 'FastPeopleSearch', url: `https://www.fastpeoplesearch.com/address/${encodedAddress.replace(/%20/g, '-')}_${encodedCity.replace(/%20/g, '-')}-${encodedState}` },
+    { name: 'WhitePages', url: `https://www.whitepages.com/address/${encodedAddress.replace(/%20/g, '-')}/${encodedCity.replace(/%20/g, '-')}-${encodedState}` },
+    { name: 'County Assessor', url: `https://www.google.com/search?q=${encodedCounty || encodedCity}+county+property+assessor+${encodedAddress}` },
+    { name: 'Property Records', url: `https://www.google.com/search?q=${encodedAddress}+property+records+ownership+history` },
+  ];
+  
+  return links;
+};
+
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
@@ -116,6 +137,15 @@ Deno.serve(async (req) => {
       console.log('Generated Street View URL for coordinates:', lat, lon);
     }
 
+    // Extract address components for property links
+    const firstLocation = data[0];
+    const addressCity = firstLocation?.address?.city || firstLocation?.address?.town || '';
+    const addressState = firstLocation?.address?.state || '';
+    const addressCounty = firstLocation?.address?.county || '';
+    
+    // Generate property lookup links
+    const propertyLinks = generatePropertyLinks(target, addressCity, addressState, addressCounty);
+
     const results = {
       query: target,
       found: data.length > 0,
@@ -139,6 +169,7 @@ Deno.serve(async (req) => {
         importance: location.importance,
         boundingBox: location.boundingbox
       })),
+      propertyLinks: propertyLinks,
       count: data.length
     };
 
