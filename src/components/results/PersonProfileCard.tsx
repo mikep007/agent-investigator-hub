@@ -18,8 +18,20 @@ interface PersonProfileCardProps {
 const PersonProfileCard = ({ findings, targetName }: PersonProfileCardProps) => {
   // Extract profile data from findings
   const extractProfileData = (): ProfileData => {
+    // Determine display name - use address if no name provided
+    let displayName = targetName;
+    if (!displayName) {
+      // Try to extract address from findings as subject identifier
+      const addressFinding = findings.find(f => f.agent_type === 'Address');
+      if (addressFinding?.data?.query) {
+        displayName = addressFinding.data.query;
+      } else {
+        displayName = 'Investigation Subject';
+      }
+    }
+    
     const profile: ProfileData = {
-      name: targetName || 'Unknown Subject',
+      name: displayName,
       locations: [],
       emails: [],
       phones: [],
