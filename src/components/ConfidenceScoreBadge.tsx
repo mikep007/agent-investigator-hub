@@ -44,7 +44,7 @@ const ConfidenceScoreBadge = ({ score, size = "md", showLabel = true }: Confiden
     >
       <Icon className={iconSizes[size]} />
       {showLabel && confidence.label}
-      <span className="font-mono font-semibold ml-1">{score}%</span>
+      <span className="font-mono font-semibold ml-1">{Math.round(score)}%</span>
     </Badge>
   );
 };
