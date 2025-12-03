@@ -491,16 +491,19 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   // Categorize logs - simplified for clarity
   const filteredLogs = filterLogsBySearch(logs);
   
-  // Web search results
-  const webLogs = filteredLogs.filter(log => 
-    log.agent_type === 'Web' || 
-    log.agent_type === 'Web_email_exact' ||
-    log.agent_type === 'Web_phone_search' ||
-    (log.source && (
-      log.source.includes('OSINT-web') || 
-      log.source.includes('web_search')
-    ))
-  );
+  // Web search results - catch all web-related agent types
+  const webLogs = filteredLogs.filter(log => {
+    const agentType = log.agent_type?.toLowerCase() || '';
+    const source = log.source?.toLowerCase() || '';
+    
+    return agentType === 'web' || 
+           agentType.startsWith('web_') ||
+           agentType.includes('_search') && !agentType.includes('people') ||
+           source.includes('osint-web') || 
+           source.includes('web_search') ||
+           source.includes('address_owner') ||
+           source.includes('address_residents');
+  });
   
   // Account discovery - platforms where email/username was found registered
   const accountLogs = filteredLogs.filter(log => 
@@ -615,10 +618,15 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
     <>
       {filteredLogs.map((log) => {
         // Handle all web-related agent types
-        const isWebType = log.agent_type === 'Web' || 
-                          log.agent_type === 'Web_email_exact' ||
-                          log.agent_type === 'Web_phone_search' ||
-                          (log.source && (log.source.includes('OSINT-web') || log.source.includes('web_search')));
+        const agentType = log.agent_type?.toLowerCase() || '';
+        const source = log.source?.toLowerCase() || '';
+        const isWebType = agentType === 'web' || 
+                          agentType.startsWith('web_') ||
+                          (agentType.includes('_search') && !agentType.includes('people')) ||
+                          source.includes('osint-web') || 
+                          source.includes('web_search') ||
+                          source.includes('address_owner') ||
+                          source.includes('address_residents');
         
         if (!isWebType) return null;
         
