@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw, Scale, LayoutDashboard } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw, Scale, LayoutDashboard, Camera, Link2, Eye, ExternalLink, Download, Video } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
@@ -529,9 +529,14 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   const accountLogs = filteredLogs.filter(log => 
     log.agent_type === 'Holehe' || 
     log.agent_type === 'Sherlock' ||
+    log.agent_type === 'Sherlock_from_email' ||
     log.agent_type === 'Social' ||
     log.agent_type === 'Social_name' ||
-    log.agent_type === 'Idcrawl'
+    log.agent_type === 'Idcrawl' ||
+    log.agent_type === 'Toutatis' ||
+    log.agent_type === 'Toutatis_from_email' ||
+    log.agent_type === 'Instaloader' ||
+    log.agent_type === 'Instaloader_from_email'
   );
   
   // Address/location data
@@ -1084,6 +1089,280 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                   </div>
                 </div>
               ))}
+            </div>
+          );
+        }
+
+        // Toutatis Instagram OSINT Results
+        if ((log.agent_type === 'Toutatis' || log.agent_type === 'Toutatis_from_email') && log.data) {
+          const extractedData = log.data.extractedData || {};
+          const dataPoints = log.data.dataPoints || [];
+          const manualLinks = log.data.manualVerificationLinks || [];
+          
+          return (
+            <div key={log.id} className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Camera className="h-5 w-5 text-pink-500" />
+                <h3 className="text-base font-medium">Instagram Intelligence (Toutatis)</h3>
+              </div>
+              
+              {/* Profile Data */}
+              {extractedData.success && (
+                <div className="border border-border rounded-lg p-4 space-y-3">
+                  <div className="flex items-start gap-4">
+                    {extractedData.profilePicUrl && (
+                      <img 
+                        src={extractedData.profilePicUrl} 
+                        alt="Profile" 
+                        className="w-20 h-20 rounded-full object-cover border-2 border-pink-500/50"
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      {extractedData.fullName && (
+                        <h4 className="text-lg font-semibold">{extractedData.fullName}</h4>
+                      )}
+                      <p className="text-sm text-muted-foreground">@{extractedData.username || log.data.username}</p>
+                      {extractedData.isVerified && (
+                        <Badge className="bg-blue-500/20 text-blue-600 mt-1">Verified Account</Badge>
+                      )}
+                    </div>
+                  </div>
+                  
+                  {extractedData.biography && (
+                    <p className="text-sm text-foreground/80 italic">"{extractedData.biography}"</p>
+                  )}
+                  
+                  {/* Extracted Contact Info */}
+                  <div className="grid grid-cols-2 gap-3 pt-2 border-t">
+                    {(extractedData.email || extractedData.publicEmail) && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Mail className="h-4 w-4 text-green-500" />
+                        <span>{extractedData.email || extractedData.publicEmail}</span>
+                      </div>
+                    )}
+                    {(extractedData.phoneNumber || extractedData.contactPhoneNumber) && (
+                      <div className="flex items-center gap-2 text-sm">
+                        <Phone className="h-4 w-4 text-green-500" />
+                        <span>{extractedData.phoneNumber || extractedData.contactPhoneNumber}</span>
+                      </div>
+                    )}
+                    {extractedData.externalUrl && (
+                      <div className="flex items-center gap-2 text-sm col-span-2">
+                        <Link2 className="h-4 w-4 text-blue-500" />
+                        <a href={extractedData.externalUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">
+                          {extractedData.externalUrl}
+                        </a>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Stats */}
+                  {(extractedData.followersCount || extractedData.postsCount) && (
+                    <div className="flex gap-4 pt-2 border-t text-sm text-muted-foreground">
+                      {extractedData.followersCount && <span>{extractedData.followersCount.toLocaleString()} followers</span>}
+                      {extractedData.followingCount && <span>{extractedData.followingCount.toLocaleString()} following</span>}
+                      {extractedData.postsCount && <span>{extractedData.postsCount.toLocaleString()} posts</span>}
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Data Points Summary */}
+              {dataPoints.length > 0 && (
+                <div className="flex flex-wrap gap-2">
+                  {dataPoints.map((point: string, idx: number) => (
+                    <Badge key={idx} variant="secondary" className="text-xs">
+                      <CheckCircle2 className="h-3 w-3 mr-1 text-green-500" />
+                      {point}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              
+              {/* Anonymous Instagram Viewers */}
+              {manualLinks.length > 0 && (
+                <div className="border border-pink-500/30 bg-pink-500/5 rounded-lg p-3">
+                  <h5 className="text-sm font-medium text-pink-600 dark:text-pink-400 mb-2 flex items-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    Anonymous Instagram Viewers
+                  </h5>
+                  <p className="text-xs text-muted-foreground mb-3">View profile anonymously without logging in:</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {manualLinks.map((link: any, idx: number) => (
+                      <a
+                        key={idx}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 p-2 rounded border border-border hover:bg-accent/50 transition-colors text-sm"
+                      >
+                        <Globe className="h-4 w-4 text-pink-500 flex-shrink-0" />
+                        <span className="truncate">{link.name}</span>
+                        <ExternalLink className="h-3 w-3 ml-auto flex-shrink-0 opacity-50" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        }
+
+        // Instaloader Profile Download Results
+        if ((log.agent_type === 'Instaloader' || log.agent_type === 'Instaloader_from_email') && log.data) {
+          const profileData = log.data.profileData || {};
+          const statistics = log.data.statistics || {};
+          const manualLinks = log.data.manualVerificationLinks || [];
+          
+          return (
+            <div key={log.id} className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Download className="h-5 w-5 text-purple-500" />
+                <h3 className="text-base font-medium">Instagram Profile Data (Instaloader)</h3>
+              </div>
+              
+              {/* Profile Info */}
+              {profileData.success && (
+                <div className="border border-border rounded-lg p-4 space-y-3">
+                  <div className="flex items-start gap-4">
+                    {profileData.profilePicUrl && (
+                      <img 
+                        src={profileData.profilePicUrl} 
+                        alt="Profile" 
+                        className="w-20 h-20 rounded-full object-cover border-2 border-purple-500/50"
+                        onError={(e) => (e.currentTarget.style.display = 'none')}
+                      />
+                    )}
+                    <div className="flex-1 min-w-0">
+                      {profileData.fullName && (
+                        <h4 className="text-lg font-semibold">{profileData.fullName}</h4>
+                      )}
+                      <p className="text-sm text-muted-foreground">@{profileData.username || log.data.username}</p>
+                      <div className="flex gap-2 mt-1">
+                        {profileData.isVerified && (
+                          <Badge className="bg-blue-500/20 text-blue-600">Verified</Badge>
+                        )}
+                        {profileData.isPrivate && (
+                          <Badge variant="secondary">Private</Badge>
+                        )}
+                        {profileData.isBusiness && (
+                          <Badge className="bg-amber-500/20 text-amber-600">Business</Badge>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {profileData.biography && (
+                    <p className="text-sm text-foreground/80 italic">"{profileData.biography}"</p>
+                  )}
+                  
+                  {profileData.externalUrl && (
+                    <div className="flex items-center gap-2 text-sm">
+                      <Link2 className="h-4 w-4 text-blue-500" />
+                      <a href={profileData.externalUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline truncate">
+                        {profileData.externalUrl}
+                      </a>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* Statistics */}
+              {(statistics.postsDownloaded > 0 || statistics.geotagsFound > 0) && (
+                <div className="flex flex-wrap gap-3 text-sm">
+                  {statistics.postsDownloaded > 0 && (
+                    <Badge variant="outline">
+                      <Camera className="h-3 w-3 mr-1" />
+                      {statistics.postsDownloaded} posts analyzed
+                    </Badge>
+                  )}
+                  {statistics.geotagsFound > 0 && (
+                    <Badge variant="outline" className="text-green-600">
+                      <MapPin className="h-3 w-3 mr-1" />
+                      {statistics.geotagsFound} locations found
+                    </Badge>
+                  )}
+                </div>
+              )}
+              
+              {/* Geotags */}
+              {profileData.geotags && profileData.geotags.length > 0 && (
+                <div className="border border-border rounded-lg p-3">
+                  <h5 className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <MapPin className="h-4 w-4 text-green-500" />
+                    Tagged Locations
+                  </h5>
+                  <div className="flex flex-wrap gap-2">
+                    {profileData.geotags.map((geo: any, idx: number) => (
+                      <Badge key={idx} variant="secondary" className="text-xs">
+                        {geo.name} ({geo.postCount} post{geo.postCount > 1 ? 's' : ''})
+                      </Badge>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Recent Posts */}
+              {profileData.recentPosts && profileData.recentPosts.length > 0 && (
+                <div className="border border-border rounded-lg p-3">
+                  <h5 className="text-sm font-medium mb-2 flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-muted-foreground" />
+                    Recent Activity
+                  </h5>
+                  <div className="space-y-2 max-h-48 overflow-y-auto">
+                    {profileData.recentPosts.slice(0, 5).map((post: any, idx: number) => (
+                      <a
+                        key={idx}
+                        href={post.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="block p-2 rounded border border-border hover:bg-accent/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 text-xs text-muted-foreground mb-1">
+                          {post.isVideo ? <Video className="h-3 w-3" /> : <Camera className="h-3 w-3" />}
+                          <span>{new Date(post.timestamp).toLocaleDateString()}</span>
+                          {post.location && (
+                            <>
+                              <MapPin className="h-3 w-3 ml-2" />
+                              <span>{post.location}</span>
+                            </>
+                          )}
+                        </div>
+                        {post.caption && (
+                          <p className="text-sm line-clamp-2">{post.caption}</p>
+                        )}
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {/* Anonymous Instagram Viewers */}
+              {manualLinks.length > 0 && (
+                <div className="border border-purple-500/30 bg-purple-500/5 rounded-lg p-3">
+                  <h5 className="text-sm font-medium text-purple-600 dark:text-purple-400 mb-2 flex items-center gap-2">
+                    <Eye className="h-4 w-4" />
+                    Story & Profile Viewers
+                  </h5>
+                  <p className="text-xs text-muted-foreground mb-3">View stories and posts anonymously:</p>
+                  <div className="grid grid-cols-2 gap-2">
+                    {manualLinks.map((link: any, idx: number) => (
+                      <a
+                        key={idx}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 p-2 rounded border border-border hover:bg-accent/50 transition-colors text-sm"
+                      >
+                        <Globe className="h-4 w-4 text-purple-500 flex-shrink-0" />
+                        <span className="truncate">{link.name}</span>
+                        <ExternalLink className="h-3 w-3 ml-auto flex-shrink-0 opacity-50" />
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           );
         }
