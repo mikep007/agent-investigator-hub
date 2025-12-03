@@ -171,6 +171,28 @@ Deno.serve(async (req) => {
         functionBody = { target: searchData.fullName, type: 'name', fullName: searchData.fullName, location: searchData.address };
         break;
 
+      case 'toutatis':
+      case 'toutatis_from_email':
+        functionName = 'osint-toutatis';
+        functionBody = { 
+          target: agentType === 'toutatis_from_email' 
+            ? searchData.email?.split('@')[0] 
+            : searchData.username 
+        };
+        break;
+
+      case 'instaloader':
+      case 'instaloader_from_email':
+        functionName = 'osint-instaloader';
+        functionBody = { 
+          target: agentType === 'instaloader_from_email' 
+            ? searchData.email?.split('@')[0] 
+            : searchData.username,
+          includePosts: agentType !== 'instaloader_from_email',
+          postsLimit: 12
+        };
+        break;
+
       default:
         throw new Error(`Unknown agent type: ${agentType}`);
     }

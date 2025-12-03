@@ -213,6 +213,22 @@ Deno.serve(async (req) => {
           })
         );
         searchTypes.push('web_email_exact');
+
+        // Instagram OSINT - Toutatis for contact info from email username
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-toutatis', {
+            body: { target: emailLocalPart }
+          })
+        );
+        searchTypes.push('toutatis_from_email');
+
+        // Instagram OSINT - Instaloader for profile data from email username
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-instaloader', {
+            body: { target: emailLocalPart, includePosts: false }
+          })
+        );
+        searchTypes.push('instaloader_from_email');
       }
     }
 
@@ -239,6 +255,22 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('leakcheck_username');
+
+      // Instagram OSINT - Toutatis for contact info extraction
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-toutatis', {
+          body: { target: searchData.username }
+        })
+      );
+      searchTypes.push('toutatis');
+
+      // Instagram OSINT - Instaloader for profile data
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-instaloader', {
+          body: { target: searchData.username, includePosts: true, postsLimit: 12 }
+        })
+      );
+      searchTypes.push('instaloader');
     }
 
     // Phone lookup
