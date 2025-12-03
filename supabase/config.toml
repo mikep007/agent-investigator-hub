@@ -26,3 +26,9 @@ verify_jwt = true
 
 [functions.sign-maps-url]
 verify_jwt = false
+
+[functions.osint-toutatis]
+verify_jwt = true
+
+[functions.osint-instaloader]
+verify_jwt = true
