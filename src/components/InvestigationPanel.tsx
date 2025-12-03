@@ -177,6 +177,22 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             message = totalContacts > 0
               ? `Found ${totalContacts} contact detail${totalContacts > 1 ? 's' : ''} from public records`
               : 'No public records found';
+          } else if (finding.agent_type === 'Toutatis' || finding.agent_type === 'Toutatis_from_email') {
+            const dataPoints = data.dataPoints?.length || 0;
+            const hasManualLinks = data.manualVerificationLinks?.length > 0;
+            message = dataPoints > 0
+              ? `Instagram: ${dataPoints} data point${dataPoints > 1 ? 's' : ''} extracted`
+              : hasManualLinks 
+                ? 'Instagram profile - anonymous viewers available'
+                : 'Instagram profile lookup';
+          } else if (finding.agent_type === 'Instaloader' || finding.agent_type === 'Instaloader_from_email') {
+            const hasProfile = data.profileData?.success;
+            const hasManualLinks = data.manualVerificationLinks?.length > 0;
+            message = hasProfile
+              ? `Instagram profile data downloaded`
+              : hasManualLinks 
+                ? 'Instagram profile - story viewers available'
+                : 'Instagram profile lookup';
           } else {
             message = finding.source;
           }
@@ -482,6 +498,30 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
       // Search in address data
       if (log.data?.location) {
         return log.data.location.formatted_address?.toLowerCase().includes(query);
+      }
+      
+      // Search in Toutatis/Instagram data
+      if (log.data?.extractedData || log.data?.manualVerificationLinks) {
+        const extracted = log.data.extractedData || {};
+        const manualLinks = log.data.manualVerificationLinks || [];
+        return (
+          extracted.username?.toLowerCase().includes(query) ||
+          extracted.fullName?.toLowerCase().includes(query) ||
+          extracted.biography?.toLowerCase().includes(query) ||
+          log.data.username?.toLowerCase().includes(query) ||
+          manualLinks.some((link: any) => link.name?.toLowerCase().includes(query))
+        );
+      }
+      
+      // Search in Instaloader profile data
+      if (log.data?.profileData) {
+        const profile = log.data.profileData;
+        return (
+          profile.username?.toLowerCase().includes(query) ||
+          profile.fullName?.toLowerCase().includes(query) ||
+          profile.biography?.toLowerCase().includes(query) ||
+          log.data.username?.toLowerCase().includes(query)
+        );
       }
       
       return false;
