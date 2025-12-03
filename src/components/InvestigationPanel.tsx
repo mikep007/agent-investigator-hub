@@ -491,19 +491,39 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   // Categorize logs - simplified for clarity
   const filteredLogs = filterLogsBySearch(logs);
   
+  // DEBUG: Log all incoming findings
+  console.log('=== INVESTIGATION PANEL DEBUG ===');
+  console.log('Total logs received:', logs.length);
+  console.log('Filtered logs:', filteredLogs.length);
+  filteredLogs.forEach((log, i) => {
+    console.log(`Log ${i}: agent_type="${log.agent_type}", source="${log.source}", hasData=${!!log.data}`);
+    if (log.data) {
+      console.log(`  Data keys:`, Object.keys(log.data));
+      if (log.data.confirmedItems) console.log(`  confirmedItems: ${log.data.confirmedItems.length}`);
+      if (log.data.possibleItems) console.log(`  possibleItems: ${log.data.possibleItems.length}`);
+    }
+  });
+  
   // Web search results - catch all web-related agent types
   const webLogs = filteredLogs.filter(log => {
     const agentType = log.agent_type?.toLowerCase() || '';
     const source = log.source?.toLowerCase() || '';
     
-    return agentType === 'web' || 
+    const isWeb = agentType === 'web' || 
            agentType.startsWith('web_') ||
-           agentType.includes('_search') && !agentType.includes('people') ||
+           (agentType.includes('_search') && !agentType.includes('people')) ||
            source.includes('osint-web') || 
            source.includes('web_search') ||
            source.includes('address_owner') ||
            source.includes('address_residents');
+    
+    if (isWeb) {
+      console.log(`  -> Categorized as WEB: agent_type="${log.agent_type}", source="${log.source}"`);
+    }
+    return isWeb;
   });
+  
+  console.log('Web logs count:', webLogs.length);
   
   // Account discovery - platforms where email/username was found registered
   const accountLogs = filteredLogs.filter(log => 
