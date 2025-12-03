@@ -1766,9 +1766,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           </div>
         )}
 
-        <Tabs defaultValue="summary" className="flex-1 flex flex-col">
-          <div className="px-6 pb-3 mb-4 border-b">
-            <TabsList className="inline-flex h-auto w-full justify-start gap-2 bg-transparent p-0 flex-wrap">
+        <Tabs defaultValue="summary" className="flex-1 flex flex-col overflow-hidden">
+          <div className="px-6 pb-3 mb-4 border-b overflow-x-auto">
+            <TabsList className="inline-flex h-auto w-max gap-1 bg-transparent p-0">
                <TabsTrigger 
                  value="summary" 
                  className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-sm px-4 py-2.5 text-sm font-medium"
