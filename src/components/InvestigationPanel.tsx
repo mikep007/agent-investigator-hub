@@ -1807,99 +1807,85 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         )}
 
         <Tabs defaultValue="summary" className="flex-1 flex flex-col overflow-hidden">
-          <div className="px-6 pb-3 mb-4 border-b overflow-x-auto">
-            <TabsList className="inline-flex h-auto w-max gap-1 bg-transparent p-0">
-               <TabsTrigger 
-                 value="summary" 
-                 className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground rounded-sm px-4 py-2.5 text-sm font-medium"
-               >
-                 <LayoutDashboard className="h-4 w-4 mr-2" />
-                 Summary
-               </TabsTrigger>
-               <TabsTrigger 
-                 value="all" 
-                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-               >
-                 All
-                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                   {filteredLogs.length}
-                 </span>
-               </TabsTrigger>
-               <TabsTrigger 
-                 value="web" 
-                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-               >
-                 <Globe className="h-4 w-4 mr-2" />
-                 Web
-                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                   {webLogs.length}
-                 </span>
-               </TabsTrigger>
-               <TabsTrigger 
-                 value="accounts" 
-                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-               >
-                 <User className="h-4 w-4 mr-2" />
-                 Accounts
-                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                   {accountLogs.length}
-                 </span>
-               </TabsTrigger>
-               <TabsTrigger 
-                 value="address" 
-                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-               >
-                 <MapPin className="h-4 w-4 mr-2" />
-                 Address
-                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                   {addressLogs.length}
-                 </span>
-               </TabsTrigger>
-               <TabsTrigger 
-                 value="people" 
-                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-               >
-                 <Mail className="h-4 w-4 mr-2" />
-                 People
-                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                   {peopleLogs.length}
-                 </span>
-               </TabsTrigger>
-               <TabsTrigger 
-                 value="breaches" 
-                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-               >
-                 <Shield className="h-4 w-4 mr-2" />
-                 Breaches
-                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                   {breachLogs.length}
-                 </span>
-               </TabsTrigger>
-               <TabsTrigger 
-                 value="court" 
-                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-               >
-                 <Scale className="h-4 w-4 mr-2" />
-                 Court Records
-                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                   {courtLogs.length}
-                 </span>
-               </TabsTrigger>
-               <TabsTrigger 
-                 value="relatives" 
-                 className="data-[state=active]:bg-background rounded-sm px-4 py-2.5 text-sm font-medium"
-               >
-                 <User className="h-4 w-4 mr-2" />
-                 Relatives
-                 <span className="ml-2 rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary">
-                   {relativesLogs.reduce((acc, log) => {
-                     const results = log.data?.results || [];
-                     return acc + results.reduce((sum: number, r: any) => sum + (r.relatives?.length || 0), 0);
-                   }, 0)}
-                 </span>
-               </TabsTrigger>
-             </TabsList>
-           </div>
+          <div className="px-4 pb-2 mb-3 border-b overflow-x-auto scrollbar-thin">
+            <TabsList className="inline-flex h-9 w-max gap-0.5 bg-muted/50 p-1 rounded-lg">
+                <TabsTrigger 
+                  value="summary" 
+                  className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                >
+                  <LayoutDashboard className="h-3.5 w-3.5 mr-1.5" />
+                  Summary
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="all" 
+                  className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                >
+                  All
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{filteredLogs.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="web" 
+                  className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                >
+                  <Globe className="h-3.5 w-3.5 mr-1.5" />
+                  Web
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{webLogs.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="accounts" 
+                  className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                >
+                  <User className="h-3.5 w-3.5 mr-1.5" />
+                  Accounts
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{accountLogs.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="address" 
+                  className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                >
+                  <MapPin className="h-3.5 w-3.5 mr-1.5" />
+                  Address
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{addressLogs.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="people" 
+                  className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                >
+                  <Mail className="h-3.5 w-3.5 mr-1.5" />
+                  People
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{peopleLogs.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="breaches" 
+                  className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                >
+                  <Shield className="h-3.5 w-3.5 mr-1.5" />
+                  Breaches
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{breachLogs.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="court" 
+                  className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                >
+                  <Scale className="h-3.5 w-3.5 mr-1.5" />
+                  Court
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{courtLogs.length}</Badge>
+                </TabsTrigger>
+                <TabsTrigger 
+                  value="relatives" 
+                  className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                >
+                  <User className="h-3.5 w-3.5 mr-1.5" />
+                  Relatives
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">
+                    {relativesLogs.reduce((acc, log) => {
+                      const results = log.data?.results || [];
+                      return acc + results.reduce((sum: number, r: any) => sum + (r.relatives?.length || 0), 0);
+                    }, 0)}
+                  </Badge>
+                </TabsTrigger>
+              </TabsList>
+          </div>
 
           {/* Summary View - 4 View Modes */}
           <TabsContent value="summary" className="flex-1 mt-0 px-6">
