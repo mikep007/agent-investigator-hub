@@ -45,48 +45,63 @@ function buildDorkQueries(name: string, location?: string, email?: string): { qu
   const queries: { query: string; type: string; priority: number }[] = [];
   const quotedName = `"${name}"`;
   
-  // 1. Social Media Profiles (highest priority)
+  // 1. BROAD GENERAL SEARCH - catches everything including .gov, .org, etc.
   queries.push({
-    query: `${quotedName} site:linkedin.com | site:facebook.com | site:twitter.com | site:instagram.com`,
-    type: 'social_media',
+    query: quotedName,
+    type: 'general',
     priority: 1
   });
   
-  // 2. Profile Pages
+  // 2. Location-specific search (high priority if location provided)
+  if (location && location !== 'provided') {
+    const locationParts = location.split(',').map(p => p.trim()).filter(p => p.length > 2);
+    const city = locationParts[0];
+    const state = locationParts.length > 1 ? locationParts[1] : '';
+    if (city) {
+      queries.push({
+        query: `${quotedName} "${city}"${state ? ` "${state}"` : ''}`,
+        type: 'location_specific',
+        priority: 1
+      });
+    }
+  }
+  
+  // 3. Government & Official Sources
   queries.push({
-    query: `${quotedName} inurl:profile | inurl:about | inurl:user`,
-    type: 'profiles',
+    query: `${quotedName} site:gov | site:edu | site:org`,
+    type: 'official_sources',
     priority: 2
   });
   
-  // 3. People Finder Sites
+  // 4. Social Media Profiles
   queries.push({
-    query: `${quotedName} site:whitepages.com | site:spokeo.com | site:beenverified.com | site:truepeoplesearch.com`,
-    type: 'people_finders',
+    query: `${quotedName} site:linkedin.com | site:facebook.com | site:twitter.com | site:instagram.com`,
+    type: 'social_media',
     priority: 3
   });
   
-  // 4. Documents (resumes, reports)
+  // 5. Profile Pages
+  queries.push({
+    query: `${quotedName} inurl:profile | inurl:about | inurl:user`,
+    type: 'profiles',
+    priority: 4
+  });
+  
+  // 6. People Finder Sites
+  queries.push({
+    query: `${quotedName} site:whitepages.com | site:spokeo.com | site:beenverified.com | site:truepeoplesearch.com`,
+    type: 'people_finders',
+    priority: 5
+  });
+  
+  // 7. Documents (resumes, reports, PDFs)
   queries.push({
     query: `${quotedName} filetype:pdf | filetype:doc | filetype:docx`,
     type: 'documents',
     priority: 4
   });
   
-  // 5. Location-specific search
-  if (location && location !== 'provided') {
-    const locationParts = location.split(',').map(p => p.trim()).filter(p => p.length > 2);
-    const city = locationParts[0];
-    if (city) {
-      queries.push({
-        query: `${quotedName} "${city}"`,
-        type: 'location_specific',
-        priority: 2
-      });
-    }
-  }
-  
-  // 6. Email-related search
+  // 8. Email-related search
   if (email) {
     queries.push({
       query: `"${email}" | ${quotedName} email`,
@@ -95,18 +110,11 @@ function buildDorkQueries(name: string, location?: string, email?: string): { qu
     });
   }
   
-  // 7. Professional/Academic sites
-  queries.push({
-    query: `${quotedName} site:edu | site:gov | site:org`,
-    type: 'official_sources',
-    priority: 5
-  });
-  
-  // 8. Contact info patterns
+  // 9. Contact info patterns
   queries.push({
     query: `${quotedName} intext:"phone" | intext:"contact" | intext:"email"`,
     type: 'contact_info',
-    priority: 4
+    priority: 5
   });
   
   return queries;
@@ -146,9 +154,9 @@ Deno.serve(async (req) => {
     // Build targeted dork queries
     const dorkQueries = buildDorkQueries(searchName, location, email);
     
-    // Execute top priority queries (limit to conserve API quota)
-    // Sort by priority and take top 3 different types
-    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 3);
+    // Execute top priority queries (increased to 5 for better coverage)
+    // Sort by priority and take top 5 different types
+    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 5);
     
     console.log('Executing dork queries:', sortedQueries.map(q => q.type));
     
