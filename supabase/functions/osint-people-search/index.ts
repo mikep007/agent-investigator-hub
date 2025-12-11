@@ -453,7 +453,7 @@ function parseSearchResults(markdown: string, html: string, firstName: string, l
   const ageMatches = [...markdown.matchAll(ageRegex)];
   const ages = [...new Set(ageMatches.map(m => m[1]))];
   
-  // Extract relatives/associated names (multiple patterns)
+  // Extract relatives/associated names (multiple patterns - expanded for better extraction)
   const relatives: string[] = [];
   
   // Pattern 1: "Relatives: Name Name" or "Related To: Name"
@@ -462,14 +462,14 @@ function parseSearchResults(markdown: string, html: string, firstName: string, l
   relativeMatches1.forEach(m => relatives.push(m[1].trim()));
   
   // Pattern 2: Names in "Possible Relatives" or "May Know" sections
-  const relativeSection = markdown.match(/(?:Possible\s+Relatives|May\s+(?:Also\s+)?Know|Associated\s+With)[:\s]*([^\n]+(?:\n[^\n]+)*?)(?=\n\n|\n[A-Z]|\$)/gi);
+  const relativeSection = markdown.match(/(?:Possible\s+Relatives|May\s+(?:Also\s+)?Know|Associated\s+With|Relatives|Associates)[:\s]*([^\n]+(?:\n[^\n]+)*?)(?=\n\n|\n[A-Z]|\$)/gi);
   if (relativeSection) {
     relativeSection.forEach(section => {
       const names = section.match(/[A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?/g);
       if (names) {
         names.forEach(name => {
           // Filter out common non-name patterns
-          if (!name.match(/^(View|Show|See|More|Click|Phone|Email|Address|Current|Previous)/i)) {
+          if (!name.match(/^(View|Show|See|More|Click|Phone|Email|Address|Current|Previous|Search|Find|Lookup|Check|Get|Full|Report)/i)) {
             relatives.push(name.trim());
           }
         });
@@ -478,9 +478,34 @@ function parseSearchResults(markdown: string, html: string, firstName: string, l
   }
   
   // Pattern 3: Names with relationship indicators
-  const relativeRegex3 = /([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*\((?:spouse|wife|husband|mother|father|son|daughter|brother|sister|sibling|parent|child|relative)\)/gi;
+  const relativeRegex3 = /([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\s*\((?:spouse|wife|husband|mother|father|son|daughter|brother|sister|sibling|parent|child|relative|ex|aunt|uncle|cousin|grandmother|grandfather|grandparent)\)/gi;
   const relativeMatches3 = [...markdown.matchAll(relativeRegex3)];
   relativeMatches3.forEach(m => relatives.push(m[1].trim()));
+  
+  // Pattern 4: Extract from link text patterns like "John Smith" appearing after relatives section
+  const linkPatterns = markdown.match(/\[([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)\]\(/g);
+  if (linkPatterns) {
+    linkPatterns.forEach(pattern => {
+      const match = pattern.match(/\[([^\]]+)\]/);
+      if (match && match[1]) {
+        const name = match[1].trim();
+        if (!name.match(/^(View|Show|See|More|Click|Phone|Email|Address|Current|Previous|Search|Find|Lookup|Check|Get|Full|Report)/i)) {
+          relatives.push(name);
+        }
+      }
+    });
+  }
+  
+  // Pattern 5: Names preceded by bullet points or dashes in relatives context
+  const bulletNames = markdown.match(/(?:^|\n)\s*[-•*]\s*([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/gm);
+  if (bulletNames) {
+    bulletNames.forEach(match => {
+      const nameMatch = match.match(/([A-Z][a-z]+\s+[A-Z][a-z]+(?:\s+[A-Z][a-z]+)?)/);
+      if (nameMatch) {
+        relatives.push(nameMatch[1].trim());
+      }
+    });
+  }
   
   // Deduplicate relatives and filter out the target name
   const targetNameLower = `${firstName} ${lastName}`.toLowerCase();
