@@ -65,6 +65,32 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
     document.head.appendChild(script);
   };
 
+  // Calculate heading from panorama location to target address
+  const calculateHeading = (fromLat: number, fromLng: number, toLat: number, toLng: number): number => {
+    const dLng = (toLng - fromLng) * Math.PI / 180;
+    const fromLatRad = fromLat * Math.PI / 180;
+    const toLatRad = toLat * Math.PI / 180;
+    
+    const x = Math.sin(dLng) * Math.cos(toLatRad);
+    const y = Math.cos(fromLatRad) * Math.sin(toLatRad) - 
+              Math.sin(fromLatRad) * Math.cos(toLatRad) * Math.cos(dLng);
+    
+    let heading = Math.atan2(x, y) * 180 / Math.PI;
+    return (heading + 360) % 360; // Normalize to 0-360
+  };
+
+  // Calculate distance between two points in meters
+  const calculateDistance = (lat1: number, lng1: number, lat2: number, lng2: number): number => {
+    const R = 6371000; // Earth's radius in meters
+    const dLat = (lat2 - lat1) * Math.PI / 180;
+    const dLng = (lng2 - lng1) * Math.PI / 180;
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLng/2) * Math.sin(dLng/2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+    return R * c;
+  };
+
   const initializePanorama = () => {
     console.log("initializePanorama called", { 
       hasRef: !!panoramaRef.current, 
@@ -83,31 +109,86 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
 
     try {
       console.log("Creating StreetViewPanorama at", latitude, longitude);
-      const panorama = new google.maps.StreetViewPanorama(panoramaRef.current, {
-        position: { lat: latitude, lng: longitude },
-        pov: { heading: 0, pitch: 0 },
-        zoom: 1,
-        addressControl: true,
-        linksControl: true,
-        panControl: true,
-        enableCloseButton: false,
-        zoomControl: true,
-        fullscreenControl: true,
-      });
-
-      // Check if Street View is available at this location
+      
+      // Check if Street View is available at this location with a small radius first
       const streetViewService = new google.maps.StreetViewService();
+      
+      // Try with smaller radius first (50m) for more accurate match
       streetViewService.getPanorama(
-        { location: { lat: latitude, lng: longitude }, radius: 100 },
+        { location: { lat: latitude, lng: longitude }, radius: 50 },
         (data, status) => {
-          console.log("StreetViewService response:", status);
-          if (status === google.maps.StreetViewStatus.OK) {
+          console.log("StreetViewService response (50m radius):", status);
+          
+          if (status === google.maps.StreetViewStatus.OK && data?.location?.latLng) {
+            const panoramaLat = data.location.latLng.lat();
+            const panoramaLng = data.location.latLng.lng();
+            const distance = calculateDistance(latitude, longitude, panoramaLat, panoramaLng);
+            
+            console.log("Panorama found at distance:", distance.toFixed(0), "m from target");
+            console.log("Panorama location:", panoramaLat, panoramaLng);
+            console.log("Target location:", latitude, longitude);
+            
+            // Calculate heading to face the target address
+            const heading = calculateHeading(panoramaLat, panoramaLng, latitude, longitude);
+            console.log("Calculated heading to target:", heading);
+            
+            const panorama = new google.maps.StreetViewPanorama(panoramaRef.current!, {
+              pano: data.location.pano,
+              pov: { 
+                heading: heading, // Face toward the target address
+                pitch: 0 
+              },
+              zoom: 1,
+              addressControl: true,
+              linksControl: true,
+              panControl: true,
+              enableCloseButton: false,
+              zoomControl: true,
+              fullscreenControl: true,
+            });
+            
             setPanoramaInstance(panorama);
             setLoading(false);
           } else {
-            console.error("Street View not available at this location:", status);
-            setError(true);
-            setLoading(false);
+            // Try with larger radius as fallback
+            console.log("No panorama at 50m, trying 100m radius...");
+            streetViewService.getPanorama(
+              { location: { lat: latitude, lng: longitude }, radius: 100 },
+              (data2, status2) => {
+                if (status2 === google.maps.StreetViewStatus.OK && data2?.location?.latLng) {
+                  const panoramaLat = data2.location.latLng.lat();
+                  const panoramaLng = data2.location.latLng.lng();
+                  const distance = calculateDistance(latitude, longitude, panoramaLat, panoramaLng);
+                  
+                  console.log("Panorama found at distance (100m):", distance.toFixed(0), "m from target");
+                  
+                  // Calculate heading to face the target address
+                  const heading = calculateHeading(panoramaLat, panoramaLng, latitude, longitude);
+                  
+                  const panorama = new google.maps.StreetViewPanorama(panoramaRef.current!, {
+                    pano: data2.location.pano,
+                    pov: { 
+                      heading: heading,
+                      pitch: 0 
+                    },
+                    zoom: 1,
+                    addressControl: true,
+                    linksControl: true,
+                    panControl: true,
+                    enableCloseButton: false,
+                    zoomControl: true,
+                    fullscreenControl: true,
+                  });
+                  
+                  setPanoramaInstance(panorama);
+                  setLoading(false);
+                } else {
+                  console.error("Street View not available within 100m of this location:", status2);
+                  setError(true);
+                  setLoading(false);
+                }
+              }
+            );
           }
         }
       );
