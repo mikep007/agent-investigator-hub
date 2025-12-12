@@ -64,6 +64,29 @@ Deno.serve(async (req) => {
     console.log('FastPeopleSearch URL:', fastPeopleSearchUrl);
 
     // Scrape both TruePeopleSearch and FastPeopleSearch in parallel
+    // Use enhanced headers to help bypass basic bot detection
+    const scrapeOptions = {
+      formats: ['markdown', 'html'],
+      onlyMainContent: true,
+      waitFor: 5000, // Increased wait time for dynamic content
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+        'Accept-Encoding': 'gzip, deflate, br',
+        'Cache-Control': 'no-cache',
+        'Pragma': 'no-cache',
+        'Sec-Ch-Ua': '"Not_A Brand";v="8", "Chromium";v="120", "Google Chrome";v="120"',
+        'Sec-Ch-Ua-Mobile': '?0',
+        'Sec-Ch-Ua-Platform': '"Windows"',
+        'Sec-Fetch-Dest': 'document',
+        'Sec-Fetch-Mode': 'navigate',
+        'Sec-Fetch-Site': 'none',
+        'Sec-Fetch-User': '?1',
+        'Upgrade-Insecure-Requests': '1',
+      },
+    };
+
     const [truePeopleResponse, fastPeopleResponse] = await Promise.allSettled([
       fetch('https://api.firecrawl.dev/v1/scrape', {
         method: 'POST',
@@ -73,9 +96,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           url: truePeopleSearchUrl,
-          formats: ['markdown', 'html'],
-          onlyMainContent: true,
-          waitFor: 3000,
+          ...scrapeOptions,
         }),
       }),
       fetch('https://api.firecrawl.dev/v1/scrape', {
@@ -86,9 +107,7 @@ Deno.serve(async (req) => {
         },
         body: JSON.stringify({
           url: fastPeopleSearchUrl,
-          formats: ['markdown', 'html'],
-          onlyMainContent: true,
-          waitFor: 3000,
+          ...scrapeOptions,
         }),
       }),
     ]);
@@ -392,20 +411,46 @@ Deno.serve(async (req) => {
 function parseSearchResults(markdown: string, html: string, firstName: string, lastName: string, source: string) {
   const results: any[] = [];
   
-  // Detect CAPTCHA or bot protection pages - return empty if blocked
+  // Enhanced CAPTCHA and bot protection detection
+  const captchaIndicators = [
+    'captcha',
+    'geo.captcha-delivery',
+    'challenge-platform',
+    'cf-turnstile',
+    'hcaptcha',
+    'recaptcha',
+    'g-recaptcha',
+    'bot detection',
+    'access denied',
+    'please verify you are human',
+    'verify you are not a robot',
+    'unusual traffic',
+    'automated access',
+    'rate limit',
+    'too many requests',
+    'blocked',
+    'cloudflare',
+    'ddos protection',
+    'security check',
+    'just a moment',
+    'checking your browser',
+    'enable javascript',
+    'please enable cookies',
+    'pardon our interruption',
+    'verify yourself',
+  ];
+  
+  const markdownLower = markdown.toLowerCase();
+  const htmlLower = html.toLowerCase();
+  
   const isCaptchaBlocked = 
-    markdown.toLowerCase().includes('captcha') ||
-    markdown.includes('geo.captcha-delivery') ||
-    markdown.includes('challenge-platform') ||
-    markdown.includes('cf-turnstile') ||
-    markdown.includes('hcaptcha') ||
-    markdown.includes('recaptcha') ||
-    markdown.includes('bot detection') ||
-    markdown.includes('access denied') ||
-    (markdown.length < 500 && markdown.includes('iframe'));
+    captchaIndicators.some(indicator => markdownLower.includes(indicator) || htmlLower.includes(indicator)) ||
+    (markdown.length < 500 && (markdown.includes('iframe') || markdown.includes('challenge'))) ||
+    (markdown.length < 200 && !markdown.includes(firstName.toLowerCase()) && !markdown.includes(lastName.toLowerCase()));
   
   if (isCaptchaBlocked) {
-    console.log(`${source}: CAPTCHA/bot protection detected, skipping extraction`);
+    console.log(`${source}: CAPTCHA/bot protection detected (content length: ${markdown.length})`);
+    console.log(`${source}: First 300 chars of blocked response:`, markdown.substring(0, 300));
     return [{
       name: `${firstName} ${lastName}`,
       phones: [],
@@ -414,8 +459,9 @@ function parseSearchResults(markdown: string, html: string, firstName: string, l
       ages: [],
       relatives: [],
       source: source,
-      note: 'Site blocked by CAPTCHA - manual verification required',
+      note: 'Site blocked by CAPTCHA - use manual verification links',
       blocked: true,
+      captchaType: captchaIndicators.find(i => markdownLower.includes(i) || htmlLower.includes(i)) || 'unknown',
     }];
   }
   
