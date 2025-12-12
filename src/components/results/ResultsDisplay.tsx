@@ -1,9 +1,8 @@
 import { useState } from "react";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { FindingData, ViewMode } from "./types";
 import ViewModeToggle from "./ViewModeToggle";
 import PersonProfileCard from "./PersonProfileCard";
-import PlatformGrid from "./PlatformGrid";
+import OSINTResultsGrid from "./OSINTResultsGrid";
 import TimelineView from "./TimelineView";
 import IntelligenceDossier from "./IntelligenceDossier";
 
@@ -22,7 +21,8 @@ const ResultsDisplay = ({
   onVerifyPlatform,
   onDeepDive 
 }: ResultsDisplayProps) => {
-  const [viewMode, setViewMode] = useState<ViewMode>('profile');
+  // Default to OSINT Industries-style grid view
+  const [viewMode, setViewMode] = useState<ViewMode>('grid');
 
   const renderView = () => {
     switch (viewMode) {
@@ -30,8 +30,9 @@ const ResultsDisplay = ({
         return <PersonProfileCard findings={findings} targetName={targetName} />;
       case 'grid':
         return (
-          <PlatformGrid 
+          <OSINTResultsGrid 
             findings={findings} 
+            targetName={targetName}
             onVerify={onVerifyPlatform}
             onDeepDive={onDeepDive}
           />
@@ -47,7 +48,14 @@ const ResultsDisplay = ({
           />
         );
       default:
-        return <PersonProfileCard findings={findings} targetName={targetName} />;
+        return (
+          <OSINTResultsGrid 
+            findings={findings} 
+            targetName={targetName}
+            onVerify={onVerifyPlatform}
+            onDeepDive={onDeepDive}
+          />
+        );
     }
   };
 
