@@ -10,6 +10,8 @@ interface ResultsDisplayProps {
   findings: FindingData[];
   targetName?: string;
   investigationId?: string;
+  inputKeywords?: string[];
+  aiSuggestedPersons?: string[];
   onVerifyPlatform?: (platformUrl: string, status: 'verified' | 'inaccurate') => void;
   onDeepDive?: (platform: string, findingId: string) => void;
 }
@@ -18,6 +20,8 @@ const ResultsDisplay = ({
   findings, 
   targetName, 
   investigationId,
+  inputKeywords = [],
+  aiSuggestedPersons = [],
   onVerifyPlatform,
   onDeepDive 
 }: ResultsDisplayProps) => {
@@ -27,7 +31,14 @@ const ResultsDisplay = ({
   const renderView = () => {
     switch (viewMode) {
       case 'profile':
-        return <PersonProfileCard findings={findings} targetName={targetName} />;
+        return (
+          <PersonProfileCard 
+            findings={findings} 
+            targetName={targetName}
+            inputKeywords={inputKeywords}
+            aiSuggestedPersons={aiSuggestedPersons}
+          />
+        );
       case 'grid':
         return (
           <OSINTResultsGrid 

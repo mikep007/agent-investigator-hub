@@ -10,4 +10,5 @@ export { default as OSINTPlatformCard } from './OSINTPlatformCard';
 export { default as ResultsSummaryBar } from './ResultsSummaryBar';
 export { default as VisualTimeline } from './VisualTimeline';
 export { default as SaveToCaseButton } from './SaveToCaseButton';
+export { default as RelatedPersonsCard } from './RelatedPersonsCard';
 export * from './types';

@@ -9,13 +9,16 @@ import {
 } from "lucide-react";
 import { FindingData, ProfileData } from "./types";
 import ConfidenceScoreBadge from "../ConfidenceScoreBadge";
+import RelatedPersonsCard from "./RelatedPersonsCard";
 
 interface PersonProfileCardProps {
   findings: FindingData[];
   targetName?: string;
+  inputKeywords?: string[];
+  aiSuggestedPersons?: string[];
 }
 
-const PersonProfileCard = ({ findings, targetName }: PersonProfileCardProps) => {
+const PersonProfileCard = ({ findings, targetName, inputKeywords = [], aiSuggestedPersons = [] }: PersonProfileCardProps) => {
   // Extract profile data from findings
   const extractProfileData = (): ProfileData => {
     // Determine display name - use address if no name provided
@@ -255,27 +258,12 @@ const PersonProfileCard = ({ findings, targetName }: PersonProfileCardProps) => 
           )}
         </div>
 
-        {/* Relatives */}
-        {profile.relatives && profile.relatives.length > 0 && (
-          <Card>
-            <CardHeader className="pb-3">
-              <div className="flex items-center gap-2">
-                <Users className="h-5 w-5 text-primary" />
-                <h3 className="font-semibold">Related Persons</h3>
-                <Badge variant="secondary" className="ml-auto">{profile.relatives.length}</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="flex flex-wrap gap-2">
-                {profile.relatives.map((relative, idx) => (
-                  <Badge key={idx} variant="outline" className="text-sm">
-                    {relative}
-                  </Badge>
-                ))}
-              </div>
-            </CardContent>
-          </Card>
-        )}
+        {/* Related Persons - Enhanced Component */}
+        <RelatedPersonsCard 
+          findings={findings}
+          inputKeywords={inputKeywords}
+          aiSuggestedPersons={aiSuggestedPersons}
+        />
 
         {/* Data Quality Summary */}
         <Card className="bg-muted/30">
