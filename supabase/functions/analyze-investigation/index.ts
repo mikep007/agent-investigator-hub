@@ -139,9 +139,12 @@ serve(async (req) => {
         });
       }
 
-      // Extract names from all findings
+      // Extract names and associated terms from all findings
       if (findingData.name) dataSummary.allNames.push(findingData.name);
       if (findingData.names) dataSummary.allNames.push(...findingData.names);
+      if (findingData.searchContext?.keywords && Array.isArray(findingData.searchContext.keywords)) {
+        dataSummary.allNames.push(...findingData.searchContext.keywords);
+      }
     });
 
     // Call Lovable AI for analysis
@@ -172,12 +175,17 @@ Be concise, professional, and focus on investigative value. Return a JSON object
   "recommendations": ["rec1", "rec2", ...]
 }`;
 
+    const uniqueNames = [...new Set(dataSummary.allNames)];
+
     const userPrompt = `Target: ${dataSummary.target}
 
 Total findings: ${dataSummary.totalFindings}
 
 ALREADY SEARCHED (do NOT recommend searching these again):
 ${Object.entries(searchedParams).filter(([_, val]) => val).map(([key]) => `- ${key}`).join('\n') || '- None'}
+
+Associated names / keywords from search and findings:
+${uniqueNames.slice(0, 20).join(', ') || '- None'}
 
 Findings by type:
 ${Object.entries(dataSummary.findingsByType).map(([type, count]) => `- ${type}: ${count}`).join('\n')}
@@ -192,7 +200,7 @@ Phone numbers: ${dataSummary.phones.join(', ')}
 
 Web mentions (sample): ${dataSummary.webMentions.slice(0, 5).join('; ')}
 
-Names found in data: ${[...new Set(dataSummary.allNames)].slice(0, 20).join(', ')}
+Names found in data: ${uniqueNames.slice(0, 20).join(', ')}
 
 Analyze this investigation and provide insights.`;
 
