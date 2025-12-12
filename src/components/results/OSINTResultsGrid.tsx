@@ -67,20 +67,21 @@ const OSINTResultsGrid = ({
     findings.forEach(finding => {
       const data = finding.data;
 
-      // Sherlock results
-      if (finding.agent_type === 'Sherlock' && data.foundPlatforms) {
-        data.foundPlatforms.forEach((p: any) => {
+      // Sherlock results - handle both foundPlatforms and profileLinks formats
+      if ((finding.agent_type === 'Sherlock' || finding.agent_type === 'Sherlock_from_email')) {
+        const platforms = data.foundPlatforms || data.profileLinks || [];
+        platforms.forEach((p: any) => {
           if (!seenUrls.has(p.url)) {
             seenUrls.add(p.url);
             extracted.push({
-              platform: p.name,
+              platform: p.name || p.platform || 'Unknown',
               url: p.url,
               username: data.username,
               userId: p.id,
               profileImage: p.profileImage,
               verified: p.verificationStatus === 'verified',
               isPublic: true,
-              creationDate: p.createdAt,
+              creationDate: p.createdAt || p.created_at,
               location: p.location,
               locationFlag: getLocationFlag(p.location),
               recentlyActive: p.recentlyActive,
@@ -90,12 +91,13 @@ const OSINTResultsGrid = ({
         });
       }
 
-      // Holehe results
-      if (finding.agent_type === 'Holehe' && data.allResults) {
-        data.allResults
-          .filter((r: any) => r.exists)
+      // Holehe results - handle both allResults and registeredOn formats
+      if (finding.agent_type === 'Holehe') {
+        const results = data.allResults || data.registeredOn || [];
+        results
+          .filter((r: any) => r.exists !== false)
           .forEach((r: any) => {
-            const url = `https://${r.domain}`;
+            const url = r.url || `https://${r.domain}`;
             if (!seenUrls.has(url)) {
               seenUrls.add(url);
               extracted.push({
