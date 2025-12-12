@@ -173,63 +173,10 @@ const Index = () => {
           />
 
 
-          {/* Main Content Grid */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Graph Visualization */}
-            <Card className="lg:col-span-2 p-6 bg-card/80 backdrop-blur border-border/50">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <Network className="w-5 h-5 text-primary" />
-                  Investigation Visualization
-                </h2>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="outline" className="border-success text-success cursor-help">
-                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                      Connected to MCP
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>MCP Server integration active</TooltipContent>
-                </Tooltip>
-              </div>
-
-              {/* AI-Generated Report Section */}
-              {report && (
-                <div className="mb-6">
-                  <ReportDisplay
-                    report={report.report}
-                    target={report.target}
-                    generatedAt={report.generatedAt}
-                    findingsCount={report.findingsCount}
-                  />
-                </div>
-              )}
-
-              <Tabs defaultValue="timeline" className="w-full">
-                <TabsList className="grid w-full grid-cols-2 mb-4">
-                  <TabsTrigger value="timeline">Digital Footprint Timeline</TabsTrigger>
-                  <TabsTrigger value="analysis">AI Investigation Analysis</TabsTrigger>
-                </TabsList>
-                <TabsContent value="timeline" className="min-h-[600px]">
-                  <RelationshipGraph 
-                    active={activeInvestigation} 
-                    investigationId={currentInvestigationId}
-                    targetName={targetName}
-                  />
-                </TabsContent>
-                <TabsContent value="analysis" className="min-h-[600px]">
-                  <InvestigationAnalysis 
-                    active={activeInvestigation} 
-                    investigationId={currentInvestigationId}
-                  />
-                </TabsContent>
-              </Tabs>
-            </Card>
-
-            {/* Investigation Results Panel */}
-            <Card className="bg-card/80 backdrop-blur border-border/50 overflow-hidden">
-              <div className="px-6 pt-6">
-                <div className="flex items-center justify-between mb-6">
+          {/* Investigation Log - Full Width Landscape */}
+          <Card className="bg-card/80 backdrop-blur border-border/50 overflow-hidden mb-6">
+            <div className="px-6 pt-6">
+              <div className="flex items-center justify-between mb-4">
                 <h2 className="text-xl font-bold flex items-center gap-2">
                   <Search className="w-5 h-5 text-primary" />
                   Investigation Log
@@ -260,8 +207,65 @@ const Index = () => {
                   </Tooltip>
                 )}
               </div>
+            </div>
+            <InvestigationPanel active={activeInvestigation} investigationId={currentInvestigationId} />
+          </Card>
+
+          {/* Visualization and Analysis Grid */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Graph Visualization */}
+            <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <Network className="w-5 h-5 text-primary" />
+                  Digital Footprint Timeline
+                </h2>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Badge variant="outline" className="border-success text-success cursor-help">
+                      <CheckCircle2 className="w-3 h-3 mr-1" />
+                      Connected to MCP
+                    </Badge>
+                  </TooltipTrigger>
+                  <TooltipContent>MCP Server integration active</TooltipContent>
+                </Tooltip>
               </div>
-              <InvestigationPanel active={activeInvestigation} investigationId={currentInvestigationId} />
+              <div className="min-h-[500px]">
+                <RelationshipGraph 
+                  active={activeInvestigation} 
+                  investigationId={currentInvestigationId}
+                  targetName={targetName}
+                />
+              </div>
+            </Card>
+
+            {/* AI Analysis */}
+            <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold flex items-center gap-2">
+                  <Brain className="w-5 h-5 text-primary" />
+                  AI Investigation Analysis
+                </h2>
+              </div>
+              
+              {/* AI-Generated Report Section */}
+              {report && (
+                <div className="mb-6">
+                  <ReportDisplay
+                    report={report.report}
+                    target={report.target}
+                    generatedAt={report.generatedAt}
+                    findingsCount={report.findingsCount}
+                  />
+                </div>
+              )}
+              
+              <div className="min-h-[500px]">
+                <InvestigationAnalysis 
+                  active={activeInvestigation} 
+                  investigationId={currentInvestigationId}
+                />
+              </div>
             </Card>
           </div>
 
