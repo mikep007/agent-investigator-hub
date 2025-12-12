@@ -615,71 +615,113 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   });
 
   const renderWebResultItem = (item: any, log: LogEntry, idx: number | string) => (
-    <div key={idx} className="group overflow-hidden">
-      <div className="flex items-start gap-1">
-        <div className="flex-1 min-w-0 overflow-hidden">
-          <div className="flex items-center gap-2 text-sm mb-1 flex-wrap">
-            <span className="text-muted-foreground truncate max-w-[200px]">{item.displayLink}</span>
-            {item.confidenceScore !== undefined && (
-              <ConfidenceScoreBadge score={item.confidenceScore} />
-            )}
-            {item.isExactMatch && item.hasLocation && (
-              <Badge variant="default" className="bg-green-600 hover:bg-green-700 text-white">
-                <MapPin className="h-3 w-3 mr-1" />
-                Location Match
-              </Badge>
-            )}
-            {item.isExactMatch && !item.hasLocation && (
-              <Badge variant="secondary" className="bg-blue-600/20 text-blue-400">
-                <Check className="h-3 w-3 mr-1" />
-                Name Match
-              </Badge>
-            )}
+    <div key={idx} className="group border-b border-border/50 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0">
+      {/* Google-style result display */}
+      <div className="space-y-1">
+        {/* URL line with favicon-style indicator */}
+        <div className="flex items-center gap-2 text-sm">
+          <div className="w-5 h-5 rounded bg-muted flex items-center justify-center flex-shrink-0">
+            <Globe className="h-3 w-3 text-muted-foreground" />
           </div>
-          <a
-            href={item.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block group-hover:underline overflow-hidden"
+          <span className="text-muted-foreground truncate">{item.displayLink}</span>
+          <span className="text-muted-foreground/60 text-xs">›</span>
+          <span className="text-muted-foreground/60 text-xs truncate max-w-[150px]">
+            {item.link.replace(/^https?:\/\/[^/]+/, '').slice(0, 40)}
+          </span>
+        </div>
+        
+        {/* Title - clickable link */}
+        <a
+          href={item.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block group-hover:underline"
+        >
+          <h3 className="text-lg text-primary font-normal line-clamp-1">
+            {item.title}
+          </h3>
+        </a>
+        
+        {/* Snippet/Description */}
+        <p className="text-sm text-muted-foreground line-clamp-2">
+          {item.snippet}
+        </p>
+        
+        {/* Match indicators */}
+        <div className="flex items-center gap-2 flex-wrap pt-1">
+          {item.confidenceScore !== undefined && (
+            <ConfidenceScoreBadge score={item.confidenceScore} />
+          )}
+          {item.isExactMatch && (
+            <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs">
+              <Check className="h-3 w-3 mr-1" />
+              Name Match
+            </Badge>
+          )}
+          {item.hasLocation && (
+            <Badge variant="secondary" className="bg-green-500/10 text-green-600 dark:text-green-400 text-xs">
+              <MapPin className="h-3 w-3 mr-1" />
+              Location
+            </Badge>
+          )}
+          {item.hasKeywords && item.keywordMatches?.length > 0 && (
+            <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs">
+              <Search className="h-3 w-3 mr-1" />
+              {item.keywordMatches.join(', ')}
+            </Badge>
+          )}
+          {item.hasPhone && (
+            <Badge variant="secondary" className="bg-orange-500/10 text-orange-600 dark:text-orange-400 text-xs">
+              <Phone className="h-3 w-3 mr-1" />
+              Phone
+            </Badge>
+          )}
+          {item.hasEmail && (
+            <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-xs">
+              <Mail className="h-3 w-3 mr-1" />
+              Email
+            </Badge>
+          )}
+          {item.sourceType && (
+            <span className="text-xs text-muted-foreground/60 italic">
+              via {item.queryDescription || item.sourceType}
+            </span>
+          )}
+        </div>
+        
+        {/* Action buttons */}
+        <div className="flex gap-2 items-center pt-2">
+          <Button
+            size="sm"
+            variant="ghost"
+            className="h-7 px-2 text-xs"
+            onClick={() => {
+              navigator.clipboard.writeText(item.link);
+              toast({ title: "Link copied to clipboard" });
+            }}
           >
-            <h3 className="text-xl text-primary mb-1 line-clamp-1 break-words">
-              {item.title}
-            </h3>
-          </a>
-          <p className="text-sm text-muted-foreground line-clamp-2 mb-2 break-words">
-            {item.snippet}
-          </p>
-          <div className="flex gap-2 items-center flex-wrap">
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant={log.verification_status === 'verified' ? 'default' : 'ghost'}
-                  className="h-7 text-xs"
-                  onClick={() => updateVerificationStatus(log.id, 'verified')}
-                >
-                  <Check className="h-3 w-3 mr-1" />
-                  Verified
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Mark as verified</TooltipContent>
-            </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  size="sm"
-                  variant={log.verification_status === 'inaccurate' ? 'destructive' : 'ghost'}
-                  className="h-7 text-xs"
-                  onClick={() => updateVerificationStatus(log.id, 'inaccurate')}
-                >
-                  <X className="h-3 w-3 mr-1" />
-                  Inaccurate
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>Mark as inaccurate</TooltipContent>
-            </Tooltip>
-            {getVerificationBadge(log.verification_status)}
-          </div>
+            <Copy className="h-3 w-3 mr-1" />
+            Copy
+          </Button>
+          <Button
+            size="sm"
+            variant={log.verification_status === 'verified' ? 'default' : 'ghost'}
+            className="h-7 text-xs"
+            onClick={() => updateVerificationStatus(log.id, 'verified')}
+          >
+            <Check className="h-3 w-3 mr-1" />
+            Verified
+          </Button>
+          <Button
+            size="sm"
+            variant={log.verification_status === 'inaccurate' ? 'destructive' : 'ghost'}
+            className="h-7 text-xs"
+            onClick={() => updateVerificationStatus(log.id, 'inaccurate')}
+          >
+            <X className="h-3 w-3 mr-1" />
+            Inaccurate
+          </Button>
+          {getVerificationBadge(log.verification_status)}
         </div>
       </div>
     </div>
@@ -704,6 +746,8 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         const confirmedItems = log.data?.confirmedItems || [];
         const possibleItems = log.data?.possibleItems || [];
         const legacyItems = !log.data?.confirmedItems && log.data?.items ? log.data.items : [];
+        const queriesUsed = log.data?.queriesUsed || [];
+        const keywordsSearched = log.data?.searchInformation?.keywordsSearched || [];
         
         const hasConfirmed = confirmedItems.length > 0;
         const hasPossible = possibleItems.length > 0;
@@ -713,14 +757,50 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         
         return (
           <div key={log.id} className="space-y-6 overflow-hidden">
+            {/* Search summary header */}
+            {queriesUsed.length > 0 && (
+              <div className="bg-muted/30 rounded-lg p-3 mb-4">
+                <div className="flex items-center gap-2 mb-2">
+                  <Search className="h-4 w-4 text-primary" />
+                  <span className="text-sm font-medium">Google Dork Queries Executed</span>
+                </div>
+                <div className="flex flex-wrap gap-1">
+                  {queriesUsed.map((q: any, i: number) => (
+                    <Tooltip key={i}>
+                      <TooltipTrigger asChild>
+                        <Badge variant="outline" className="text-xs cursor-help">
+                          {q.description || q.type}
+                        </Badge>
+                      </TooltipTrigger>
+                      <TooltipContent className="max-w-sm">
+                        <p className="text-xs font-mono break-all">{q.query}</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  ))}
+                </div>
+                {keywordsSearched.length > 0 && (
+                  <div className="mt-2 flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Keywords searched:</span>
+                    {keywordsSearched.map((k: string, i: number) => (
+                      <Badge key={i} variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs">
+                        {k}
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+            
             {/* Confirmed Results */}
             {hasConfirmed && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-3">
                   <Shield className="h-5 w-5 text-green-500" />
-                  <h3 className="text-base font-medium text-green-400">Confirmed Matches ({confirmedItems.length})</h3>
+                  <h3 className="text-base font-medium text-green-600 dark:text-green-400">
+                    Confirmed Matches ({confirmedItems.length})
+                  </h3>
                 </div>
-                <div className="space-y-4">
+                <div className="space-y-0 bg-card rounded-lg p-4 border border-border">
                   {confirmedItems.map((item: any, idx: number) => renderWebResultItem(item, log, idx))}
                 </div>
               </div>
@@ -728,13 +808,15 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             
             {/* Possible Results */}
             {hasPossible && (
-              <div className="space-y-4">
-                <div className="flex items-center gap-2 flex-wrap">
+              <div className="space-y-2">
+                <div className="flex items-center gap-2 mb-3">
                   <AlertCircle className="h-5 w-5 text-yellow-500" />
-                  <h3 className="text-base font-medium text-yellow-400">Possible Matches ({possibleItems.length})</h3>
+                  <h3 className="text-base font-medium text-yellow-600 dark:text-yellow-400">
+                    Possible Matches ({possibleItems.length})
+                  </h3>
                   <span className="text-xs text-muted-foreground">— Requires manual verification</span>
                 </div>
-                <div className="space-y-4 opacity-80">
+                <div className="space-y-0 bg-card/50 rounded-lg p-4 border border-border/50 opacity-90">
                   {possibleItems.map((item: any, idx: number) => renderWebResultItem(item, log, `possible-${idx}`))}
                 </div>
               </div>
@@ -742,7 +824,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             
             {/* Legacy results (for backward compatibility) */}
             {hasLegacy && (
-              <div className="space-y-4">
+              <div className="space-y-0 bg-card rounded-lg p-4 border border-border">
                 {legacyItems.map((item: any, idx: number) => renderWebResultItem(item, log, idx))}
               </div>
             )}

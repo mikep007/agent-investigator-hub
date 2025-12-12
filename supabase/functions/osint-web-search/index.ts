@@ -40,81 +40,170 @@ function checkNameMatch(text: string, fullName: string): { exact: boolean; parti
   return { exact: false, partial: false };
 }
 
-// Build Google Dork queries for comprehensive OSINT
-function buildDorkQueries(name: string, location?: string, email?: string): { query: string; type: string; priority: number }[] {
-  const queries: { query: string; type: string; priority: number }[] = [];
+// Build Google Dork queries for comprehensive OSINT with keywords
+function buildDorkQueries(
+  name: string, 
+  location?: string, 
+  email?: string, 
+  phone?: string,
+  keywords?: string
+): { query: string; type: string; priority: number; description: string }[] {
+  const queries: { query: string; type: string; priority: number; description: string }[] = [];
   const quotedName = `"${name}"`;
   
-  // 1. BROAD GENERAL SEARCH - catches everything including .gov, .org, etc.
+  // Parse location for city/state
+  let city = '';
+  let state = '';
+  if (location && location !== 'provided') {
+    const locationParts = location.split(',').map(p => p.trim()).filter(p => p.length > 2);
+    city = locationParts[0] || '';
+    state = locationParts.length > 1 ? locationParts[1] : '';
+  }
+  
+  // Parse keywords into array
+  const keywordList = keywords 
+    ? keywords.split(',').map(k => k.trim()).filter(k => k.length > 1)
+    : [];
+  
+  // 1. COMBINED DORK: Name + Location + Keywords (highest priority)
+  if (keywordList.length > 0) {
+    const keywordQuery = keywordList.map(k => `"${k}"`).join(' ');
+    queries.push({
+      query: `${quotedName} ${city ? `"${city}"` : ''} ${state ? `"${state}"` : ''} ${keywordQuery}`,
+      type: 'keywords_combined',
+      priority: 1,
+      description: `Name + Location + Keywords: ${keywordList.join(', ')}`
+    });
+  }
+  
+  // 2. BROAD GENERAL SEARCH - catches everything including .gov, .org, etc.
   queries.push({
     query: quotedName,
     type: 'general',
-    priority: 1
+    priority: 1,
+    description: 'General name search'
   });
   
-  // 2. Location-specific search (high priority if location provided)
-  if (location && location !== 'provided') {
-    const locationParts = location.split(',').map(p => p.trim()).filter(p => p.length > 2);
-    const city = locationParts[0];
-    const state = locationParts.length > 1 ? locationParts[1] : '';
-    if (city) {
+  // 3. Location-specific search (high priority if location provided)
+  if (city) {
+    queries.push({
+      query: `${quotedName} "${city}"${state ? ` "${state}"` : ''}`,
+      type: 'location_specific',
+      priority: 1,
+      description: `Location-specific: ${city}${state ? `, ${state}` : ''}`
+    });
+  }
+  
+  // 4. Name + Phone number search
+  if (phone) {
+    const cleanPhone = phone.replace(/\D/g, '');
+    const formattedPhone = cleanPhone.length === 10 
+      ? `(${cleanPhone.slice(0,3)}) ${cleanPhone.slice(3,6)}-${cleanPhone.slice(6)}`
+      : phone;
+    queries.push({
+      query: `${quotedName} "${formattedPhone}" | "${cleanPhone}"`,
+      type: 'phone_combined',
+      priority: 1,
+      description: `Name + Phone: ${phone}`
+    });
+  }
+  
+  // 5. Name + Email search
+  if (email) {
+    queries.push({
+      query: `${quotedName} "${email}"`,
+      type: 'email_combined',
+      priority: 1,
+      description: `Name + Email: ${email}`
+    });
+  }
+  
+  // 6. Keywords only search (if keywords provided)
+  if (keywordList.length > 0) {
+    for (const keyword of keywordList.slice(0, 2)) {
       queries.push({
-        query: `${quotedName} "${city}"${state ? ` "${state}"` : ''}`,
-        type: 'location_specific',
-        priority: 1
+        query: `${quotedName} "${keyword}"`,
+        type: 'keyword_specific',
+        priority: 2,
+        description: `Keyword search: ${keyword}`
       });
     }
   }
   
-  // 3. Government & Official Sources
+  // 7. Government & Official Sources
   queries.push({
     query: `${quotedName} site:gov | site:edu | site:org`,
     type: 'official_sources',
-    priority: 2
+    priority: 2,
+    description: 'Government, Education, Organization sites'
   });
   
-  // 4. Social Media Profiles
+  // 8. Social Media Profiles
   queries.push({
     query: `${quotedName} site:linkedin.com | site:facebook.com | site:twitter.com | site:instagram.com`,
     type: 'social_media',
-    priority: 3
+    priority: 3,
+    description: 'Social media profiles'
   });
   
-  // 5. Profile Pages
+  // 9. Profile Pages
   queries.push({
     query: `${quotedName} inurl:profile | inurl:about | inurl:user`,
     type: 'profiles',
-    priority: 4
+    priority: 4,
+    description: 'Profile and about pages'
   });
   
-  // 6. People Finder Sites
+  // 10. People Finder Sites
   queries.push({
     query: `${quotedName} site:whitepages.com | site:spokeo.com | site:beenverified.com | site:truepeoplesearch.com`,
     type: 'people_finders',
-    priority: 5
+    priority: 5,
+    description: 'People finder websites'
   });
   
-  // 7. Documents (resumes, reports, PDFs)
+  // 11. Documents (resumes, reports, PDFs)
   queries.push({
     query: `${quotedName} filetype:pdf | filetype:doc | filetype:docx`,
     type: 'documents',
-    priority: 4
+    priority: 4,
+    description: 'Documents (PDF, DOC)'
   });
   
-  // 8. Email-related search
-  if (email) {
+  // 12. News & Articles
+  if (city || keywordList.length > 0) {
     queries.push({
-      query: `"${email}" | ${quotedName} email`,
-      type: 'email_mentions',
-      priority: 3
+      query: `${quotedName} ${city ? `"${city}"` : ''} site:news.google.com | site:newspapers.com | inurl:news`,
+      type: 'news',
+      priority: 3,
+      description: 'News articles and mentions'
     });
   }
   
-  // 9. Contact info patterns
+  // 13. Court/Legal Records
+  if (city || state) {
+    queries.push({
+      query: `${quotedName} ${state ? `"${state}"` : `"${city}"`} site:gov court | case | arrest | warrant`,
+      type: 'legal_records',
+      priority: 4,
+      description: 'Court and legal records'
+    });
+  }
+  
+  // 14. Business/Professional
+  queries.push({
+    query: `${quotedName} ${city ? `"${city}"` : ''} site:bbb.org | site:yelp.com | site:glassdoor.com | LLC | Inc | owner`,
+    type: 'business',
+    priority: 4,
+    description: 'Business and professional associations'
+  });
+  
+  // 15. Contact info patterns
   queries.push({
     query: `${quotedName} intext:"phone" | intext:"contact" | intext:"email"`,
     type: 'contact_info',
-    priority: 5
+    priority: 5,
+    description: 'Contact information mentions'
   });
   
   return queries;
@@ -142,6 +231,7 @@ Deno.serve(async (req) => {
   try {
     const { target, searchData } = await req.json();
     console.log('Web search for:', target);
+    console.log('Search data:', JSON.stringify(searchData));
 
     if (!GOOGLE_API_KEY || !GOOGLE_SEARCH_ENGINE_ID) {
       throw new Error('Google API credentials not configured');
@@ -150,19 +240,28 @@ Deno.serve(async (req) => {
     const searchName = searchData?.fullName || target;
     const location = searchData?.address;
     const email = searchData?.email;
+    const phone = searchData?.phone;
+    const keywords = searchData?.keywords;
     
-    // Build targeted dork queries
-    const dorkQueries = buildDorkQueries(searchName, location, email);
+    console.log('Building dork queries with keywords:', keywords);
     
-    // Execute top priority queries (increased to 5 for better coverage)
-    // Sort by priority and take top 5 different types
-    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 5);
+    // Build targeted dork queries including keywords
+    const dorkQueries = buildDorkQueries(searchName, location, email, phone, keywords);
     
-    console.log('Executing dork queries:', sortedQueries.map(q => q.type));
+    // Execute top priority queries (up to 6 for comprehensive coverage)
+    // Sort by priority and take top queries, prioritizing keyword queries
+    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 6);
+    
+    console.log('Executing dork queries:', sortedQueries.map(q => ({ type: q.type, desc: q.description })));
     
     const searchPromises = sortedQueries.map(q => 
       executeSearch(q.query, GOOGLE_API_KEY!, GOOGLE_SEARCH_ENGINE_ID!)
-        .then(result => ({ ...result, queryType: q.type, queryUsed: q.query }))
+        .then(result => ({ 
+          ...result, 
+          queryType: q.type, 
+          queryUsed: q.query,
+          queryDescription: q.description 
+        }))
     );
     
     const searchResults = await Promise.all(searchPromises);
@@ -171,6 +270,11 @@ Deno.serve(async (req) => {
     const seenUrls = new Set<string>();
     const confirmedResults: any[] = [];
     const possibleResults: any[] = [];
+    
+    // Parse keywords for matching
+    const keywordList = keywords 
+      ? keywords.split(',').map((k: string) => k.trim().toLowerCase()).filter((k: string) => k.length > 1)
+      : [];
     
     for (const result of searchResults) {
       if (!result || !result.items) continue;
@@ -191,30 +295,72 @@ Deno.serve(async (req) => {
           );
         }
         
+        // Check keyword matches
+        const keywordMatches: string[] = [];
+        for (const keyword of keywordList) {
+          if (textToCheck.toLowerCase().includes(keyword)) {
+            keywordMatches.push(keyword);
+          }
+        }
+        
+        // Check phone presence
+        let phonePresent = false;
+        if (phone) {
+          const cleanPhone = phone.replace(/\D/g, '');
+          phonePresent = textToCheck.includes(cleanPhone) || 
+                         textToCheck.includes(phone) ||
+                         (cleanPhone.length >= 7 && textToCheck.includes(cleanPhone.slice(-7)));
+        }
+        
+        // Check email presence
+        let emailPresent = false;
+        if (email) {
+          emailPresent = textToCheck.toLowerCase().includes(email.toLowerCase());
+        }
+        
         // Calculate confidence based on match quality and source type
-        let confidenceScore = 0.5;
+        let confidenceScore = 0.4;
         
         // Boost for exact name match
         if (nameMatch.exact) {
-          confidenceScore = 0.75;
+          confidenceScore = 0.65;
         } else if (nameMatch.partial) {
           confidenceScore = 0.35;
         }
         
-        // Boost for location co-occurrence
+        // Boost for location co-occurrence (+15%)
         if (locationPresent) {
           confidenceScore += 0.15;
         }
         
+        // Boost for keyword matches (+10% per keyword, max +20%)
+        if (keywordMatches.length > 0) {
+          confidenceScore += Math.min(0.20, keywordMatches.length * 0.10);
+        }
+        
+        // Boost for phone match (+15%)
+        if (phonePresent) {
+          confidenceScore += 0.15;
+        }
+        
+        // Boost for email match (+15%)
+        if (emailPresent) {
+          confidenceScore += 0.15;
+        }
+        
         // Boost for high-value source types
-        if (result.queryType === 'social_media') {
+        if (result.queryType === 'keywords_combined') {
           confidenceScore += 0.10;
+        } else if (result.queryType === 'social_media') {
+          confidenceScore += 0.08;
+        } else if (result.queryType === 'official_sources') {
+          confidenceScore += 0.08;
         } else if (result.queryType === 'people_finders') {
           confidenceScore += 0.05;
         }
         
-        // Cap at 0.95
-        confidenceScore = Math.min(0.95, confidenceScore);
+        // Cap at 0.98
+        confidenceScore = Math.min(0.98, confidenceScore);
         
         const processedItem = {
           title: item.title || '',
@@ -224,7 +370,12 @@ Deno.serve(async (req) => {
           confidenceScore,
           isExactMatch: nameMatch.exact,
           hasLocation: locationPresent,
-          sourceType: result.queryType
+          hasKeywords: keywordMatches.length > 0,
+          keywordMatches,
+          hasPhone: phonePresent,
+          hasEmail: emailPresent,
+          sourceType: result.queryType,
+          queryDescription: result.queryDescription
         };
         
         if (confidenceScore >= 0.6) {
@@ -242,15 +393,21 @@ Deno.serve(async (req) => {
     const results = {
       searchInformation: {
         totalResults: String(confirmedResults.length + possibleResults.length),
-        queriesExecuted: sortedQueries.map(q => q.type)
+        queriesExecuted: sortedQueries.map(q => q.type),
+        keywordsSearched: keywordList
       },
       confirmedItems: confirmedResults,
       possibleItems: possibleResults,
       items: [...confirmedResults, ...possibleResults],
-      queriesUsed: sortedQueries.map(q => ({ type: q.type, query: q.query }))
+      queriesUsed: sortedQueries.map(q => ({ 
+        type: q.type, 
+        query: q.query,
+        description: q.description 
+      }))
     };
     
     console.log('Web search complete:', confirmedResults.length, 'confirmed,', possibleResults.length, 'possible');
+    console.log('Keywords matched in results:', keywordList.length > 0 ? 'yes' : 'none provided');
 
     return new Response(JSON.stringify(results), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
