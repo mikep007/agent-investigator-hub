@@ -2022,12 +2022,122 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           <TabsContent value="breaches" className="flex-1 mt-0 px-6">
             <ScrollArea className="h-[550px]">
               <div className="space-y-6 pb-4 pr-4">
-                {breachLogs.map((log) => (
-                  <BreachResults key={log.id} data={log.data} />
-                ))}
-                {breachLogs.length === 0 && (
+                {breachLogs.length > 0 ? (
+                  <>
+                    {/* Organize breaches by search type */}
+                    {(() => {
+                      const emailBreaches = breachLogs.filter(log => 
+                        log.agent_type === 'Leakcheck' && log.data?.type === 'email'
+                      );
+                      const usernameBreaches = breachLogs.filter(log => 
+                        log.agent_type === 'Leakcheck_username' || log.data?.type === 'login' || log.data?.type === 'username'
+                      );
+                      const phoneBreaches = breachLogs.filter(log => 
+                        log.agent_type === 'Leakcheck_phone' || log.data?.type === 'phone'
+                      );
+                      
+                      const totalBreaches = breachLogs.reduce((sum, log) => sum + (log.data?.found || 0), 0);
+                      
+                      return (
+                        <>
+                          {/* Summary Header */}
+                          <div className="bg-card border border-border rounded-lg p-4">
+                            <div className="flex items-center justify-between mb-4">
+                              <h3 className="text-lg font-semibold flex items-center gap-2">
+                                <Shield className="h-5 w-5 text-primary" />
+                                Breach Intelligence Summary
+                              </h3>
+                              <Badge 
+                                variant={totalBreaches > 0 ? "destructive" : "secondary"}
+                                className="text-sm px-3 py-1"
+                              >
+                                {totalBreaches} Total Breaches Found
+                              </Badge>
+                            </div>
+                            
+                            {/* Quick Stats */}
+                            <div className="grid grid-cols-3 gap-4">
+                              <div className="text-center p-3 bg-muted/50 rounded-lg border">
+                                <Mail className="h-5 w-5 mx-auto mb-1 text-blue-500" />
+                                <p className="text-2xl font-bold">{emailBreaches.reduce((sum, log) => sum + (log.data?.found || 0), 0)}</p>
+                                <p className="text-xs text-muted-foreground">Email Breaches</p>
+                              </div>
+                              <div className="text-center p-3 bg-muted/50 rounded-lg border">
+                                <User className="h-5 w-5 mx-auto mb-1 text-purple-500" />
+                                <p className="text-2xl font-bold">{usernameBreaches.reduce((sum, log) => sum + (log.data?.found || 0), 0)}</p>
+                                <p className="text-xs text-muted-foreground">Username Breaches</p>
+                              </div>
+                              <div className="text-center p-3 bg-muted/50 rounded-lg border">
+                                <Phone className="h-5 w-5 mx-auto mb-1 text-green-500" />
+                                <p className="text-2xl font-bold">{phoneBreaches.reduce((sum, log) => sum + (log.data?.found || 0), 0)}</p>
+                                <p className="text-xs text-muted-foreground">Phone Breaches</p>
+                              </div>
+                            </div>
+                          </div>
+                          
+                          {/* Email Breaches Section */}
+                          {emailBreaches.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2 border-b pb-2">
+                                <Mail className="h-4 w-4 text-blue-500" />
+                                <h4 className="text-base font-medium">Email Address Breaches</h4>
+                                <Badge variant="outline" className="ml-auto">
+                                  {emailBreaches.length} search{emailBreaches.length > 1 ? 'es' : ''}
+                                </Badge>
+                              </div>
+                              {emailBreaches.map((log) => (
+                                <BreachResults key={log.id} data={log.data} />
+                              ))}
+                            </div>
+                          )}
+                          
+                          {/* Username Breaches Section */}
+                          {usernameBreaches.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2 border-b pb-2">
+                                <User className="h-4 w-4 text-purple-500" />
+                                <h4 className="text-base font-medium">Username Breaches</h4>
+                                <Badge variant="outline" className="ml-auto">
+                                  {usernameBreaches.length} search{usernameBreaches.length > 1 ? 'es' : ''}
+                                </Badge>
+                              </div>
+                              {usernameBreaches.map((log) => (
+                                <BreachResults key={log.id} data={log.data} />
+                              ))}
+                            </div>
+                          )}
+                          
+                          {/* Phone Breaches Section */}
+                          {phoneBreaches.length > 0 && (
+                            <div className="space-y-3">
+                              <div className="flex items-center gap-2 border-b pb-2">
+                                <Phone className="h-4 w-4 text-green-500" />
+                                <h4 className="text-base font-medium">Phone Number Breaches</h4>
+                                <Badge variant="outline" className="ml-auto">
+                                  {phoneBreaches.length} search{phoneBreaches.length > 1 ? 'es' : ''}
+                                </Badge>
+                              </div>
+                              {phoneBreaches.map((log) => (
+                                <BreachResults key={log.id} data={log.data} />
+                              ))}
+                            </div>
+                          )}
+                          
+                          {/* No categorized breaches - show all */}
+                          {emailBreaches.length === 0 && usernameBreaches.length === 0 && phoneBreaches.length === 0 && (
+                            breachLogs.map((log) => (
+                              <BreachResults key={log.id} data={log.data} />
+                            ))
+                          )}
+                        </>
+                      );
+                    })()}
+                  </>
+                ) : (
                   <div className="text-center text-muted-foreground py-8">
-                    No breach data available. Include an email address, phone number, or username in your search to check for data breaches.
+                    <Shield className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="mb-2">No breach data available.</p>
+                    <p className="text-sm">Include an email address, phone number, or username in your search to check for data breaches.</p>
                   </div>
                 )}
               </div>
