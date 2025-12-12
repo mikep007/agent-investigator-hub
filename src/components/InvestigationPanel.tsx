@@ -601,6 +601,12 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   // Court records
   const courtLogs = filteredLogs.filter(log => log.agent_type === 'Court_records');
 
+  // Username results (Sherlock-based)
+  const usernameLogs = filteredLogs.filter(log => 
+    log.agent_type === 'Sherlock' || 
+    log.agent_type === 'Sherlock_from_email'
+  );
+
   // Relatives - extract from People_search results
   const relativesLogs = filteredLogs.filter(log => {
     if (log.agent_type !== 'People_search') return false;
@@ -749,22 +755,25 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   const renderSocialResults = (filteredLogs: LogEntry[]) => (
     <>
       {filteredLogs.map((log) => {
-        // Sherlock Results
-        if (log.agent_type === 'Sherlock' && log.data?.foundPlatforms?.length > 0) {
+        // Sherlock Results - handle both foundPlatforms and profileLinks formats
+        const sherlockPlatforms = log.data?.foundPlatforms || log.data?.profileLinks || [];
+        if ((log.agent_type === 'Sherlock' || log.agent_type === 'Sherlock_from_email') && sherlockPlatforms.length > 0) {
           return (
             <div key={log.id} className="space-y-4">
               <div className="flex items-center gap-2 mb-2">
                 <Shield className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-medium">Username found on {log.data.foundPlatforms.length} platforms</h3>
+                <h3 className="text-base font-medium">
+                  Username "{log.data.username}" found on {sherlockPlatforms.length} platforms
+                </h3>
               </div>
-              {log.data.foundPlatforms.map((platform: any, idx: number) => (
+              {sherlockPlatforms.map((platform: any, idx: number) => (
                 <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
                   <div className="flex items-start gap-2">
                     <div className="flex-shrink-0 mt-1">
-                      {getPlatformIcon(platform.name)}
+                      <PlatformLogo platform={platform.name || platform.platform || 'unknown'} />
                     </div>
                     <div className="flex-1 min-w-0">
-                      <div className="text-sm text-muted-foreground mb-1">{platform.name}</div>
+                      <div className="text-sm text-muted-foreground mb-1">{platform.name || platform.platform}</div>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <a
@@ -774,7 +783,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                             className="block group-hover:underline"
                           >
                             <h3 className="text-xl text-primary line-clamp-1 mb-1">
-                              Profile on {platform.name}
+                              Profile on {platform.name || platform.platform}
                             </h3>
                           </a>
                         </TooltipTrigger>
@@ -839,17 +848,17 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           );
         }
 
-        // Holehe Results
-        if (log.agent_type === 'Holehe' && log.data?.accountsFound > 0) {
+        // Holehe Results - handle both allResults and registeredOn formats
+        const holeheResults = log.data?.allResults || log.data?.registeredOn || [];
+        const holeheFound = holeheResults.filter((r: any) => r.exists !== false);
+        if (log.agent_type === 'Holehe' && holeheFound.length > 0) {
           return (
             <div key={log.id} className="space-y-4">
               <div className="flex items-center gap-2 mb-2">
                 <Mail className="h-5 w-5 text-primary" />
-                <h3 className="text-base font-medium">Email found on {log.data.accountsFound} platforms</h3>
+                <h3 className="text-base font-medium">Email found on {holeheFound.length} platforms</h3>
               </div>
-              {log.data.allResults
-                .filter((r: any) => r.exists)
-                .map((result: any, idx: number) => (
+              {holeheFound.map((result: any, idx: number) => (
                   <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
                     <div className="flex items-start gap-2">
                       <div className="flex-shrink-0 mt-1">
@@ -1872,6 +1881,19 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                   <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{courtLogs.length}</Badge>
                 </TabsTrigger>
                 <TabsTrigger 
+                  value="usernames" 
+                  className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                >
+                  <User className="h-3.5 w-3.5 mr-1.5" />
+                  Usernames
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">
+                    {usernameLogs.reduce((acc, log) => {
+                      const platforms = log.data?.profileLinks || log.data?.foundPlatforms || [];
+                      return acc + platforms.length;
+                    }, 0)}
+                  </Badge>
+                </TabsTrigger>
+                <TabsTrigger 
                   value="relatives" 
                   className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
                 >
@@ -2184,6 +2206,69 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                     <Scale className="h-12 w-12 mx-auto mb-4 opacity-50" />
                     <p className="mb-2">No court records found.</p>
                     <p className="text-sm">Include a full name in your search to check criminal and civil court records.</p>
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          <TabsContent value="usernames" className="flex-1 mt-0 px-6">
+            <ScrollArea className="h-[550px]">
+              <div className="space-y-6 pb-4 pr-4">
+                {usernameLogs.length > 0 ? (
+                  usernameLogs.map((log) => {
+                    const platforms = log.data?.profileLinks || log.data?.foundPlatforms || [];
+                    if (platforms.length === 0) return null;
+                    
+                    return (
+                      <div key={log.id} className="space-y-4">
+                        <div className="flex items-center gap-2 mb-2">
+                          <User className="h-5 w-5 text-primary" />
+                          <h3 className="text-base font-medium">
+                            Username "{log.data.username}" found on {platforms.length} platforms
+                          </h3>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                          {platforms.map((platform: any, idx: number) => (
+                            <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
+                              <div className="flex items-start gap-3">
+                                <div className="flex-shrink-0 mt-0.5">
+                                  <PlatformLogo platform={platform.name || platform.platform || 'unknown'} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm font-medium mb-1">{platform.name || platform.platform}</div>
+                                  <a
+                                    href={platform.url}
+                                    target="_blank"
+                                    rel="noopener noreferrer nofollow"
+                                    className="text-sm text-primary hover:underline truncate block"
+                                  >
+                                    {platform.url}
+                                  </a>
+                                </div>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2"
+                                  onClick={() => {
+                                    navigator.clipboard.writeText(platform.url);
+                                    toast({ title: "Link copied to clipboard" });
+                                  }}
+                                >
+                                  <Copy className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    <User className="h-12 w-12 mx-auto mb-4 opacity-50" />
+                    <p className="mb-2">No username search results.</p>
+                    <p className="text-sm">Include an email or username in your search to discover accounts.</p>
                   </div>
                 )}
               </div>

@@ -34,42 +34,48 @@ const VisualTimeline = ({ findings }: VisualTimelineProps) => {
     findings.forEach(finding => {
       const data = finding.data;
 
-      // Sherlock results
-      if (finding.agent_type === 'Sherlock' && data.foundPlatforms) {
-        data.foundPlatforms.forEach((p: any) => {
+      // Sherlock results - handle both foundPlatforms and profileLinks formats
+      if ((finding.agent_type === 'Sherlock' || finding.agent_type === 'Sherlock_from_email')) {
+        const platforms = data.foundPlatforms || data.profileLinks || [];
+        platforms.forEach((p: any) => {
+          // Try to extract actual creation date from platform data
+          const createdAt = p.createdAt || p.created_at || p.joinDate || p.memberSince || null;
           items.push({
-            platform: p.name,
-            createdAt: finding.created_at,
+            platform: p.name || p.platform || 'Unknown',
+            createdAt: createdAt, // Use actual date if available, null otherwise
             type: 'account',
             url: p.url,
-            description: `Created Account (${p.name})`,
+            description: `Account on ${p.name || p.platform || 'platform'}`,
           });
         });
       }
 
       // Holehe results
-      if (finding.agent_type === 'Holehe' && data.allResults) {
-        data.allResults
-          .filter((r: any) => r.exists)
+      if (finding.agent_type === 'Holehe' && (data.allResults || data.registeredOn)) {
+        const results = data.allResults || data.registeredOn || [];
+        results
+          .filter((r: any) => r.exists !== false)
           .forEach((r: any) => {
             items.push({
               platform: r.name || r.domain,
-              createdAt: finding.created_at,
+              createdAt: null, // Holehe doesn't provide creation dates
               type: 'account',
-              url: `https://${r.domain}`,
-              description: `Created Account (${r.name || r.domain})`,
+              url: r.url || `https://${r.domain}`,
+              description: `Account on ${r.name || r.domain}`,
             });
           });
       }
 
-      // Breach results
-      if ((finding.agent_type === 'Breach' || finding.source?.includes('LeakCheck')) && data.sources) {
-        data.sources.forEach((source: any) => {
+      // Breach results - use actual breach dates
+      if ((finding.agent_type?.toLowerCase().includes('leakcheck') || finding.agent_type === 'Breach')) {
+        const sources = data.sources || [];
+        sources.forEach((source: any) => {
+          const breachDate = source.date || source.breach_date || source.breachDate;
           items.push({
             platform: source.name || source.source,
-            createdAt: source.date || source.breach_date || finding.created_at,
+            createdAt: breachDate || null,
             type: 'breach',
-            description: `Data Breach`,
+            description: `Data Breach${breachDate ? '' : ' (date unknown)'}`,
           });
         });
       }
@@ -79,17 +85,33 @@ const VisualTimeline = ({ findings }: VisualTimelineProps) => {
         data.profiles
           .filter((p: any) => p.exists)
           .forEach((p: any) => {
+            const createdAt = p.createdAt || p.created_at || p.joinDate || null;
             items.push({
               platform: p.platform,
-              createdAt: finding.created_at,
+              createdAt: createdAt,
               type: 'account',
               url: p.url,
-              description: `Created Account (${p.platform})`,
+              description: `Account on ${p.platform}`,
             });
           });
       }
+
+      // Instagram/Toutatis/Instaloader results
+      if (finding.agent_type?.includes('Toutatis') || finding.agent_type?.includes('Instaloader')) {
+        const profile = data.profileData || data.extractedData || {};
+        if (profile.username || data.username) {
+          items.push({
+            platform: 'Instagram',
+            createdAt: null, // Instagram doesn't expose creation dates
+            type: 'account',
+            url: data.profileUrl || `https://instagram.com/${profile.username || data.username}`,
+            description: `Account on Instagram`,
+          });
+        }
+      }
     });
 
+    // Filter out items without dates for the timeline chart, but keep them for the table
     return items;
   }, [findings]);
 

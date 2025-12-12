@@ -74,16 +74,38 @@ const ResultsSummaryBar = ({ findings, targetName }: ResultsSummaryBarProps) => 
       if (data.city && typeof data.city === 'string') stats.locations.add(data.city);
       if (data.state && typeof data.state === 'string') stats.locations.add(data.state);
 
-      // Track dates
-      const createdAt = finding.created_at;
-      if (createdAt) {
-        if (!stats.firstSeen || createdAt < stats.firstSeen) {
-          stats.firstSeen = createdAt;
-        }
-        if (!stats.lastSeen || createdAt > stats.lastSeen) {
-          stats.lastSeen = createdAt;
-        }
+      // Track dates - look for actual profile creation dates, not finding creation
+      // Check for breach dates
+      if (finding.agent_type?.toLowerCase().includes('leakcheck') && data.sources) {
+        data.sources.forEach((source: any) => {
+          const breachDate = source.date || source.breach_date || source.breachDate;
+          if (breachDate) {
+            const parsed = new Date(breachDate);
+            if (!isNaN(parsed.getTime())) {
+              if (!stats.firstSeen || parsed.toISOString() < stats.firstSeen) {
+                stats.firstSeen = parsed.toISOString();
+              }
+              if (!stats.lastSeen || parsed.toISOString() > stats.lastSeen) {
+                stats.lastSeen = parsed.toISOString();
+              }
+            }
+          }
+        });
       }
+      
+      // Check platform data for creation dates
+      const platforms = data.profileLinks || data.foundPlatforms || [];
+      platforms.forEach((p: any) => {
+        const createdAt = p.createdAt || p.created_at || p.joinDate || p.memberSince;
+        if (createdAt) {
+          const parsed = new Date(createdAt);
+          if (!isNaN(parsed.getTime())) {
+            if (!stats.firstSeen || parsed.toISOString() < stats.firstSeen) {
+              stats.firstSeen = parsed.toISOString();
+            }
+          }
+        }
+      });
     });
 
     return stats;
@@ -186,18 +208,22 @@ const ResultsSummaryBar = ({ findings, targetName }: ResultsSummaryBarProps) => 
         <div className="flex flex-col items-start gap-1 px-4 py-3 min-w-[160px] border-r border-border">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Calendar className="h-4 w-4" />
-            <span className="text-sm font-medium">First Seen (1)</span>
+            <span className="text-sm font-medium">First Seen</span>
           </div>
-          <span className="text-xs mt-1">{formatDate(stats.firstSeen)}</span>
+          <span className="text-xs mt-1">
+            {stats.firstSeen ? formatDate(stats.firstSeen) : 'Unknown'}
+          </span>
         </div>
 
         {/* Last Seen */}
         <div className="flex flex-col items-start gap-1 px-4 py-3 min-w-[160px]">
           <div className="flex items-center gap-2 text-muted-foreground">
             <Calendar className="h-4 w-4" />
-            <span className="text-sm font-medium">Last Seen (1)</span>
+            <span className="text-sm font-medium">Last Seen</span>
           </div>
-          <span className="text-xs mt-1">{formatDate(stats.lastSeen)}</span>
+          <span className="text-xs mt-1">
+            {stats.lastSeen ? formatDate(stats.lastSeen) : 'Unknown'}
+          </span>
         </div>
       </div>
     </div>
