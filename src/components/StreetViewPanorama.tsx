@@ -17,7 +17,15 @@ declare global {
 }
 
 const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewPanoramaProps) => {
-  console.log("StreetViewPanorama rendered with:", { latitude, longitude, staticImageUrl });
+  // Validate coordinates
+  const hasValidCoords = typeof latitude === 'number' && 
+                         typeof longitude === 'number' && 
+                         !isNaN(latitude) && 
+                         !isNaN(longitude) &&
+                         latitude >= -90 && latitude <= 90 &&
+                         longitude >= -180 && longitude <= 180;
+  
+  console.log("StreetViewPanorama rendered with:", { latitude, longitude, staticImageUrl, hasValidCoords });
   
   const panoramaRef = useRef<HTMLDivElement>(null);
   // Default to interactive 360° view since Static API may not be enabled
@@ -27,6 +35,16 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
   const [error, setError] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [staticError, setStaticError] = useState(false);
+
+  // If coordinates are invalid, show error state immediately
+  if (!hasValidCoords) {
+    return (
+      <div className="p-4 rounded-lg border border-border bg-muted text-sm text-muted-foreground">
+        <p>Invalid or missing coordinates for Street View.</p>
+        <p className="text-xs mt-1">Lat: {latitude}, Lon: {longitude}</p>
+      </div>
+    );
+  }
 
   const loadGoogleMapsScript = () => {
     // Check if Google Maps is already loaded (from index.html)

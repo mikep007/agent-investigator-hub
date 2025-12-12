@@ -130,12 +130,26 @@ const AddressResults = ({ data, confidenceScore }: AddressResultsProps) => {
           <MapPin className="h-4 w-4 text-primary" />
           Street View
         </h4>
-        {data.locations?.[0] && (
+        {data.locations?.[0]?.latitude && data.locations?.[0]?.longitude ? (
           <StreetViewPanorama
             latitude={data.locations[0].latitude}
             longitude={data.locations[0].longitude}
             staticImageUrl={data.streetViewUrl}
           />
+        ) : (
+          <div className="p-4 rounded-lg border border-border bg-muted text-sm text-muted-foreground">
+            <p>Location coordinates not available for Street View preview.</p>
+            {data.query && (
+              <a
+                href={`https://www.google.com/maps/search/${encodeURIComponent(data.query)}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary hover:underline mt-2 inline-block"
+              >
+                Search on Google Maps →
+              </a>
+            )}
+          </div>
         )}
       </div>
 
