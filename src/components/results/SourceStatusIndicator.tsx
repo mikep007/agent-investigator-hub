@@ -1,5 +1,6 @@
 import { Badge } from "@/components/ui/badge";
-import { 
+import { Button } from "@/components/ui/button";
+import {
   CheckCircle2, 
   XCircle, 
   ShieldAlert, 
@@ -38,7 +39,8 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
       const agentType = finding.agent_type;
 
       // People Search results (TruePeopleSearch, FastPeopleSearch)
-      if (agentType === 'PeopleSearch') {
+      if (agentType === 'People_search' || agentType === 'PeopleSearch' || agentType === 'People_search_phone') {
+        // Check for blocked status in results
         if (data.results && Array.isArray(data.results)) {
           data.results.forEach((result: any) => {
             const sourceName = result.source || 'People Search';
@@ -62,6 +64,28 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
           });
         }
         
+        // Check for blocked indicators in note/success fields
+        if (data.note && (data.note.includes('CAPTCHA') || data.note.includes('blocked'))) {
+          if (!seenSources.has('TruePeopleSearch')) {
+            seenSources.add('TruePeopleSearch');
+            statuses.push({
+              name: 'TruePeopleSearch',
+              status: 'blocked',
+              captchaType: 'CAPTCHA',
+              note: 'Blocked by bot protection',
+            });
+          }
+          if (!seenSources.has('FastPeopleSearch')) {
+            seenSources.add('FastPeopleSearch');
+            statuses.push({
+              name: 'FastPeopleSearch',
+              status: 'blocked',
+              captchaType: 'HTTP Block',
+              note: 'Connection refused - use manual links',
+            });
+          }
+        }
+        
         // Check merged results for blocked indicators
         if (data.merged) {
           const merged = data.merged;
@@ -83,6 +107,19 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
               });
             }
           }
+        }
+        
+        // If we have manualVerificationUrls, show as partial success with manual option
+        if (data.manualVerificationUrls && !seenSources.has('People Search')) {
+          seenSources.add('People Search');
+          const hasResults = data.results?.some((r: any) => r.phones?.length || r.emails?.length);
+          statuses.push({
+            name: 'People Search',
+            status: hasResults ? 'success' : 'blocked',
+            note: hasResults ? undefined : 'Use manual verification links',
+            resultsCount: hasResults ? data.results?.reduce((acc: number, r: any) => 
+              acc + (r.phones?.length || 0) + (r.emails?.length || 0), 0) : undefined,
+          });
         }
       }
 
