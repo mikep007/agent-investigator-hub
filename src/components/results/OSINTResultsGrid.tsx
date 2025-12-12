@@ -2,6 +2,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { FindingData } from "./types";
 import OSINTPlatformCard from "./OSINTPlatformCard";
 import ResultsSummaryBar from "./ResultsSummaryBar";
+import SourceStatusIndicator from "./SourceStatusIndicator";
 import VisualTimeline from "./VisualTimeline";
 import { useMemo } from "react";
 
@@ -158,6 +159,9 @@ const OSINTResultsGrid = ({
       <div className="space-y-6 p-1">
         {/* Summary Stats Bar */}
         <ResultsSummaryBar findings={findings} targetName={targetName} />
+
+        {/* Source Status Indicator */}
+        <SourceStatusIndicator findings={findings} />
 
         {/* Visual Timeline */}
         <VisualTimeline findings={findings} />
