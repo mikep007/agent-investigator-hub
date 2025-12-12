@@ -64,6 +64,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   const [retrying, setRetrying] = useState<string | null>(null);
   const [searchData, setSearchData] = useState<SearchData | null>(null);
   const [failedAgents, setFailedAgents] = useState<string[]>([]);
+  const [aiSuggestedPersons, setAiSuggestedPersons] = useState<string[]>([]);
   const { toast } = useToast();
 
   useEffect(() => {
@@ -117,6 +118,15 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 address: fData.searchContext.hasAddress ? 'provided' : undefined,
                 keywords: fData.searchContext.keywords?.join(', '),
               });
+            }
+          }
+          
+          // Extract AI-suggested persons from analysis findings
+          const analysisFinding = findings.find(f => f.agent_type === 'Analysis');
+          if (analysisFinding) {
+            const analysisData = analysisFinding.data as any;
+            if (analysisData?.relatedPersons) {
+              setAiSuggestedPersons(analysisData.relatedPersons);
             }
           }
         }
@@ -2006,6 +2016,8 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 }))}
                 targetName={searchData?.fullName}
                 investigationId={investigationId || undefined}
+                inputKeywords={searchData?.keywords?.split(',').map(k => k.trim()).filter(Boolean) || []}
+                aiSuggestedPersons={aiSuggestedPersons}
                 onVerifyPlatform={(url, status) => {
                   // Find the log that contains this platform
                   const log = logs.find(l => {
