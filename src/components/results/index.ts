@@ -1,4 +1,5 @@
 export { default as ResultsDisplay } from './ResultsDisplay';
+export { default as SourceStatusIndicator } from './SourceStatusIndicator';
 export { default as ViewModeToggle } from './ViewModeToggle';
 export { default as PersonProfileCard } from './PersonProfileCard';
 export { default as PlatformGrid } from './PlatformGrid';
