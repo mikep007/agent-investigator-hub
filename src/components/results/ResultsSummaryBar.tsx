@@ -51,13 +51,28 @@ const ResultsSummaryBar = ({ findings, targetName }: ResultsSummaryBarProps) => 
         });
       }
 
-      // Extract locations
+      // Extract locations - handle both string and object formats
       if (data.locations) {
-        data.locations.forEach((loc: string) => stats.locations.add(loc));
+        data.locations.forEach((loc: any) => {
+          if (typeof loc === 'string') {
+            stats.locations.add(loc);
+          } else if (loc && typeof loc === 'object') {
+            // Handle location objects with displayName or address
+            const locationStr = loc.displayName || loc.address || loc.city || 
+                               (loc.city && loc.state ? `${loc.city}, ${loc.state}` : null);
+            if (locationStr && typeof locationStr === 'string') {
+              stats.locations.add(locationStr);
+            }
+          }
+        });
       }
-      if (data.location) stats.locations.add(data.location);
-      if (data.city) stats.locations.add(data.city);
-      if (data.state) stats.locations.add(data.state);
+      // Handle individual location fields
+      if (data.location && typeof data.location === 'string') stats.locations.add(data.location);
+      if (data.location && typeof data.location === 'object' && data.location.displayName) {
+        stats.locations.add(data.location.displayName);
+      }
+      if (data.city && typeof data.city === 'string') stats.locations.add(data.city);
+      if (data.state && typeof data.state === 'string') stats.locations.add(data.state);
 
       // Track dates
       const createdAt = finding.created_at;
