@@ -49,7 +49,11 @@ function buildDorkQueries(
   keywords?: string
 ): { query: string; type: string; priority: number; description: string }[] {
   const queries: { query: string; type: string; priority: number; description: string }[] = [];
-  const quotedName = `"${name}"`;
+  
+  // Handle multiple names separated by / or &
+  const names = name.split(/[\/&]/).map(n => n.trim()).filter(n => n.length > 1);
+  const primaryName = names[0] || name;
+  const quotedPrimary = `"${primaryName}"`;
   
   // Parse location for city/state
   let city = '';
@@ -65,152 +69,131 @@ function buildDorkQueries(
     ? keywords.split(',').map(k => k.trim()).filter(k => k.length > 1)
     : [];
   
-  // 1. COMBINED DORK: Name + Location + Keywords (highest priority)
-  if (keywordList.length > 0) {
-    const keywordQuery = keywordList.map(k => `"${k}"`).join(' ');
-    queries.push({
-      query: `${quotedName} ${city ? `"${city}"` : ''} ${state ? `"${state}"` : ''} ${keywordQuery}`,
-      type: 'keywords_combined',
-      priority: 1,
-      description: `Name + Location + Keywords: ${keywordList.join(', ')}`
-    });
+  // Add secondary names as keywords
+  if (names.length > 1) {
+    for (let i = 1; i < names.length; i++) {
+      keywordList.push(names[i]);
+    }
   }
   
-  // 2. BROAD GENERAL SEARCH - catches everything including .gov, .org, etc.
+  // 1. SIMPLE broad name search - MOST IMPORTANT for getting results
   queries.push({
-    query: quotedName,
+    query: quotedPrimary,
     type: 'general',
     priority: 1,
     description: 'General name search'
   });
   
-  // 3. Location-specific search (high priority if location provided)
+  // 2. Name + City only (simple, likely to get results)
   if (city) {
     queries.push({
-      query: `${quotedName} "${city}"${state ? ` "${state}"` : ''}`,
-      type: 'location_specific',
+      query: `${quotedPrimary} ${city}`,
+      type: 'location_city',
       priority: 1,
-      description: `Location-specific: ${city}${state ? `, ${state}` : ''}`
+      description: `Name + City: ${city}`
     });
   }
   
-  // 4. Name + Phone number search
-  if (phone) {
+  // 3. Name + State only
+  if (state) {
+    queries.push({
+      query: `${quotedPrimary} ${state}`,
+      type: 'location_state',
+      priority: 2,
+      description: `Name + State: ${state}`
+    });
+  }
+  
+  // 4. Name + Full location (city, state)
+  if (city && state) {
+    queries.push({
+      query: `${quotedPrimary} "${city}" "${state}"`,
+      type: 'location_full',
+      priority: 2,
+      description: `Name + Full location: ${city}, ${state}`
+    });
+  }
+  
+  // 5. Name + Each keyword separately (more likely to get results than combining all)
+  for (const keyword of keywordList.slice(0, 3)) {
+    queries.push({
+      query: `${quotedPrimary} "${keyword}"`,
+      type: 'keyword_specific',
+      priority: 2,
+      description: `Keyword: ${keyword}`
+    });
+  }
+  
+  // 6. Name + Email (direct match)
+  if (email && email !== 'provided') {
+    queries.push({
+      query: `"${email}"`,
+      type: 'email_direct',
+      priority: 1,
+      description: `Email search: ${email}`
+    });
+  }
+  
+  // 7. Name + Phone (digits only for best match)
+  if (phone && phone !== 'provided') {
     const cleanPhone = phone.replace(/\D/g, '');
-    const formattedPhone = cleanPhone.length === 10 
-      ? `(${cleanPhone.slice(0,3)}) ${cleanPhone.slice(3,6)}-${cleanPhone.slice(6)}`
-      : phone;
-    queries.push({
-      query: `${quotedName} "${formattedPhone}" | "${cleanPhone}"`,
-      type: 'phone_combined',
-      priority: 1,
-      description: `Name + Phone: ${phone}`
-    });
-  }
-  
-  // 5. Name + Email search
-  if (email) {
-    queries.push({
-      query: `${quotedName} "${email}"`,
-      type: 'email_combined',
-      priority: 1,
-      description: `Name + Email: ${email}`
-    });
-  }
-  
-  // 6. Keywords only search (if keywords provided)
-  if (keywordList.length > 0) {
-    for (const keyword of keywordList.slice(0, 2)) {
+    if (cleanPhone.length >= 10) {
       queries.push({
-        query: `${quotedName} "${keyword}"`,
-        type: 'keyword_specific',
-        priority: 2,
-        description: `Keyword search: ${keyword}`
+        query: `"${cleanPhone}"`,
+        type: 'phone_direct',
+        priority: 1,
+        description: `Phone search: ${phone}`
       });
     }
   }
   
-  // 7. Government & Official Sources
+  // 8. LinkedIn specific (high value for professional info)
   queries.push({
-    query: `${quotedName} site:gov | site:edu | site:org`,
-    type: 'official_sources',
+    query: `${quotedPrimary} site:linkedin.com`,
+    type: 'linkedin',
     priority: 2,
-    description: 'Government, Education, Organization sites'
+    description: 'LinkedIn profiles'
   });
   
-  // 8. Social Media Profiles
+  // 9. Facebook specific
   queries.push({
-    query: `${quotedName} site:linkedin.com | site:facebook.com | site:twitter.com | site:instagram.com`,
-    type: 'social_media',
+    query: `${quotedPrimary} site:facebook.com`,
+    type: 'facebook',
     priority: 3,
-    description: 'Social media profiles'
+    description: 'Facebook profiles'
   });
   
-  // 9. Profile Pages
+  // 10. Government/official sources
   queries.push({
-    query: `${quotedName} inurl:profile | inurl:about | inurl:user`,
-    type: 'profiles',
-    priority: 4,
-    description: 'Profile and about pages'
+    query: `${quotedPrimary} site:gov`,
+    type: 'gov_sites',
+    priority: 3,
+    description: 'Government sites'
   });
   
-  // 10. People Finder Sites
+  // 11. PDF/Documents
   queries.push({
-    query: `${quotedName} site:whitepages.com | site:spokeo.com | site:beenverified.com | site:truepeoplesearch.com`,
-    type: 'people_finders',
-    priority: 5,
-    description: 'People finder websites'
-  });
-  
-  // 11. Documents (resumes, reports, PDFs)
-  queries.push({
-    query: `${quotedName} filetype:pdf | filetype:doc | filetype:docx`,
+    query: `${quotedPrimary} filetype:pdf`,
     type: 'documents',
     priority: 4,
-    description: 'Documents (PDF, DOC)'
+    description: 'PDF documents'
   });
   
-  // 12. News & Articles
-  if (city || keywordList.length > 0) {
-    queries.push({
-      query: `${quotedName} ${city ? `"${city}"` : ''} site:news.google.com | site:newspapers.com | inurl:news`,
-      type: 'news',
-      priority: 3,
-      description: 'News articles and mentions'
-    });
-  }
-  
-  // 13. Court/Legal Records
-  if (city || state) {
-    queries.push({
-      query: `${quotedName} ${state ? `"${state}"` : `"${city}"`} site:gov court | case | arrest | warrant`,
-      type: 'legal_records',
-      priority: 4,
-      description: 'Court and legal records'
-    });
-  }
-  
-  // 14. Business/Professional
+  // 12. People search sites
   queries.push({
-    query: `${quotedName} ${city ? `"${city}"` : ''} site:bbb.org | site:yelp.com | site:glassdoor.com | LLC | Inc | owner`,
-    type: 'business',
-    priority: 4,
-    description: 'Business and professional associations'
-  });
-  
-  // 15. Contact info patterns
-  queries.push({
-    query: `${quotedName} intext:"phone" | intext:"contact" | intext:"email"`,
-    type: 'contact_info',
-    priority: 5,
-    description: 'Contact information mentions'
+    query: `${quotedPrimary} site:whitepages.com OR site:spokeo.com OR site:truepeoplesearch.com`,
+    type: 'people_finders',
+    priority: 3,
+    description: 'People finder sites'
   });
   
   return queries;
 }
 
 async function executeSearch(query: string, apiKey: string, searchEngineId: string): Promise<any> {
-  const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(query)}&num=5`;
+  const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(query)}&num=10`;
+  
+  console.log(`Executing search: "${query}"`);
   
   const response = await fetch(searchUrl);
   const data = await response.json();
@@ -220,6 +203,7 @@ async function executeSearch(query: string, apiKey: string, searchEngineId: stri
     return null;
   }
   
+  console.log(`Query "${query.slice(0, 50)}..." returned ${data.items?.length || 0} results`);
   return data;
 }
 
@@ -230,10 +214,12 @@ Deno.serve(async (req) => {
 
   try {
     const { target, searchData } = await req.json();
-    console.log('Web search for:', target);
+    console.log('=== Web Search Started ===');
+    console.log('Target:', target);
     console.log('Search data:', JSON.stringify(searchData));
 
     if (!GOOGLE_API_KEY || !GOOGLE_SEARCH_ENGINE_ID) {
+      console.error('Missing API credentials');
       throw new Error('Google API credentials not configured');
     }
 
@@ -243,16 +229,16 @@ Deno.serve(async (req) => {
     const phone = searchData?.phone;
     const keywords = searchData?.keywords;
     
-    console.log('Building dork queries with keywords:', keywords);
+    console.log('Parsed inputs - Name:', searchName, 'Location:', location, 'Keywords:', keywords);
     
     // Build targeted dork queries including keywords
     const dorkQueries = buildDorkQueries(searchName, location, email, phone, keywords);
     
-    // Execute top priority queries (up to 6 for comprehensive coverage)
-    // Sort by priority and take top queries, prioritizing keyword queries
-    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 6);
+    // Execute MORE queries for comprehensive coverage (up to 8)
+    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 8);
     
-    console.log('Executing dork queries:', sortedQueries.map(q => ({ type: q.type, desc: q.description })));
+    console.log('Will execute', sortedQueries.length, 'queries:');
+    sortedQueries.forEach((q, i) => console.log(`  ${i+1}. [${q.type}] ${q.query.slice(0, 60)}...`));
     
     const searchPromises = sortedQueries.map(q => 
       executeSearch(q.query, GOOGLE_API_KEY!, GOOGLE_SEARCH_ENGINE_ID!)
@@ -265,6 +251,7 @@ Deno.serve(async (req) => {
     );
     
     const searchResults = await Promise.all(searchPromises);
+    console.log('All searches complete. Processing results...');
     
     // Deduplicate results by URL
     const seenUrls = new Set<string>();
