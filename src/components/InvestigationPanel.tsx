@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw, Scale, LayoutDashboard, Camera, Link2, Eye, ExternalLink, Download, Video, FileDown } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw, Scale, LayoutDashboard, Camera, Link2, Eye, ExternalLink, Download, Video, FileDown, HelpCircle } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
@@ -588,7 +588,8 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
     log.agent_type === 'Toutatis' ||
     log.agent_type === 'Toutatis_from_email' ||
     log.agent_type === 'Instaloader' ||
-    log.agent_type === 'Instaloader_from_email'
+    log.agent_type === 'Instaloader_from_email' ||
+    log.agent_type === 'Email_intelligence'
   );
   
   // Address/location data
@@ -1115,6 +1116,117 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                     </div>
                   </div>
                 ))}
+            </div>
+          );
+        }
+
+        // Email Intelligence Results - Associated Emails (like OSINT Industries)
+        if (log.agent_type === 'Email_intelligence' && log.data?.associatedEmails?.length > 0) {
+          return (
+            <div key={log.id} className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Mail className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-medium">Associated Emails Found ({log.data.associatedEmails.length})</h3>
+              </div>
+              <p className="text-sm text-muted-foreground mb-3">
+                These email addresses were found linked to the target email through breach data and pattern analysis
+              </p>
+              {log.data.associatedEmails.map((assocEmail: any, idx: number) => (
+                <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
+                  <div className="flex items-start gap-3">
+                    <div className="flex-shrink-0 mt-1">
+                      {assocEmail.confidence === 'high' ? (
+                        <CheckCircle2 className="h-5 w-5 text-green-500" />
+                      ) : assocEmail.confidence === 'medium' ? (
+                        <AlertCircle className="h-5 w-5 text-yellow-500" />
+                      ) : (
+                        <HelpCircle className="h-5 w-5 text-muted-foreground" />
+                      )}
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <h3 className="text-lg font-medium text-foreground">{assocEmail.email}</h3>
+                        <Badge 
+                          variant={assocEmail.confidence === 'high' ? 'default' : 'secondary'}
+                          className={
+                            assocEmail.confidence === 'high' 
+                              ? 'bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50' 
+                              : assocEmail.confidence === 'medium'
+                                ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400 border-yellow-500/50'
+                                : ''
+                          }
+                        >
+                          {assocEmail.confidence} confidence
+                        </Badge>
+                      </div>
+                      <p className="text-sm text-muted-foreground mb-2">{assocEmail.source}</p>
+                      {assocEmail.context && (
+                        <p className="text-xs text-muted-foreground italic">{assocEmail.context}</p>
+                      )}
+                      <div className="flex gap-2 mt-2">
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => {
+                            navigator.clipboard.writeText(assocEmail.email);
+                            toast({ title: 'Email copied to clipboard' });
+                          }}
+                        >
+                          <Copy className="h-3 w-3 mr-1" />
+                          Copy
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          className="h-7 text-xs"
+                          onClick={() => window.open(`https://haveibeenpwned.com/account/${encodeURIComponent(assocEmail.email)}`, '_blank')}
+                        >
+                          <ExternalLink className="h-3 w-3 mr-1" />
+                          Check Breaches
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Manual Verification Links */}
+              {log.data.manualVerificationLinks?.length > 0 && (
+                <div className="mt-4 pt-4 border-t border-border">
+                  <h4 className="text-sm font-medium text-muted-foreground mb-2">Additional Verification Sources</h4>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
+                    {log.data.manualVerificationLinks.slice(0, 6).map((link: any, idx: number) => (
+                      <a
+                        key={idx}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center gap-2 p-2 rounded-md border border-border hover:border-primary/50 hover:bg-accent/50 transition-colors text-xs"
+                      >
+                        <ExternalLink className="h-3 w-3 text-muted-foreground" />
+                        <span className="truncate">{link.name}</span>
+                      </a>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Breach Summary */}
+              {log.data.breachSummary?.totalBreaches > 0 && (
+                <div className="mt-4 p-3 bg-destructive/10 rounded-lg border border-destructive/20">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Shield className="h-4 w-4 text-destructive" />
+                    <span className="text-sm font-medium">Breach Summary</span>
+                  </div>
+                  <p className="text-sm text-muted-foreground">
+                    Found in {log.data.breachSummary.totalBreaches} breach{log.data.breachSummary.totalBreaches > 1 ? 'es' : ''}
+                    {log.data.breachSummary.exposedFields?.length > 0 && (
+                      <span> • Exposed fields: {log.data.breachSummary.exposedFields.slice(0, 5).join(', ')}</span>
+                    )}
+                  </p>
+                </div>
+              )}
             </div>
           );
         }
