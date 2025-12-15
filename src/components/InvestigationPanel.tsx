@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw, Scale, LayoutDashboard, Camera, Link2, Eye, ExternalLink, Download, Video } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw, Scale, LayoutDashboard, Camera, Link2, Eye, ExternalLink, Download, Video, FileDown } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
@@ -13,6 +13,7 @@ import InvestigativeAssistant from "./InvestigativeAssistant";
 import AddressResults from "./AddressResults";
 import BreachResults from "./BreachResults";
 import { ResultsDisplay, FindingData } from "./results";
+import { exportWebResultsToCSV } from "@/utils/csvExport";
 import {
   Tooltip,
   TooltipContent,
@@ -737,67 +738,125 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
     </div>
   );
 
-  const renderWebResults = (filteredLogs: LogEntry[]) => (
-    <>
-      {filteredLogs.map((log) => {
-        // Handle all web-related agent types
-        const agentType = log.agent_type?.toLowerCase() || '';
-        const source = log.source?.toLowerCase() || '';
-        const isWebType = agentType === 'web' || 
-                          agentType.startsWith('web_') ||
-                          (agentType.includes('_search') && !agentType.includes('people')) ||
-                          source.includes('osint-web') || 
-                          source.includes('web_search') ||
-                          source.includes('address_owner') ||
-                          source.includes('address_residents');
+  // Collect all web results for export
+  const collectWebResultsForExport = (filteredLogs: LogEntry[]) => {
+    const allConfirmed: any[] = [];
+    const allPossible: any[] = [];
+    
+    filteredLogs.forEach(log => {
+      const agentType = log.agent_type?.toLowerCase() || '';
+      const source = log.source?.toLowerCase() || '';
+      const isWebType = agentType === 'web' || 
+                        agentType.startsWith('web_') ||
+                        (agentType.includes('_search') && !agentType.includes('people')) ||
+                        source.includes('osint-web') || 
+                        source.includes('web_search') ||
+                        source.includes('address_owner') ||
+                        source.includes('address_residents');
+      
+      if (!isWebType) return;
+      
+      const confirmedItems = log.data?.confirmedItems || [];
+      const possibleItems = log.data?.possibleItems || [];
+      const legacyItems = !log.data?.confirmedItems && log.data?.items ? log.data.items : [];
+      
+      allConfirmed.push(...confirmedItems);
+      allPossible.push(...possibleItems, ...legacyItems);
+    });
+    
+    return { allConfirmed, allPossible };
+  };
+
+  const handleExportWebResults = (filteredLogs: LogEntry[]) => {
+    const { allConfirmed, allPossible } = collectWebResultsForExport(filteredLogs);
+    const targetName = searchData?.fullName;
+    exportWebResultsToCSV(allConfirmed, allPossible, targetName);
+    toast({
+      title: "Export Complete",
+      description: `Exported ${allConfirmed.length + allPossible.length} web results to CSV`,
+    });
+  };
+
+  const renderWebResults = (filteredLogs: LogEntry[]) => {
+    const { allConfirmed, allPossible } = collectWebResultsForExport(filteredLogs);
+    const hasAnyResults = allConfirmed.length > 0 || allPossible.length > 0;
+
+    return (
+      <>
+        {/* Export button header */}
+        {hasAnyResults && (
+          <div className="flex justify-end mb-4">
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={() => handleExportWebResults(filteredLogs)}
+              className="gap-2"
+            >
+              <FileDown className="h-4 w-4" />
+              Export to CSV
+            </Button>
+          </div>
+        )}
         
-        if (!isWebType) return null;
-        
-        const confirmedItems = log.data?.confirmedItems || [];
-        const possibleItems = log.data?.possibleItems || [];
-        const legacyItems = !log.data?.confirmedItems && log.data?.items ? log.data.items : [];
-        const queriesUsed = log.data?.queriesUsed || [];
-        const keywordsSearched = log.data?.searchInformation?.keywordsSearched || [];
-        
-        const hasConfirmed = confirmedItems.length > 0;
-        const hasPossible = possibleItems.length > 0;
-        const hasLegacy = legacyItems.length > 0;
-        
-        if (!hasConfirmed && !hasPossible && !hasLegacy) return null;
-        
-        return (
-          <div key={log.id} className="space-y-6 overflow-hidden">
-            {/* Search summary header */}
-            {queriesUsed.length > 0 && (
-              <div className="bg-muted/30 rounded-lg p-3 mb-4">
-                <div className="flex items-center gap-2 mb-2">
-                  <Search className="h-4 w-4 text-primary" />
-                  <span className="text-sm font-medium">Google Dork Queries Executed</span>
-                </div>
-                <div className="flex flex-wrap gap-1">
-                  {queriesUsed.map((q: any, i: number) => (
-                    <Tooltip key={i}>
-                      <TooltipTrigger asChild>
-                        <Badge variant="outline" className="text-xs cursor-help">
-                          {q.description || q.type}
-                        </Badge>
-                      </TooltipTrigger>
-                      <TooltipContent className="max-w-sm">
-                        <p className="text-xs font-mono break-all">{q.query}</p>
-                      </TooltipContent>
-                    </Tooltip>
-                  ))}
-                </div>
-                {keywordsSearched.length > 0 && (
-                  <div className="mt-2 flex items-center gap-2">
-                    <span className="text-xs text-muted-foreground">Keywords searched:</span>
-                    {keywordsSearched.map((k: string, i: number) => (
-                      <Badge key={i} variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs">
-                        {k}
-                      </Badge>
+        {filteredLogs.map((log) => {
+          // Handle all web-related agent types
+          const agentType = log.agent_type?.toLowerCase() || '';
+          const source = log.source?.toLowerCase() || '';
+          const isWebType = agentType === 'web' || 
+                            agentType.startsWith('web_') ||
+                            (agentType.includes('_search') && !agentType.includes('people')) ||
+                            source.includes('osint-web') || 
+                            source.includes('web_search') ||
+                            source.includes('address_owner') ||
+                            source.includes('address_residents');
+          
+          if (!isWebType) return null;
+          
+          const confirmedItems = log.data?.confirmedItems || [];
+          const possibleItems = log.data?.possibleItems || [];
+          const legacyItems = !log.data?.confirmedItems && log.data?.items ? log.data.items : [];
+          const queriesUsed = log.data?.queriesUsed || [];
+          const keywordsSearched = log.data?.searchInformation?.keywordsSearched || [];
+          
+          const hasConfirmed = confirmedItems.length > 0;
+          const hasPossible = possibleItems.length > 0;
+          const hasLegacy = legacyItems.length > 0;
+          
+          if (!hasConfirmed && !hasPossible && !hasLegacy) return null;
+          
+          return (
+            <div key={log.id} className="space-y-6 overflow-hidden">
+              {/* Search summary header */}
+              {queriesUsed.length > 0 && (
+                <div className="bg-muted/30 rounded-lg p-3 mb-4">
+                  <div className="flex items-center gap-2 mb-2">
+                    <Search className="h-4 w-4 text-primary" />
+                    <span className="text-sm font-medium">Google Dork Queries Executed</span>
+                  </div>
+                  <div className="flex flex-wrap gap-1">
+                    {queriesUsed.map((q: any, i: number) => (
+                      <Tooltip key={i}>
+                        <TooltipTrigger asChild>
+                          <Badge variant="outline" className="text-xs cursor-help">
+                            {q.description || q.type}
+                          </Badge>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-sm">
+                          <p className="text-xs font-mono break-all">{q.query}</p>
+                        </TooltipContent>
+                      </Tooltip>
                     ))}
                   </div>
-                )}
+                  {keywordsSearched.length > 0 && (
+                    <div className="mt-2 flex items-center gap-2">
+                      <span className="text-xs text-muted-foreground">Keywords searched:</span>
+                      {keywordsSearched.map((k: string, i: number) => (
+                        <Badge key={i} variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs">
+                          {k}
+                        </Badge>
+                      ))}
+                    </div>
+                  )}
               </div>
             )}
             
@@ -842,7 +901,8 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         );
       })}
     </>
-  );
+    );
+  };
 
   const renderSocialResults = (filteredLogs: LogEntry[]) => (
     <>
