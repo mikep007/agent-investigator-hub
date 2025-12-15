@@ -21,14 +21,46 @@ interface BreachRecord {
     compilation?: number;
   };
   fields: string[];
-  [key: string]: any; // Allow any additional fields like email, username, password, etc.
+  [key: string]: any;
 }
 
 interface BreachSource {
   name: string;
   date: string;
   line?: string;
-  record?: BreachRecord; // Add the full record data
+  record?: BreachRecord;
+}
+
+// Retry with exponential backoff for rate limiting
+async function fetchWithRetry(url: string, options: RequestInit, maxRetries = 3): Promise<Response> {
+  let lastError: Error | null = null;
+  
+  for (let attempt = 0; attempt < maxRetries; attempt++) {
+    try {
+      const response = await fetch(url, options);
+      
+      // If rate limited, wait and retry
+      if (response.status === 429) {
+        const retryAfter = response.headers.get('Retry-After');
+        const waitTime = retryAfter ? parseInt(retryAfter) * 1000 : Math.pow(2, attempt + 1) * 1000;
+        console.log(`Rate limited, waiting ${waitTime}ms before retry ${attempt + 1}/${maxRetries}`);
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+        continue;
+      }
+      
+      return response;
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error(String(error));
+      console.error(`Fetch attempt ${attempt + 1} failed:`, lastError.message);
+      
+      if (attempt < maxRetries - 1) {
+        const waitTime = Math.pow(2, attempt + 1) * 1000;
+        await new Promise(resolve => setTimeout(resolve, waitTime));
+      }
+    }
+  }
+  
+  throw lastError || new Error('Max retries exceeded');
 }
 
 Deno.serve(async (req) => {
@@ -37,20 +69,15 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { target, type } = await req.json(); // target can be email, phone, or username
-    // LeakCheck API v2 uses 'login' for username searches, not 'username'
+    const { target, type } = await req.json();
     let searchType = type || 'email';
     if (searchType === 'username') {
       searchType = 'login';
     }
     
-    // Clean and format target based on type
     let cleanTarget = target?.trim();
     if (searchType === 'phone') {
-      // LeakCheck expects phone numbers without formatting - digits only
       cleanTarget = cleanTarget.replace(/[\s\-\(\)\+\.]/g, '');
-      // If it starts with 1 and is 11 digits, it's likely US format - keep as is
-      // Otherwise ensure proper format
       console.log(`Phone cleaned: ${target} -> ${cleanTarget}`);
     }
     
@@ -65,11 +92,10 @@ Deno.serve(async (req) => {
       throw new Error('LEAKCHECK_API_KEY not configured');
     }
 
-    // Call LeakCheck.io Pro API v2 for detailed breach data
     const apiUrl = `https://leakcheck.io/api/v2/query/${encodeURIComponent(cleanTarget)}?type=${searchType}`;
     console.log('Calling LeakCheck Pro API v2:', apiUrl);
     
-    const response = await fetch(apiUrl, {
+    const response = await fetchWithRetry(apiUrl, {
       method: 'GET',
       headers: {
         'Accept': 'application/json',
@@ -85,9 +111,10 @@ Deno.serve(async (req) => {
       return new Response(JSON.stringify({ 
         error: `LeakCheck API error: ${response.statusText}`,
         found: 0,
-        sources: []
+        sources: [],
+        rateLimited: response.status === 429
       }), {
-        status: 200, // Return 200 to not break the investigation flow
+        status: 200,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
@@ -99,15 +126,12 @@ Deno.serve(async (req) => {
       quota: data.quota,
     });
 
-    // Extract all unique fields from all breach records
     const allFields = new Set<string>();
     data.result?.forEach(record => {
       record.fields?.forEach(field => allFields.add(field));
     });
 
-    // Convert breach records to sources format with detailed data
     const sources: BreachSource[] = data.result?.map(record => {
-      // Build a line showing the leaked data
       const dataLine = record.fields
         ?.map(field => {
           const value = record[field];
@@ -120,7 +144,7 @@ Deno.serve(async (req) => {
         name: record.source.name,
         date: record.source.breach_date,
         line: dataLine,
-        record: record, // Include the full record for detailed display
+        record: record,
       };
     }) || [];
 
@@ -133,6 +157,7 @@ Deno.serve(async (req) => {
       fields: Array.from(allFields),
       sources: sources,
       success: data.success,
+      quota: data.quota,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
@@ -144,7 +169,7 @@ Deno.serve(async (req) => {
       found: 0,
       sources: []
     }), {
-      status: 200, // Return 200 to not break the investigation flow
+      status: 200,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   }
