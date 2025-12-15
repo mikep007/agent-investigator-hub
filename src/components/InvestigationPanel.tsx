@@ -59,6 +59,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const [webKeywordFilter, setWebKeywordFilter] = useState("");
   const [deepDiveDialog, setDeepDiveDialog] = useState<{ open: boolean; platform: string; findingId: string } | null>(null);
   const [deepDiveLoading, setDeepDiveLoading] = useState(false);
   const [deepDiveResults, setDeepDiveResults] = useState<any>(null);
@@ -777,24 +778,66 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
     });
   };
 
+  // Filter web results by keyword
+  const filterWebItemsByKeyword = (items: any[]) => {
+    if (!webKeywordFilter.trim()) return items;
+    const keyword = webKeywordFilter.toLowerCase();
+    return items.filter((item: any) => 
+      item.title?.toLowerCase().includes(keyword) ||
+      item.snippet?.toLowerCase().includes(keyword) ||
+      item.link?.toLowerCase().includes(keyword) ||
+      item.displayLink?.toLowerCase().includes(keyword)
+    );
+  };
+
   const renderWebResults = (filteredLogs: LogEntry[]) => {
     const { allConfirmed, allPossible } = collectWebResultsForExport(filteredLogs);
-    const hasAnyResults = allConfirmed.length > 0 || allPossible.length > 0;
+    const filteredConfirmed = filterWebItemsByKeyword(allConfirmed);
+    const filteredPossible = filterWebItemsByKeyword(allPossible);
+    const hasAnyResults = filteredConfirmed.length > 0 || filteredPossible.length > 0;
+    const totalOriginal = allConfirmed.length + allPossible.length;
+    const totalFiltered = filteredConfirmed.length + filteredPossible.length;
 
     return (
       <>
-        {/* Export button header */}
-        {hasAnyResults && (
-          <div className="flex justify-end mb-4">
+        {/* Filter and Export header */}
+        <div className="flex flex-col sm:flex-row gap-3 mb-4">
+          <div className="relative flex-1">
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+            <Input
+              placeholder="Filter results by keyword..."
+              value={webKeywordFilter}
+              onChange={(e) => setWebKeywordFilter(e.target.value)}
+              className="pl-9 h-9"
+            />
+            {webKeywordFilter && (
+              <Button
+                variant="ghost"
+                size="sm"
+                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
+                onClick={() => setWebKeywordFilter("")}
+              >
+                <X className="h-3 w-3" />
+              </Button>
+            )}
+          </div>
+          {totalOriginal > 0 && (
             <Button
               size="sm"
               variant="outline"
               onClick={() => handleExportWebResults(filteredLogs)}
-              className="gap-2"
+              className="gap-2 h-9"
             >
               <FileDown className="h-4 w-4" />
               Export to CSV
             </Button>
+          )}
+        </div>
+        
+        {/* Filter status */}
+        {webKeywordFilter && (
+          <div className="mb-4 text-sm text-muted-foreground">
+            Showing {totalFiltered} of {totalOriginal} results for "{webKeywordFilter}"
           </div>
         )}
         
@@ -812,9 +855,9 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
           
           if (!isWebType) return null;
           
-          const confirmedItems = log.data?.confirmedItems || [];
-          const possibleItems = log.data?.possibleItems || [];
-          const legacyItems = !log.data?.confirmedItems && log.data?.items ? log.data.items : [];
+          const confirmedItems = filterWebItemsByKeyword(log.data?.confirmedItems || []);
+          const possibleItems = filterWebItemsByKeyword(log.data?.possibleItems || []);
+          const legacyItems = filterWebItemsByKeyword(!log.data?.confirmedItems && log.data?.items ? log.data.items : []);
           const queriesUsed = log.data?.queriesUsed || [];
           const keywordsSearched = log.data?.searchInformation?.keywordsSearched || [];
           
