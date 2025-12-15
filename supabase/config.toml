@@ -32,3 +32,45 @@ verify_jwt = true
 
 [functions.osint-instaloader]
 verify_jwt = true
+
+[functions.osint-email-intelligence]
+verify_jwt = true
+
+[functions.osint-holehe]
+verify_jwt = true
+
+[functions.osint-leakcheck]
+verify_jwt = true
+
+[functions.osint-web-search]
+verify_jwt = true
+
+[functions.osint-sherlock]
+verify_jwt = true
+
+[functions.osint-email-lookup]
+verify_jwt = true
+
+[functions.osint-phone-lookup]
+verify_jwt = true
+
+[functions.osint-social-search]
+verify_jwt = true
+
+[functions.osint-address-search]
+verify_jwt = true
+
+[functions.osint-industries]
+verify_jwt = true
+
+[functions.osint-start-investigation]
+verify_jwt = true
+
+[functions.generate-osint-report]
+verify_jwt = true
+
+[functions.ai-investigative-assistant]
+verify_jwt = true
+
+[functions.deep-platform-investigation]
+verify_jwt = true

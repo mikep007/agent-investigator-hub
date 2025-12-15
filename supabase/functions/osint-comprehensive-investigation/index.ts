@@ -155,6 +155,14 @@ Deno.serve(async (req) => {
 
     // Email enumeration
     if (searchData.email) {
+      // Run Email Intelligence for associated emails (like OSINT Industries)
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-email-intelligence', {
+          body: { target: searchData.email }
+        })
+      );
+      searchTypes.push('email_intelligence');
+
       // Run Holehe for platform enumeration
       searchPromises.push(
         supabaseClient.functions.invoke('osint-holehe', {
