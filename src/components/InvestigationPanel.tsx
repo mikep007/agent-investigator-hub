@@ -12,7 +12,7 @@ import PlatformLogo from "./PlatformLogo";
 import InvestigativeAssistant from "./InvestigativeAssistant";
 import AddressResults from "./AddressResults";
 import BreachResults from "./BreachResults";
-import { ResultsDisplay, FindingData } from "./results";
+import { ResultsDisplay, FindingData, GoogleSearchResults } from "./results";
 import { exportWebResultsToCSV } from "@/utils/csvExport";
 import {
   Tooltip,
@@ -816,158 +816,36 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
 
   const renderWebResults = (filteredLogs: LogEntry[]) => {
     const { allConfirmed, allPossible } = collectWebResultsForExport(filteredLogs);
-    const filteredConfirmed = filterWebItemsByKeyword(allConfirmed);
-    const filteredPossible = filterWebItemsByKeyword(allPossible);
-    const hasAnyResults = filteredConfirmed.length > 0 || filteredPossible.length > 0;
-    const totalOriginal = allConfirmed.length + allPossible.length;
-    const totalFiltered = filteredConfirmed.length + filteredPossible.length;
+    
+    // Collect queries and keywords from all web logs
+    let allQueriesUsed: { type: string; query: string; description: string }[] = [];
+    let allKeywordsSearched: string[] = [];
+    
+    filteredLogs.forEach(log => {
+      const agentType = log.agent_type?.toLowerCase() || '';
+      const source = log.source?.toLowerCase() || '';
+      const isWebType = agentType === 'web' || 
+                        agentType.startsWith('web_') ||
+                        (agentType.includes('_search') && !agentType.includes('people')) ||
+                        source.includes('osint-web') || 
+                        source.includes('web_search');
+      
+      if (isWebType) {
+        const queriesUsed = log.data?.queriesUsed || [];
+        const keywordsSearched = log.data?.searchInformation?.keywordsSearched || [];
+        allQueriesUsed = [...allQueriesUsed, ...queriesUsed];
+        allKeywordsSearched = [...new Set([...allKeywordsSearched, ...keywordsSearched])];
+      }
+    });
 
     return (
-      <>
-        {/* Filter and Export header */}
-        <div className="flex flex-col sm:flex-row gap-3 mb-4">
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder="Filter results by keyword..."
-              value={webKeywordFilter}
-              onChange={(e) => setWebKeywordFilter(e.target.value)}
-              className="pl-9 h-9"
-            />
-            {webKeywordFilter && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-1 top-1/2 -translate-y-1/2 h-7 w-7 p-0"
-                onClick={() => setWebKeywordFilter("")}
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            )}
-          </div>
-          {totalOriginal > 0 && (
-            <Button
-              size="sm"
-              variant="outline"
-              onClick={() => handleExportWebResults(filteredLogs)}
-              className="gap-2 h-9"
-            >
-              <FileDown className="h-4 w-4" />
-              Export to CSV
-            </Button>
-          )}
-        </div>
-        
-        {/* Filter status */}
-        {webKeywordFilter && (
-          <div className="mb-4 text-sm text-muted-foreground">
-            Showing {totalFiltered} of {totalOriginal} results for "{webKeywordFilter}"
-          </div>
-        )}
-        
-        {filteredLogs.map((log) => {
-          // Handle all web-related agent types
-          const agentType = log.agent_type?.toLowerCase() || '';
-          const source = log.source?.toLowerCase() || '';
-          const isWebType = agentType === 'web' || 
-                            agentType.startsWith('web_') ||
-                            (agentType.includes('_search') && !agentType.includes('people')) ||
-                            source.includes('osint-web') || 
-                            source.includes('web_search') ||
-                            source.includes('address_owner') ||
-                            source.includes('address_residents');
-          
-          if (!isWebType) return null;
-          
-          const confirmedItems = filterWebItemsByKeyword(log.data?.confirmedItems || []);
-          const possibleItems = filterWebItemsByKeyword(log.data?.possibleItems || []);
-          const legacyItems = filterWebItemsByKeyword(!log.data?.confirmedItems && log.data?.items ? log.data.items : []);
-          const queriesUsed = log.data?.queriesUsed || [];
-          const keywordsSearched = log.data?.searchInformation?.keywordsSearched || [];
-          
-          const hasConfirmed = confirmedItems.length > 0;
-          const hasPossible = possibleItems.length > 0;
-          const hasLegacy = legacyItems.length > 0;
-          
-          if (!hasConfirmed && !hasPossible && !hasLegacy) return null;
-          
-          return (
-            <div key={log.id} className="space-y-6 overflow-hidden">
-              {/* Search summary header */}
-              {queriesUsed.length > 0 && (
-                <div className="bg-muted/30 rounded-lg p-3 mb-4">
-                  <div className="flex items-center gap-2 mb-2">
-                    <Search className="h-4 w-4 text-primary" />
-                    <span className="text-sm font-medium">Google Dork Queries Executed</span>
-                  </div>
-                  <div className="flex flex-wrap gap-1">
-                    {queriesUsed.map((q: any, i: number) => (
-                      <Tooltip key={i}>
-                        <TooltipTrigger asChild>
-                          <Badge variant="outline" className="text-xs cursor-help">
-                            {q.description || q.type}
-                          </Badge>
-                        </TooltipTrigger>
-                        <TooltipContent className="max-w-sm">
-                          <p className="text-xs font-mono break-all">{q.query}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    ))}
-                  </div>
-                  {keywordsSearched.length > 0 && (
-                    <div className="mt-2 flex items-center gap-2">
-                      <span className="text-xs text-muted-foreground">Keywords searched:</span>
-                      {keywordsSearched.map((k: string, i: number) => (
-                        <Badge key={i} variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs">
-                          {k}
-                        </Badge>
-                      ))}
-                    </div>
-                  )}
-              </div>
-            )}
-            
-            {/* Confirmed Results */}
-            {hasConfirmed && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 mb-3">
-                  <Shield className="h-5 w-5 text-green-500" />
-                  <h3 className="text-base font-medium text-green-600 dark:text-green-400">
-                    Confirmed Matches ({confirmedItems.length})
-                  </h3>
-                </div>
-                <div className="space-y-0 bg-card rounded-lg p-4 border border-border">
-                  {confirmedItems.map((item: any, idx: number) => renderWebResultItem(item, log, idx))}
-                </div>
-              </div>
-            )}
-            
-            {/* Possible Results */}
-            {hasPossible && (
-              <div className="space-y-2">
-                <div className="flex items-center gap-2 mb-3">
-                  <AlertCircle className="h-5 w-5 text-yellow-500" />
-                  <h3 className="text-base font-medium text-yellow-600 dark:text-yellow-400">
-                    Possible Matches ({possibleItems.length})
-                  </h3>
-                  <span className="text-xs text-muted-foreground">— Requires manual verification</span>
-                </div>
-                <div className="space-y-0 bg-card/50 rounded-lg p-4 border border-border/50 opacity-90">
-                  {possibleItems.map((item: any, idx: number) => renderWebResultItem(item, log, `possible-${idx}`))}
-                </div>
-              </div>
-            )}
-            
-            {/* Legacy results (for backward compatibility) */}
-            {hasLegacy && (
-              <div className="space-y-0 bg-card rounded-lg p-4 border border-border">
-                {legacyItems.map((item: any, idx: number) => renderWebResultItem(item, log, idx))}
-              </div>
-            )}
-          </div>
-        );
-      })}
-    </>
+      <GoogleSearchResults
+        confirmedResults={allConfirmed}
+        possibleResults={allPossible}
+        queriesUsed={allQueriesUsed}
+        keywordsSearched={allKeywordsSearched}
+        targetName={searchData?.fullName}
+      />
     );
   };
 
