@@ -628,30 +628,44 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   });
 
   const renderWebResultItem = (item: any, log: LogEntry, idx: number | string) => (
-    <div key={idx} className="group border-b border-border/50 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0">
+    <div key={idx} className="group border-b border-border/50 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0 hover:bg-muted/20 rounded-lg p-3 -mx-3 transition-colors">
       {/* Google-style result display */}
       <div className="space-y-1">
-        {/* URL line with favicon-style indicator */}
-        <div className="flex items-center gap-2 text-sm">
-          <div className="w-5 h-5 rounded bg-muted flex items-center justify-center flex-shrink-0">
-            <Globe className="h-3 w-3 text-muted-foreground" />
-          </div>
-          <span className="text-muted-foreground truncate">{item.displayLink}</span>
-          <span className="text-muted-foreground/60 text-xs">›</span>
-          <span className="text-muted-foreground/60 text-xs truncate max-w-[150px]">
-            {item.link.replace(/^https?:\/\/[^/]+/, '').slice(0, 40)}
-          </span>
-        </div>
-        
-        {/* Title - clickable link */}
+        {/* URL line with favicon-style indicator - now clickable */}
         <a
           href={item.link}
           target="_blank"
           rel="noopener noreferrer"
-          className="block group-hover:underline"
+          className="flex items-center gap-2 text-sm hover:text-primary transition-colors cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            window.open(item.link, '_blank', 'noopener,noreferrer');
+          }}
         >
-          <h3 className="text-lg text-primary font-normal line-clamp-1">
-            {item.title}
+          <div className="w-5 h-5 rounded bg-muted flex items-center justify-center flex-shrink-0">
+            <Globe className="h-3 w-3 text-muted-foreground group-hover:text-primary transition-colors" />
+          </div>
+          <span className="text-muted-foreground truncate group-hover:text-primary transition-colors">{item.displayLink}</span>
+          <span className="text-muted-foreground/60 text-xs">›</span>
+          <span className="text-muted-foreground/60 text-xs truncate max-w-[150px]">
+            {item.link?.replace(/^https?:\/\/[^/]+/, '').slice(0, 40) || ''}
+          </span>
+          <ExternalLink className="h-3 w-3 text-muted-foreground/40 group-hover:text-primary transition-colors ml-auto opacity-0 group-hover:opacity-100" />
+        </a>
+        
+        {/* Title - clickable link with better styling */}
+        <a
+          href={item.link}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="block hover:underline cursor-pointer"
+          onClick={(e) => {
+            e.stopPropagation();
+            window.open(item.link, '_blank', 'noopener,noreferrer');
+          }}
+        >
+          <h3 className="text-lg text-primary font-medium line-clamp-2 hover:text-primary/80 transition-colors">
+            {item.title || 'Untitled Result'}
           </h3>
         </a>
         
@@ -703,10 +717,19 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         </div>
         
         {/* Action buttons */}
-        <div className="flex gap-2 items-center pt-2">
+        <div className="flex gap-2 items-center pt-2 flex-wrap">
           <Button
             size="sm"
-            variant="ghost"
+            variant="default"
+            className="h-7 px-3 text-xs bg-primary hover:bg-primary/90"
+            onClick={() => window.open(item.link, '_blank', 'noopener,noreferrer')}
+          >
+            <ExternalLink className="h-3 w-3 mr-1" />
+            Visit Page
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
             className="h-7 px-2 text-xs"
             onClick={() => {
               navigator.clipboard.writeText(item.link);
@@ -714,7 +737,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
             }}
           >
             <Copy className="h-3 w-3 mr-1" />
-            Copy
+            Copy Link
           </Button>
           <Button
             size="sm"
