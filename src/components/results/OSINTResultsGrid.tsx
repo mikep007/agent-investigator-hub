@@ -16,6 +16,7 @@ interface OSINTResultsGridProps {
 interface ExtractedPlatform {
   platform: string;
   url: string;
+  findingId: string;
   username?: string;
   userId?: string;
   profileImage?: string;
@@ -66,6 +67,7 @@ const OSINTResultsGrid = ({
 
     findings.forEach(finding => {
       const data = finding.data;
+      const findingId = finding.id;
 
       // Sherlock results - handle both foundPlatforms and profileLinks formats
       if ((finding.agent_type === 'Sherlock' || finding.agent_type === 'Sherlock_from_email')) {
@@ -76,6 +78,7 @@ const OSINTResultsGrid = ({
             extracted.push({
               platform: p.name || p.platform || 'Unknown',
               url: p.url,
+              findingId,
               username: data.username,
               userId: p.id,
               profileImage: p.profileImage,
@@ -103,6 +106,7 @@ const OSINTResultsGrid = ({
               extracted.push({
                 platform: r.name || r.domain,
                 url,
+                findingId,
                 verified: r.verificationStatus === 'verified',
                 isPublic: r.isPublic,
               });
@@ -120,6 +124,7 @@ const OSINTResultsGrid = ({
               extracted.push({
                 platform: p.platform,
                 url: p.url,
+                findingId,
                 username: p.username || p.name,
                 profileImage: p.profileImage || p.image,
                 verified: p.verificationStatus === 'verified',
@@ -143,6 +148,7 @@ const OSINTResultsGrid = ({
           extracted.push({
             platform: 'Instagram',
             url,
+            findingId,
             username: profile.username,
             fullName: profile.fullName,
             profileImage: profile.profilePicUrl,
@@ -174,7 +180,7 @@ const OSINTResultsGrid = ({
             <OSINTPlatformCard
               key={`${platform.platform}-${idx}`}
               {...platform}
-              onExpand={() => onDeepDive?.(platform.platform, platform.url)}
+              onExpand={() => onDeepDive?.(platform.platform, platform.findingId)}
             />
           ))}
         </div>
