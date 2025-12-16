@@ -11,4 +11,5 @@ export { default as ResultsSummaryBar } from './ResultsSummaryBar';
 export { default as VisualTimeline } from './VisualTimeline';
 export { default as SaveToCaseButton } from './SaveToCaseButton';
 export { default as RelatedPersonsCard } from './RelatedPersonsCard';
+export { default as GoogleSearchResults } from './GoogleSearchResults';
 export * from './types';
