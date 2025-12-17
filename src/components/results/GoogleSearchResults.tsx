@@ -48,6 +48,7 @@ interface GoogleSearchResultsProps {
   keywordsSearched?: string[];
   targetName?: string;
   onVerify?: (link: string, status: 'verified' | 'inaccurate') => void;
+  error?: string | null;
 }
 
 const GoogleSearchResults = ({
@@ -56,7 +57,8 @@ const GoogleSearchResults = ({
   queriesUsed = [],
   keywordsSearched = [],
   targetName,
-  onVerify
+  onVerify,
+  error
 }: GoogleSearchResultsProps) => {
   const { toast } = useToast();
   const [filter, setFilter] = useState("");
@@ -332,6 +334,68 @@ const GoogleSearchResults = ({
       </div>
     );
   };
+
+  // Check for API configuration error
+  const isApiDisabledError = error && (
+    error.includes('Custom Search API has not been used') ||
+    error.includes('it is disabled') ||
+    error.includes('API_KEY_SERVICE_BLOCKED') ||
+    error.includes('accessNotConfigured')
+  );
+
+  if (isApiDisabledError) {
+    return (
+      <div className="rounded-xl border border-yellow-500/30 bg-yellow-500/5 p-6">
+        <div className="flex items-start gap-4">
+          <div className="flex-shrink-0 w-12 h-12 rounded-full bg-yellow-500/10 flex items-center justify-center">
+            <AlertCircle className="h-6 w-6 text-yellow-500" />
+          </div>
+          <div className="flex-1 space-y-3">
+            <h3 className="font-semibold text-lg text-yellow-600 dark:text-yellow-400">
+              Google Custom Search API Not Enabled
+            </h3>
+            <p className="text-sm text-muted-foreground">
+              Web search requires the Google Custom Search API to be enabled in your Google Cloud Console. 
+              This API provides 100 free searches per day.
+            </p>
+            <div className="bg-muted/50 rounded-lg p-4 space-y-2">
+              <p className="text-sm font-medium">To enable:</p>
+              <ol className="text-sm text-muted-foreground space-y-1.5 list-decimal list-inside">
+                <li>Go to the <a href="https://console.cloud.google.com/apis/library/customsearch.googleapis.com" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline font-medium">Google Cloud Console</a></li>
+                <li>Select your project from the dropdown</li>
+                <li>Click "Enable" to activate the Custom Search API</li>
+                <li>Wait a few minutes for changes to propagate</li>
+                <li>Re-run your investigation</li>
+              </ol>
+            </div>
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-2 mt-2"
+              onClick={() => window.open('https://console.cloud.google.com/apis/library/customsearch.googleapis.com', '_blank')}
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open Google Cloud Console
+            </Button>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-6">
+        <div className="flex items-start gap-4">
+          <AlertCircle className="h-6 w-6 text-destructive flex-shrink-0 mt-0.5" />
+          <div className="space-y-2">
+            <h3 className="font-semibold text-destructive">Web Search Error</h3>
+            <p className="text-sm text-muted-foreground">{error}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (totalResults === 0) {
     return (
