@@ -5,10 +5,40 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
-import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle, Info } from "lucide-react";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle, Info, Building2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SearchHelpModal } from "./SearchHelpModal";
 import AddressAutocomplete from "./AddressAutocomplete";
+
+// US States for dropdown
+const US_STATES = [
+  { code: "AL", name: "Alabama" }, { code: "AK", name: "Alaska" }, { code: "AZ", name: "Arizona" },
+  { code: "AR", name: "Arkansas" }, { code: "CA", name: "California" }, { code: "CO", name: "Colorado" },
+  { code: "CT", name: "Connecticut" }, { code: "DE", name: "Delaware" }, { code: "FL", name: "Florida" },
+  { code: "GA", name: "Georgia" }, { code: "HI", name: "Hawaii" }, { code: "ID", name: "Idaho" },
+  { code: "IL", name: "Illinois" }, { code: "IN", name: "Indiana" }, { code: "IA", name: "Iowa" },
+  { code: "KS", name: "Kansas" }, { code: "KY", name: "Kentucky" }, { code: "LA", name: "Louisiana" },
+  { code: "ME", name: "Maine" }, { code: "MD", name: "Maryland" }, { code: "MA", name: "Massachusetts" },
+  { code: "MI", name: "Michigan" }, { code: "MN", name: "Minnesota" }, { code: "MS", name: "Mississippi" },
+  { code: "MO", name: "Missouri" }, { code: "MT", name: "Montana" }, { code: "NE", name: "Nebraska" },
+  { code: "NV", name: "Nevada" }, { code: "NH", name: "New Hampshire" }, { code: "NJ", name: "New Jersey" },
+  { code: "NM", name: "New Mexico" }, { code: "NY", name: "New York" }, { code: "NC", name: "North Carolina" },
+  { code: "ND", name: "North Dakota" }, { code: "OH", name: "Ohio" }, { code: "OK", name: "Oklahoma" },
+  { code: "OR", name: "Oregon" }, { code: "PA", name: "Pennsylvania" }, { code: "RI", name: "Rhode Island" },
+  { code: "SC", name: "South Carolina" }, { code: "SD", name: "South Dakota" }, { code: "TN", name: "Tennessee" },
+  { code: "TX", name: "Texas" }, { code: "UT", name: "Utah" }, { code: "VT", name: "Vermont" },
+  { code: "VA", name: "Virginia" }, { code: "WA", name: "Washington" }, { code: "WV", name: "West Virginia" },
+  { code: "WI", name: "Wisconsin" }, { code: "WY", name: "Wyoming" }, { code: "DC", name: "Washington D.C." },
+];
+
+type SearchMode = 'comprehensive' | 'location_only';
 
 interface SearchData {
   fullName?: string;
@@ -17,6 +47,8 @@ interface SearchData {
   phone?: string;
   username?: string;
   keywords?: string;
+  city?: string;
+  state?: string;
 }
 
 interface ValidationState {
@@ -31,6 +63,7 @@ interface ComprehensiveSearchFormProps {
 }
 
 const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: ComprehensiveSearchFormProps) => {
+  const [searchMode, setSearchMode] = useState<SearchMode>('comprehensive');
   const [searchData, setSearchData] = useState<SearchData>({
     fullName: "",
     address: "",
@@ -38,6 +71,8 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
     phone: "",
     username: "",
     keywords: "",
+    city: "",
+    state: "",
   });
   
   const [validation, setValidation] = useState<ValidationState>({
@@ -82,13 +117,41 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
   };
 
   const validateAndSubmit = () => {
-    // At least one field is required
+    // Different validation based on search mode
+    if (searchMode === 'location_only') {
+      // Location-only mode requires city and state
+      if (!searchData.city?.trim() || !searchData.state?.trim()) {
+        toast({
+          title: "Validation Error",
+          description: "Both city and state are required for location-only search",
+          variant: "destructive",
+        });
+        return;
+      }
+      
+      // Construct address from city/state for the search
+      const locationAddress = `${searchData.city.trim()}, ${searchData.state}`;
+      
+      toast({
+        title: "Location Search Started",
+        description: `Searching in ${locationAddress}`,
+      });
+      
+      onStartInvestigation({
+        ...searchData,
+        address: locationAddress,
+      });
+      return;
+    }
+
+    // Comprehensive mode - at least one field is required
     const hasAtLeastOneField = 
       searchData.fullName?.trim() || 
       searchData.email?.trim() || 
       searchData.phone?.trim() || 
       searchData.username?.trim() || 
-      searchData.address?.trim();
+      searchData.address?.trim() ||
+      (searchData.city?.trim() && searchData.state?.trim());
 
     if (!hasAtLeastOneField) {
       toast({
@@ -156,10 +219,10 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
       }
     }
 
-    // Count filled fields
+    // Count filled fields including city/state
     const filledFields = [
       searchData.fullName,
-      searchData.address,
+      searchData.address || (searchData.city && searchData.state ? `${searchData.city}, ${searchData.state}` : ''),
       searchData.email,
       searchData.phone,
       searchData.username,
@@ -171,7 +234,13 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
       description: `Searching with ${filledFields} data point${filledFields > 1 ? 's' : ''}`,
     });
 
-    onStartInvestigation(searchData);
+    // If city/state provided but not address, construct address
+    const finalSearchData = {
+      ...searchData,
+      address: searchData.address || (searchData.city && searchData.state ? `${searchData.city.trim()}, ${searchData.state}` : ''),
+    };
+
+    onStartInvestigation(finalSearchData);
   };
 
   const handleKeyPress = (e: React.KeyboardEvent) => {
@@ -188,15 +257,112 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Search className="w-5 h-5 text-primary" />
-                Comprehensive Person Investigation
+                {searchMode === 'location_only' ? 'Location Search' : 'Comprehensive Person Investigation'}
               </h2>
               <SearchHelpModal />
             </div>
             <p className="text-sm text-muted-foreground">
-              Enter at least one search parameter. More data points = higher accuracy and confidence scores.
+              {searchMode === 'location_only' 
+                ? 'Search by city and state when you only know the location.'
+                : 'Enter at least one search parameter. More data points = higher accuracy and confidence scores.'}
             </p>
           </div>
 
+          {/* Search Mode Selector */}
+          <div className="space-y-2">
+            <Label className="flex items-center gap-2">
+              <Building2 className="w-4 h-4 text-muted-foreground" />
+              Search Mode
+            </Label>
+            <Select 
+              value={searchMode} 
+              onValueChange={(value: SearchMode) => setSearchMode(value)}
+              disabled={loading}
+            >
+              <SelectTrigger className="bg-background">
+                <SelectValue placeholder="Select search mode" />
+              </SelectTrigger>
+              <SelectContent className="bg-background border border-border z-50">
+                <SelectItem value="comprehensive">Full Investigation (Person Search)</SelectItem>
+                <SelectItem value="location_only">Location Only (City & State)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Location-Only Mode Fields */}
+          {searchMode === 'location_only' && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 rounded-lg border border-border bg-muted/20">
+              <div className="space-y-2">
+                <Label htmlFor="city" className="flex items-center gap-2">
+                  <Building2 className="w-4 h-4 text-muted-foreground" />
+                  City <span className="text-destructive">*</span>
+                </Label>
+                <Input
+                  id="city"
+                  placeholder="e.g., Philadelphia"
+                  value={searchData.city}
+                  onChange={(e) => handleChange("city", e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  className="bg-background/50"
+                  maxLength={100}
+                  disabled={loading}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="state" className="flex items-center gap-2">
+                  <MapPin className="w-4 h-4 text-muted-foreground" />
+                  State <span className="text-destructive">*</span>
+                </Label>
+                <Select 
+                  value={searchData.state} 
+                  onValueChange={(value) => handleChange("state", value)}
+                  disabled={loading}
+                >
+                  <SelectTrigger className="bg-background/50">
+                    <SelectValue placeholder="Select state" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-background border border-border z-50 max-h-[300px]">
+                    {US_STATES.map((state) => (
+                      <SelectItem key={state.code} value={state.code}>
+                        {state.name} ({state.code})
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              
+              {/* Optional name for location search */}
+              <div className="space-y-2 md:col-span-2">
+                <Label htmlFor="locationName" className="flex items-center gap-2">
+                  <User className="w-4 h-4 text-muted-foreground" />
+                  Name (Optional)
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Info className="w-4 h-4 text-muted-foreground cursor-help" />
+                    </TooltipTrigger>
+                    <TooltipContent className="max-w-xs bg-popover border border-border">
+                      <p className="text-sm">
+                        Adding a name helps narrow results to a specific person in this location.
+                      </p>
+                    </TooltipContent>
+                  </Tooltip>
+                </Label>
+                <Input
+                  id="locationName"
+                  placeholder="John Smith (optional)"
+                  value={searchData.fullName}
+                  onChange={(e) => handleChange("fullName", e.target.value)}
+                  onKeyDown={handleKeyPress}
+                  className="bg-background/50"
+                  maxLength={100}
+                  disabled={loading}
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Comprehensive Mode Fields */}
+          {searchMode === 'comprehensive' && (
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {/* Full Name - Optional */}
             <div className="space-y-2 md:col-span-2">
@@ -374,6 +540,7 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
             </div>
           </div>
           </div>
+          )}
 
           <Button
             onClick={validateAndSubmit}
@@ -384,12 +551,12 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
             {loading ? (
               <>
                 <Activity className="w-4 h-4 mr-2 animate-spin" />
-                Investigating...
+                {searchMode === 'location_only' ? 'Searching Location...' : 'Investigating...'}
               </>
             ) : (
               <>
                 <Search className="w-4 h-4 mr-2" />
-                Start Comprehensive Investigation
+                {searchMode === 'location_only' ? 'Search Location' : 'Start Comprehensive Investigation'}
               </>
             )}
           </Button>
