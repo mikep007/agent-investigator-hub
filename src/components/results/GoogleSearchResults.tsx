@@ -23,6 +23,7 @@ import {
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "../ConfidenceScoreBadge";
 import { exportWebResultsToCSV } from "@/utils/csvExport";
+import LinkPreviewTooltip from "./LinkPreviewTooltip";
 
 interface WebResultItem {
   title: string;
@@ -136,29 +137,49 @@ const GoogleSearchResults = ({
         </div>
 
         <div className="p-4 pl-6">
-          {/* URL row - clickable */}
-          <button
-            onClick={() => handleVisit(item.link)}
-            className="flex items-center gap-2 text-sm text-left w-full group/url hover:text-primary transition-colors mb-1"
+          {/* URL row - clickable with preview tooltip */}
+          <LinkPreviewTooltip
+            url={item.link}
+            title={item.title}
+            snippet={item.snippet}
+            confidence={item.confidenceScore}
+            hasLocation={item.hasLocation}
+            hasEmail={item.hasEmail}
+            hasPhone={item.hasPhone}
           >
-            <div className="w-5 h-5 rounded bg-muted/80 flex items-center justify-center flex-shrink-0">
-              <Globe className="h-3 w-3 text-muted-foreground group-hover/url:text-primary transition-colors" />
-            </div>
-            <span className="text-muted-foreground truncate group-hover/url:text-primary transition-colors">
-              {item.displayLink}
-            </span>
-            <ExternalLink className="h-3 w-3 text-muted-foreground/50 group-hover/url:text-primary transition-colors opacity-0 group-hover/url:opacity-100" />
-          </button>
+            <button
+              onClick={() => handleVisit(item.link)}
+              className="flex items-center gap-2 text-sm text-left w-full group/url hover:text-primary transition-colors mb-1"
+            >
+              <div className="w-5 h-5 rounded bg-muted/80 flex items-center justify-center flex-shrink-0">
+                <Globe className="h-3 w-3 text-muted-foreground group-hover/url:text-primary transition-colors" />
+              </div>
+              <span className="text-muted-foreground truncate group-hover/url:text-primary transition-colors">
+                {item.displayLink}
+              </span>
+              <ExternalLink className="h-3 w-3 text-muted-foreground/50 group-hover/url:text-primary transition-colors opacity-0 group-hover/url:opacity-100" />
+            </button>
+          </LinkPreviewTooltip>
 
-          {/* Title - main clickable element */}
-          <button
-            onClick={() => handleVisit(item.link)}
-            className="text-left w-full mb-2"
+          {/* Title - main clickable element with preview tooltip */}
+          <LinkPreviewTooltip
+            url={item.link}
+            title={item.title}
+            snippet={item.snippet}
+            confidence={item.confidenceScore}
+            hasLocation={item.hasLocation}
+            hasEmail={item.hasEmail}
+            hasPhone={item.hasPhone}
           >
-            <h3 className="text-lg font-medium text-primary hover:underline line-clamp-2 transition-colors">
-              {item.title || 'Untitled Result'}
-            </h3>
-          </button>
+            <button
+              onClick={() => handleVisit(item.link)}
+              className="text-left w-full mb-2"
+            >
+              <h3 className="text-lg font-medium text-primary hover:underline line-clamp-2 transition-colors">
+                {item.title || 'Untitled Result'}
+              </h3>
+            </button>
+          </LinkPreviewTooltip>
 
           {/* Snippet */}
           <p className="text-sm text-muted-foreground line-clamp-2 mb-3">
