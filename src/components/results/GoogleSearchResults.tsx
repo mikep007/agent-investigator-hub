@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -63,6 +63,9 @@ const GoogleSearchResults = ({
   const [showPossible, setShowPossible] = useState(true);
   const [verifiedLinks, setVerifiedLinks] = useState<Set<string>>(new Set());
   const [inaccurateLinks, setInaccurateLinks] = useState<Set<string>>(new Set());
+  const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
 
   const filterResults = (results: WebResultItem[]) => {
     if (!filter.trim()) return results;
@@ -79,6 +82,59 @@ const GoogleSearchResults = ({
   const filteredPossible = filterResults(possibleResults);
   const totalResults = confirmedResults.length + possibleResults.length;
   const filteredTotal = filteredConfirmed.length + filteredPossible.length;
+
+  // Combine all visible results for keyboard navigation
+  const allVisibleResults = [
+    ...filteredConfirmed,
+    ...(showPossible ? filteredPossible : [])
+  ];
+
+  // Keyboard navigation handler
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+    if (allVisibleResults.length === 0) return;
+
+    switch (e.key) {
+      case 'ArrowDown':
+      case 'j':
+        e.preventDefault();
+        setFocusedIndex(prev => 
+          prev < allVisibleResults.length - 1 ? prev + 1 : 0
+        );
+        break;
+      case 'ArrowUp':
+      case 'k':
+        e.preventDefault();
+        setFocusedIndex(prev => 
+          prev > 0 ? prev - 1 : allVisibleResults.length - 1
+        );
+        break;
+      case 'Enter':
+        e.preventDefault();
+        if (focusedIndex >= 0 && focusedIndex < allVisibleResults.length) {
+          window.open(allVisibleResults[focusedIndex].link, '_blank', 'noopener,noreferrer');
+        }
+        break;
+      case 'Escape':
+        e.preventDefault();
+        setFocusedIndex(-1);
+        break;
+    }
+  }, [allVisibleResults, focusedIndex]);
+
+  // Scroll focused result into view
+  useEffect(() => {
+    if (focusedIndex >= 0 && resultRefs.current[focusedIndex]) {
+      resultRefs.current[focusedIndex]?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'nearest'
+      });
+    }
+  }, [focusedIndex]);
+
+  // Reset focus when filter changes
+  useEffect(() => {
+    setFocusedIndex(-1);
+  }, [filter, showPossible]);
 
   const handleCopyLink = (link: string) => {
     navigator.clipboard.writeText(link);
@@ -116,19 +172,23 @@ const GoogleSearchResults = ({
     });
   };
 
-  const renderResultItem = (item: WebResultItem, index: number, isConfirmed: boolean) => {
+  const renderResultItem = (item: WebResultItem, index: number, isConfirmed: boolean, globalIndex: number) => {
     const isVerified = verifiedLinks.has(item.link);
     const isInaccurate = inaccurateLinks.has(item.link);
+    const isFocused = focusedIndex === globalIndex;
 
     return (
       <div 
         key={`${item.link}-${index}`}
+        ref={(el) => { resultRefs.current[globalIndex] = el; }}
         className={`group relative rounded-xl border transition-all duration-200 ${
-          isInaccurate 
-            ? 'border-destructive/30 bg-destructive/5 opacity-60' 
-            : isVerified 
-              ? 'border-green-500/30 bg-green-500/5' 
-              : 'border-border hover:border-primary/50 hover:bg-muted/30'
+          isFocused
+            ? 'border-primary ring-2 ring-primary/50 bg-primary/5'
+            : isInaccurate 
+              ? 'border-destructive/30 bg-destructive/5 opacity-60' 
+              : isVerified 
+                ? 'border-green-500/30 bg-green-500/5' 
+                : 'border-border hover:border-primary/50 hover:bg-muted/30'
         }`}
       >
         {/* Rank indicator */}
@@ -284,10 +344,17 @@ const GoogleSearchResults = ({
   }
 
   return (
-    <div className="space-y-4">
+    <div 
+      ref={containerRef}
+      className="space-y-4 outline-none"
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+      role="listbox"
+      aria-label="Web search results"
+    >
       {/* Header with stats and controls */}
       <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center justify-between">
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-2">
             <Sparkles className="h-5 w-5 text-primary" />
             <h3 className="font-semibold">
@@ -300,6 +367,9 @@ const GoogleSearchResults = ({
           <Badge variant="outline" className="text-muted-foreground">
             {possibleResults.length} possible
           </Badge>
+          <span className="text-xs text-muted-foreground hidden sm:inline">
+            ↑↓ navigate • Enter to visit
+          </span>
         </div>
         <Button
           size="sm"
@@ -376,7 +446,7 @@ const GoogleSearchResults = ({
             </h4>
           </div>
           <div className="space-y-3 pl-4">
-            {filteredConfirmed.map((item, idx) => renderResultItem(item, idx, true))}
+            {filteredConfirmed.map((item, idx) => renderResultItem(item, idx, true, idx))}
           </div>
         </div>
       )}
@@ -402,7 +472,7 @@ const GoogleSearchResults = ({
           
           {showPossible && (
             <div className="space-y-3 pl-4 opacity-90">
-              {filteredPossible.map((item, idx) => renderResultItem(item, idx, false))}
+              {filteredPossible.map((item, idx) => renderResultItem(item, idx, false, filteredConfirmed.length + idx))}
             </div>
           )}
         </div>
