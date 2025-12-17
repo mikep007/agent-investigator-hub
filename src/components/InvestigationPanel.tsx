@@ -817,9 +817,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
   const renderWebResults = (filteredLogs: LogEntry[]) => {
     const { allConfirmed, allPossible } = collectWebResultsForExport(filteredLogs);
     
-    // Collect queries and keywords from all web logs
+    // Collect queries, keywords, and errors from all web logs
     let allQueriesUsed: { type: string; query: string; description: string }[] = [];
     let allKeywordsSearched: string[] = [];
+    let webError: string | null = null;
     
     filteredLogs.forEach(log => {
       const agentType = log.agent_type?.toLowerCase() || '';
@@ -835,6 +836,11 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         const keywordsSearched = log.data?.searchInformation?.keywordsSearched || [];
         allQueriesUsed = [...allQueriesUsed, ...queriesUsed];
         allKeywordsSearched = [...new Set([...allKeywordsSearched, ...keywordsSearched])];
+        
+        // Check for error in web results
+        if (log.data?.error && !webError) {
+          webError = log.data.error;
+        }
       }
     });
 
@@ -845,6 +851,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
         queriesUsed={allQueriesUsed}
         keywordsSearched={allKeywordsSearched}
         targetName={searchData?.fullName}
+        error={webError}
       />
     );
   };
