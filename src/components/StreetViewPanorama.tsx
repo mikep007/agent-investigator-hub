@@ -35,6 +35,7 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
   const [error, setError] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
   const [staticError, setStaticError] = useState(false);
+  const [nearbyDistance, setNearbyDistance] = useState<number | null>(null);
 
   // If coordinates are invalid, show error state immediately
   if (!hasValidCoords) {
@@ -166,19 +167,20 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
             });
             
             setPanoramaInstance(panorama);
+            setNearbyDistance(Math.round(distance));
             setLoading(false);
           } else {
-            // Try with larger radius as fallback
-            console.log("No panorama at 50m, trying 100m radius...");
+            // Try with larger radius as fallback (500m for nearby streets)
+            console.log("No panorama at 50m, trying 500m radius...");
             streetViewService.getPanorama(
-              { location: { lat: latitude, lng: longitude }, radius: 100 },
+              { location: { lat: latitude, lng: longitude }, radius: 500 },
               (data2, status2) => {
                 if (status2 === google.maps.StreetViewStatus.OK && data2?.location?.latLng) {
                   const panoramaLat = data2.location.latLng.lat();
                   const panoramaLng = data2.location.latLng.lng();
                   const distance = calculateDistance(latitude, longitude, panoramaLat, panoramaLng);
                   
-                  console.log("Panorama found at distance (100m):", distance.toFixed(0), "m from target");
+                  console.log("Panorama found at distance (500m):", distance.toFixed(0), "m from target");
                   
                   // Calculate heading to face the target address
                   const heading = calculateHeading(panoramaLat, panoramaLng, latitude, longitude);
@@ -199,9 +201,10 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
                   });
                   
                   setPanoramaInstance(panorama);
+                  setNearbyDistance(Math.round(distance));
                   setLoading(false);
                 } else {
-                  console.error("Street View not available within 100m of this location:", status2);
+                  console.error("Street View not available within 500m of this location:", status2);
                   setError(true);
                   setLoading(false);
                 }
@@ -315,15 +318,22 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
         </div>
       )}
       {!loading && !error && (
-        <Button
-          onClick={toggleView}
-          size="sm"
-          className="absolute bottom-3 right-3 gap-2"
-          variant="secondary"
-        >
-          <ImageIcon className="h-4 w-4" />
-          Static View
-        </Button>
+        <>
+          {nearbyDistance && nearbyDistance > 50 && (
+            <div className="absolute top-3 left-3 bg-amber-500/90 text-white text-xs px-2 py-1 rounded-md">
+              Nearby view ({nearbyDistance}m away)
+            </div>
+          )}
+          <Button
+            onClick={toggleView}
+            size="sm"
+            className="absolute bottom-3 right-3 gap-2"
+            variant="secondary"
+          >
+            <ImageIcon className="h-4 w-4" />
+            Static View
+          </Button>
+        </>
       )}
     </div>
   );
