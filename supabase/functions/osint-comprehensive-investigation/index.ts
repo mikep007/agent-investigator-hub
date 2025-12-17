@@ -420,11 +420,29 @@ Deno.serve(async (req) => {
 
         if (error) {
           console.error(`Error from ${agentType} function:`, error);
+          const errorMessage = typeof error === 'string' ? error : (error.message || JSON.stringify(error));
           searchDebug.push({
             type: agentType,
             status: 'error',
-            error: typeof error === 'string' ? error : JSON.stringify(error),
+            error: errorMessage,
           });
+          
+          // Still create a finding with the error so the UI can display it
+          if (agentType === 'web' || agentType.includes('web_')) {
+            await supabaseClient.from('findings').insert({
+              investigation_id: investigation.id,
+              agent_type: 'Web',
+              source: `OSINT-${agentType}`,
+              data: {
+                error: errorMessage,
+                items: [],
+                confirmedItems: [],
+                possibleItems: [],
+              },
+              confidence_score: null,
+              verification_status: 'needs_review',
+            });
+          }
           continue;
         }
 
@@ -511,11 +529,29 @@ Deno.serve(async (req) => {
         }
       } else {
         console.error(`OSINT search ${agentType} failed:`, result.reason);
+        const errorMessage = typeof result.reason === 'string' ? result.reason : (result.reason?.message || JSON.stringify(result.reason));
         searchDebug.push({
           type: agentType,
           status: 'failed',
-          error: typeof result.reason === 'string' ? result.reason : JSON.stringify(result.reason),
+          error: errorMessage,
         });
+        
+        // Still create a finding with the error so the UI can display it
+        if (agentType === 'web' || agentType.includes('web_')) {
+          await supabaseClient.from('findings').insert({
+            investigation_id: investigation.id,
+            agent_type: 'Web',
+            source: `OSINT-${agentType}`,
+            data: {
+              error: errorMessage,
+              items: [],
+              confirmedItems: [],
+              possibleItems: [],
+            },
+            confidence_score: null,
+            verification_status: 'needs_review',
+          });
+        }
       }
     }
 
