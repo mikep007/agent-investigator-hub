@@ -42,99 +42,127 @@ function checkNameMatch(text: string, fullName: string): { exact: boolean; parti
 
 // Build Google Dork queries for comprehensive OSINT with keywords
 function buildDorkQueries(
-  name: string, 
-  location?: string, 
-  email?: string, 
+  name: string,
+  location?: string,
+  email?: string,
   phone?: string,
-  keywords?: string
+  keywords?: string,
+  seedQuery?: string,
 ): { query: string; type: string; priority: number; description: string }[] {
   const queries: { query: string; type: string; priority: number; description: string }[] = [];
-  
+
+  const stripOuterQuotes = (value: string) => value.replace(/^"+|"+$/g, '').trim();
+
   // Handle multiple names separated by / or &
-  const names = name.split(/[\/&]/).map(n => n.trim()).filter(n => n.length > 1);
-  const primaryName = names[0] || name;
+  const names = stripOuterQuotes(name)
+    .split(/[\/&]/)
+    .map((n) => n.trim())
+    .filter((n) => n.length > 1);
+  const primaryName = names[0] || stripOuterQuotes(name);
   const quotedPrimary = `"${primaryName}"`;
-  
+
+  // If we got a richer "seed" query from the orchestrator (e.g. address owner dork),
+  // always run it first to avoid losing those extra terms.
+  const normalizedSeed = seedQuery?.trim();
+  if (normalizedSeed && normalizedSeed.length > 1 && stripOuterQuotes(normalizedSeed) !== primaryName) {
+    queries.push({
+      query: normalizedSeed,
+      type: 'seed',
+      priority: 1,
+      description: 'Seed query (from investigation context)',
+    });
+  }
+
   // Parse location for city/state
   let city = '';
   let state = '';
   if (location && location !== 'provided') {
-    const locationParts = location.split(',').map(p => p.trim()).filter(p => p.length > 2);
+    const locationParts = location.split(',').map((p) => p.trim()).filter((p) => p.length > 2);
     city = locationParts[0] || '';
     state = locationParts.length > 1 ? locationParts[1] : '';
   }
-  
+
   // Parse keywords into array
-  const keywordList = keywords 
-    ? keywords.split(',').map(k => k.trim()).filter(k => k.length > 1)
+  const keywordList = keywords
+    ? keywords.split(',').map((k) => k.trim()).filter((k) => k.length > 1)
     : [];
-  
+
   // Add secondary names as keywords
   if (names.length > 1) {
     for (let i = 1; i < names.length; i++) {
       keywordList.push(names[i]);
     }
   }
-  
+
   // 1. SIMPLE broad name search - MOST IMPORTANT for getting results
+  // Run both quoted + unquoted (quoted can be too strict with middle initials, etc.)
   queries.push({
     query: quotedPrimary,
-    type: 'general',
+    type: 'general_exact',
     priority: 1,
-    description: 'General name search'
+    description: 'General name search (exact phrase)',
   });
-  
+
+  if (primaryName !== quotedPrimary.replace(/"/g, '') && primaryName.length > 1) {
+    queries.push({
+      query: primaryName,
+      type: 'general_broad',
+      priority: 1,
+      description: 'General name search (broad)',
+    });
+  }
+
   // 2. Name + City only (simple, likely to get results)
   if (city) {
     queries.push({
       query: `${quotedPrimary} ${city}`,
       type: 'location_city',
       priority: 1,
-      description: `Name + City: ${city}`
+      description: `Name + City: ${city}`,
     });
   }
-  
+
   // 3. Name + State only
   if (state) {
     queries.push({
       query: `${quotedPrimary} ${state}`,
       type: 'location_state',
       priority: 2,
-      description: `Name + State: ${state}`
+      description: `Name + State: ${state}`,
     });
   }
-  
+
   // 4. Name + Full location (city, state)
   if (city && state) {
     queries.push({
       query: `${quotedPrimary} "${city}" "${state}"`,
       type: 'location_full',
       priority: 2,
-      description: `Name + Full location: ${city}, ${state}`
+      description: `Name + Full location: ${city}, ${state}`,
     });
   }
-  
+
   // 5. Name + Each keyword separately (more likely to get results than combining all)
   for (const keyword of keywordList.slice(0, 3)) {
     queries.push({
       query: `${quotedPrimary} "${keyword}"`,
       type: 'keyword_specific',
       priority: 2,
-      description: `Keyword: ${keyword}`
+      description: `Keyword: ${keyword}`,
     });
   }
-  
-  // 6. Name + Email (direct match)
+
+  // 6. Email (direct match)
   if (email && email !== 'provided') {
     queries.push({
-      query: `"${email}"`,
+      query: `"${stripOuterQuotes(email)}"`,
       type: 'email_direct',
       priority: 1,
-      description: `Email search: ${email}`
+      description: `Email search: ${email}`,
     });
   }
-  
-  // 7. Name + Phone (digits only for best match)
+
+  // 7. Phone (digits only for best match)
   if (phone && phone !== 'provided') {
     const cleanPhone = phone.replace(/\D/g, '');
     if (cleanPhone.length >= 10) {
@@ -142,51 +170,51 @@ function buildDorkQueries(
         query: `"${cleanPhone}"`,
         type: 'phone_direct',
         priority: 1,
-        description: `Phone search: ${phone}`
+        description: `Phone search: ${phone}`,
       });
     }
   }
-  
+
   // 8. LinkedIn specific (high value for professional info)
   queries.push({
     query: `${quotedPrimary} site:linkedin.com`,
     type: 'linkedin',
     priority: 2,
-    description: 'LinkedIn profiles'
+    description: 'LinkedIn profiles',
   });
-  
+
   // 9. Facebook specific
   queries.push({
     query: `${quotedPrimary} site:facebook.com`,
     type: 'facebook',
     priority: 3,
-    description: 'Facebook profiles'
+    description: 'Facebook profiles',
   });
-  
+
   // 10. Government/official sources
   queries.push({
     query: `${quotedPrimary} site:gov`,
     type: 'gov_sites',
     priority: 3,
-    description: 'Government sites'
+    description: 'Government sites',
   });
-  
+
   // 11. PDF/Documents
   queries.push({
     query: `${quotedPrimary} filetype:pdf`,
     type: 'documents',
     priority: 4,
-    description: 'PDF documents'
+    description: 'PDF documents',
   });
-  
+
   // 12. People search sites
   queries.push({
     query: `${quotedPrimary} site:whitepages.com OR site:spokeo.com OR site:truepeoplesearch.com`,
     type: 'people_finders',
     priority: 3,
-    description: 'People finder sites'
+    description: 'People finder sites',
   });
-  
+
   return queries;
 }
 
@@ -223,7 +251,10 @@ Deno.serve(async (req) => {
       throw new Error('Google API credentials not configured');
     }
 
-    const searchName = searchData?.fullName || target;
+    const stripOuterQuotes = (value: string) => String(value || '').replace(/^"+|"+$/g, '').trim();
+
+    const seedQuery = typeof target === 'string' ? target.trim() : '';
+    const searchName = stripOuterQuotes(searchData?.fullName || seedQuery);
     const location = searchData?.address;
     const email = searchData?.email;
     const phone = searchData?.phone;
@@ -231,9 +262,9 @@ Deno.serve(async (req) => {
     
     console.log('Parsed inputs - Name:', searchName, 'Location:', location, 'Keywords:', keywords);
     
-    // Build targeted dork queries including keywords
-    const dorkQueries = buildDorkQueries(searchName, location, email, phone, keywords);
-    
+    // Build targeted dork queries including keywords + preserve any seed query passed in target
+    const dorkQueries = buildDorkQueries(searchName, location, email, phone, keywords, seedQuery);
+
     // Execute MORE queries for comprehensive coverage (up to 8)
     const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 8);
     
