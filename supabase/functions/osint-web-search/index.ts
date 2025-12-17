@@ -251,6 +251,34 @@ Deno.serve(async (req) => {
     );
     
     const searchResults = await Promise.all(searchPromises);
+    
+    // Check if ALL searches failed due to API being blocked
+    const allFailed = searchResults.every(r => r === null);
+    const firstError = searchResults.find(r => r?.error);
+    
+    if (allFailed || firstError?.error) {
+      const errorMessage = firstError?.error?.message || 'Google Custom Search API is blocked or not enabled. Please enable it in Google Cloud Console.';
+      console.error('All searches failed. API Error:', errorMessage);
+      
+      // Return error in response so UI can show helpful message
+      return new Response(JSON.stringify({ 
+        error: errorMessage,
+        searchInformation: { totalResults: "0", queriesExecuted: sortedQueries.map(q => q.type) },
+        confirmedItems: [],
+        possibleItems: [],
+        items: [],
+        queriesUsed: sortedQueries.map(q => ({ type: q.type, query: q.query, description: q.description })),
+        searchContext: {
+          fullName: searchName,
+          hasAddress: !!location,
+          hasEmail: !!email,
+          hasPhone: !!phone,
+          hasKeywords: !!keywords
+        }
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     console.log('All searches complete. Processing results...');
     
     // Deduplicate results by URL
