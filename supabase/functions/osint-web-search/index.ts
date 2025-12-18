@@ -8,6 +8,53 @@ const corsHeaders = {
 const GOOGLE_API_KEY = Deno.env.get('GOOGLE_API_KEY');
 const GOOGLE_SEARCH_ENGINE_ID = Deno.env.get('GOOGLE_SEARCH_ENGINE_ID');
 
+// State business registry URLs and search domains
+const STATE_BUSINESS_REGISTRIES: Record<string, { domain: string; name: string; searchTypes: string[] }> = {
+  'FL': { domain: 'dos.fl.gov', name: 'Florida SunBiz', searchTypes: ['officer', 'registered agent', 'business'] },
+  'FLORIDA': { domain: 'dos.fl.gov', name: 'Florida SunBiz', searchTypes: ['officer', 'registered agent', 'business'] },
+  'CA': { domain: 'bizfileonline.sos.ca.gov', name: 'California Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'CALIFORNIA': { domain: 'bizfileonline.sos.ca.gov', name: 'California Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'NY': { domain: 'apps.dos.ny.gov', name: 'NY Business Entity Search', searchTypes: ['officer', 'agent', 'business'] },
+  'NEW YORK': { domain: 'apps.dos.ny.gov', name: 'NY Business Entity Search', searchTypes: ['officer', 'agent', 'business'] },
+  'TX': { domain: 'mycpa.cpa.state.tx.us', name: 'Texas Comptroller', searchTypes: ['officer', 'business'] },
+  'TEXAS': { domain: 'mycpa.cpa.state.tx.us', name: 'Texas Comptroller', searchTypes: ['officer', 'business'] },
+  'PA': { domain: 'file.dos.pa.gov', name: 'PA Business Entity Search', searchTypes: ['officer', 'agent', 'business'] },
+  'PENNSYLVANIA': { domain: 'file.dos.pa.gov', name: 'PA Business Entity Search', searchTypes: ['officer', 'agent', 'business'] },
+  'NJ': { domain: 'njportal.com', name: 'NJ Business Gateway', searchTypes: ['officer', 'agent', 'business'] },
+  'NEW JERSEY': { domain: 'njportal.com', name: 'NJ Business Gateway', searchTypes: ['officer', 'agent', 'business'] },
+  'IL': { domain: 'apps.ilsos.gov', name: 'Illinois Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'ILLINOIS': { domain: 'apps.ilsos.gov', name: 'Illinois Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'OH': { domain: 'businesssearch.ohiosos.gov', name: 'Ohio Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'OHIO': { domain: 'businesssearch.ohiosos.gov', name: 'Ohio Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'GA': { domain: 'ecorp.sos.ga.gov', name: 'Georgia Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'GEORGIA': { domain: 'ecorp.sos.ga.gov', name: 'Georgia Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'NC': { domain: 'sosnc.gov', name: 'NC Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'NORTH CAROLINA': { domain: 'sosnc.gov', name: 'NC Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'MI': { domain: 'cofs.lara.state.mi.us', name: 'Michigan Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'MICHIGAN': { domain: 'cofs.lara.state.mi.us', name: 'Michigan Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'AZ': { domain: 'azsos.gov', name: 'Arizona Corporation Commission', searchTypes: ['officer', 'agent', 'business'] },
+  'ARIZONA': { domain: 'azsos.gov', name: 'Arizona Corporation Commission', searchTypes: ['officer', 'agent', 'business'] },
+  'WA': { domain: 'sos.wa.gov', name: 'Washington Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'WASHINGTON': { domain: 'sos.wa.gov', name: 'Washington Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'CO': { domain: 'sos.state.co.us', name: 'Colorado Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'COLORADO': { domain: 'sos.state.co.us', name: 'Colorado Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'MA': { domain: 'corp.sec.state.ma.us', name: 'Massachusetts Corporations', searchTypes: ['officer', 'agent', 'business'] },
+  'MASSACHUSETTS': { domain: 'corp.sec.state.ma.us', name: 'Massachusetts Corporations', searchTypes: ['officer', 'agent', 'business'] },
+  'VA': { domain: 'scc.virginia.gov', name: 'Virginia Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'VIRGINIA': { domain: 'scc.virginia.gov', name: 'Virginia Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'NV': { domain: 'nvsos.gov', name: 'Nevada Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'NEVADA': { domain: 'nvsos.gov', name: 'Nevada Business Search', searchTypes: ['officer', 'agent', 'business'] },
+  'MD': { domain: 'egov.maryland.gov', name: 'Maryland Business Express', searchTypes: ['officer', 'agent', 'business'] },
+  'MARYLAND': { domain: 'egov.maryland.gov', name: 'Maryland Business Express', searchTypes: ['officer', 'agent', 'business'] },
+};
+
+// Get state registry info from state name or abbreviation
+function getStateRegistry(stateInput: string): { domain: string; name: string; searchTypes: string[] } | null {
+  if (!stateInput) return null;
+  const normalized = stateInput.toUpperCase().trim();
+  return STATE_BUSINESS_REGISTRIES[normalized] || null;
+}
+
 // Check if full name appears as an exact phrase or adjacent words
 function checkNameMatch(text: string, fullName: string): { exact: boolean; partial: boolean } {
   const textLower = text.toLowerCase();
@@ -293,6 +340,85 @@ function buildDorkQueries(
     });
   }
 
+  // ========== STATE BUSINESS REGISTRY SEARCHES ==========
+  const stateRegistry = getStateRegistry(state);
+  if (stateRegistry) {
+    // Search state business registry for officer/director
+    queries.push({
+      query: `${quotedPrimary} site:${stateRegistry.domain} officer OR director OR member OR agent`,
+      type: 'business_registry_officer',
+      priority: 2,
+      description: `${stateRegistry.name} - Officer/Director Search`,
+    });
+
+    // Search for registered agent
+    queries.push({
+      query: `${quotedPrimary} site:${stateRegistry.domain} "registered agent"`,
+      type: 'business_registry_agent',
+      priority: 2,
+      description: `${stateRegistry.name} - Registered Agent Search`,
+    });
+
+    // General business affiliation search on state registry
+    queries.push({
+      query: `${quotedPrimary} site:${stateRegistry.domain}`,
+      type: 'business_registry_general',
+      priority: 2,
+      description: `${stateRegistry.name} - Business Affiliations`,
+    });
+
+    // If we have an address, search by street address
+    if (city) {
+      queries.push({
+        query: `${quotedPrimary} "${city}" site:${stateRegistry.domain}`,
+        type: 'business_registry_address',
+        priority: 3,
+        description: `${stateRegistry.name} - Business at ${city}`,
+      });
+    }
+
+    // Search for keywords + business registry
+    for (const keyword of keywordList.slice(0, 2)) {
+      queries.push({
+        query: `"${keyword}" site:${stateRegistry.domain} ${quotedPrimary}`,
+        type: 'business_registry_keyword',
+        priority: 3,
+        description: `${stateRegistry.name} - Keyword "${keyword}"`,
+      });
+    }
+  }
+
+  // General business/corporate searches (all states)
+  queries.push({
+    query: `${quotedPrimary} "officer" OR "director" OR "president" OR "CEO" site:gov`,
+    type: 'business_officer_gov',
+    priority: 2,
+    description: 'Business Officer/Director on .gov sites',
+  });
+
+  queries.push({
+    query: `${quotedPrimary} "registered agent" OR "statutory agent" site:gov`,
+    type: 'business_agent_gov',
+    priority: 3,
+    description: 'Registered Agent on .gov sites',
+  });
+
+  // OpenCorporates search (aggregates business data)
+  queries.push({
+    query: `${quotedPrimary} site:opencorporates.com`,
+    type: 'opencorporates',
+    priority: 3,
+    description: 'OpenCorporates business database',
+  });
+
+  // Bloomberg/business news for corporate affiliations
+  queries.push({
+    query: `${quotedPrimary} site:bloomberg.com OR site:crunchbase.com`,
+    type: 'business_news',
+    priority: 4,
+    description: 'Business profiles (Bloomberg, Crunchbase)',
+  });
+
   // ========== SITE-SPECIFIC SEARCHES ==========
   queries.push({
     query: `${quotedPrimary} site:linkedin.com`,
@@ -377,16 +503,27 @@ Deno.serve(async (req) => {
     const username = searchData?.username;
     const relatives = searchData?.relatives || searchData?.associates || [];
     
+    // Detect state from location for business registry searches
+    let detectedState = '';
+    if (location && location !== 'provided') {
+      const locationParts = location.split(',').map((p: string) => p.trim());
+      detectedState = locationParts.length > 1 ? locationParts[locationParts.length - 1] : locationParts[0];
+    }
+    const stateRegistry = getStateRegistry(detectedState);
+    
     console.log('Parsed inputs - Name:', searchName, 'Location:', location, 'Keywords:', keywords, 'Username:', username, 'Relatives:', relatives?.length || 0);
+    if (stateRegistry) {
+      console.log('Detected state registry:', stateRegistry.name, '- Will search business affiliations');
+    }
     
     // Build targeted dork queries with keywords combined with all data points
     const dorkQueries = buildDorkQueries(searchName, location, email, phone, keywords, seedQuery, username, relatives);
 
-    // Execute MORE queries for comprehensive coverage (up to 10 for keyword combinations)
-    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 10);
+    // Execute MORE queries for comprehensive coverage (up to 12 to include business registry searches)
+    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 12);
     
     console.log('Will execute', sortedQueries.length, 'queries:');
-    sortedQueries.forEach((q, i) => console.log(`  ${i+1}. [${q.type}] ${q.query.slice(0, 60)}...`));
+    sortedQueries.forEach((q, i) => console.log(`  ${i+1}. [${q.type}] ${q.query.slice(0, 80)}...`));
     
     const searchPromises = sortedQueries.map(q => 
       executeSearch(q.query, GOOGLE_API_KEY!, GOOGLE_SEARCH_ENGINE_ID!)
