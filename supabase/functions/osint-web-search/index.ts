@@ -40,7 +40,7 @@ function checkNameMatch(text: string, fullName: string): { exact: boolean; parti
   return { exact: false, partial: false };
 }
 
-// Build Google Dork queries for comprehensive OSINT with keywords
+// Build Google Dork queries for comprehensive OSINT with keywords combined with all data points
 function buildDorkQueries(
   name: string,
   location?: string,
@@ -48,6 +48,8 @@ function buildDorkQueries(
   phone?: string,
   keywords?: string,
   seedQuery?: string,
+  username?: string,
+  relatives?: string[],
 ): { query: string; type: string; priority: number; description: string }[] {
   const queries: { query: string; type: string; priority: number; description: string }[] = [];
 
@@ -61,8 +63,12 @@ function buildDorkQueries(
   const primaryName = names[0] || stripOuterQuotes(name);
   const quotedPrimary = `"${primaryName}"`;
 
-  // If we got a richer "seed" query from the orchestrator (e.g. address owner dork),
-  // always run it first to avoid losing those extra terms.
+  // Parse name parts for individual keyword combinations
+  const nameParts = primaryName.split(/\s+/).filter(p => p.length > 1);
+  const firstName = nameParts[0] || '';
+  const lastName = nameParts.length > 1 ? nameParts[nameParts.length - 1] : '';
+
+  // If we got a richer "seed" query from the orchestrator, run it first
   const normalizedSeed = seedQuery?.trim();
   if (normalizedSeed && normalizedSeed.length > 1 && stripOuterQuotes(normalizedSeed) !== primaryName) {
     queries.push({
@@ -94,8 +100,19 @@ function buildDorkQueries(
     }
   }
 
-  // 1. SIMPLE broad name search - MOST IMPORTANT for getting results
-  // Run both quoted + unquoted (quoted can be too strict with middle initials, etc.)
+  // Clean phone number
+  const cleanPhone = phone ? phone.replace(/\D/g, '') : '';
+  const hasValidPhone = cleanPhone.length >= 10;
+
+  // Clean email
+  const cleanEmail = email && email !== 'provided' ? stripOuterQuotes(email) : '';
+
+  // Clean username
+  const cleanUsername = username ? stripOuterQuotes(username).replace(/^@/, '') : '';
+
+  // ========== PRIMARY SEARCHES ==========
+
+  // 1. Full name searches
   queries.push({
     query: quotedPrimary,
     type: 'general_exact',
@@ -103,16 +120,7 @@ function buildDorkQueries(
     description: 'General name search (exact phrase)',
   });
 
-  if (primaryName !== quotedPrimary.replace(/"/g, '') && primaryName.length > 1) {
-    queries.push({
-      query: primaryName,
-      type: 'general_broad',
-      priority: 1,
-      description: 'General name search (broad)',
-    });
-  }
-
-  // 2. Name + City only (simple, likely to get results)
+  // 2. Name + City
   if (city) {
     queries.push({
       query: `${quotedPrimary} ${city}`,
@@ -122,7 +130,151 @@ function buildDorkQueries(
     });
   }
 
-  // 3. Name + State only
+  // ========== KEYWORD + NAME COMBINATIONS ==========
+  for (const keyword of keywordList.slice(0, 3)) {
+    // Keyword + full name
+    queries.push({
+      query: `${quotedPrimary} "${keyword}"`,
+      type: 'keyword_name',
+      priority: 2,
+      description: `Keyword "${keyword}" + Full Name`,
+    });
+
+    // Keyword + first name only (catches partial matches)
+    if (firstName) {
+      queries.push({
+        query: `"${firstName}" "${keyword}"`,
+        type: 'keyword_firstname',
+        priority: 3,
+        description: `Keyword "${keyword}" + First Name`,
+      });
+    }
+
+    // Keyword + last name only
+    if (lastName) {
+      queries.push({
+        query: `"${lastName}" "${keyword}"`,
+        type: 'keyword_lastname',
+        priority: 3,
+        description: `Keyword "${keyword}" + Last Name`,
+      });
+    }
+  }
+
+  // ========== KEYWORD + PHONE COMBINATIONS ==========
+  if (hasValidPhone) {
+    // Phone direct search
+    queries.push({
+      query: `"${cleanPhone}"`,
+      type: 'phone_direct',
+      priority: 1,
+      description: `Phone search: ${phone}`,
+    });
+
+    // Phone + keywords
+    for (const keyword of keywordList.slice(0, 2)) {
+      queries.push({
+        query: `"${cleanPhone}" "${keyword}"`,
+        type: 'keyword_phone',
+        priority: 2,
+        description: `Keyword "${keyword}" + Phone`,
+      });
+    }
+
+    // Phone + name
+    queries.push({
+      query: `"${cleanPhone}" ${quotedPrimary}`,
+      type: 'phone_name',
+      priority: 2,
+      description: 'Phone + Name combination',
+    });
+  }
+
+  // ========== KEYWORD + EMAIL COMBINATIONS ==========
+  if (cleanEmail) {
+    // Email direct search
+    queries.push({
+      query: `"${cleanEmail}"`,
+      type: 'email_direct',
+      priority: 1,
+      description: `Email search: ${email}`,
+    });
+
+    // Email + keywords
+    for (const keyword of keywordList.slice(0, 2)) {
+      queries.push({
+        query: `"${cleanEmail}" "${keyword}"`,
+        type: 'keyword_email',
+        priority: 2,
+        description: `Keyword "${keyword}" + Email`,
+      });
+    }
+
+    // Email + name
+    queries.push({
+      query: `"${cleanEmail}" ${quotedPrimary}`,
+      type: 'email_name',
+      priority: 2,
+      description: 'Email + Name combination',
+    });
+  }
+
+  // ========== KEYWORD + USERNAME COMBINATIONS ==========
+  if (cleanUsername) {
+    // Username direct search
+    queries.push({
+      query: `"${cleanUsername}"`,
+      type: 'username_direct',
+      priority: 2,
+      description: `Username search: ${cleanUsername}`,
+    });
+
+    // Username + keywords
+    for (const keyword of keywordList.slice(0, 2)) {
+      queries.push({
+        query: `"${cleanUsername}" "${keyword}"`,
+        type: 'keyword_username',
+        priority: 2,
+        description: `Keyword "${keyword}" + Username`,
+      });
+    }
+
+    // Username + name
+    queries.push({
+      query: `"${cleanUsername}" ${quotedPrimary}`,
+      type: 'username_name',
+      priority: 2,
+      description: 'Username + Name combination',
+    });
+  }
+
+  // ========== KEYWORD + RELATIVES/ASSOCIATES COMBINATIONS ==========
+  if (relatives && relatives.length > 0) {
+    for (const relative of relatives.slice(0, 3)) {
+      const cleanRelative = stripOuterQuotes(relative);
+      if (cleanRelative.length > 2) {
+        // Relative + primary name
+        queries.push({
+          query: `"${cleanRelative}" ${quotedPrimary}`,
+          type: 'relative_name',
+          priority: 2,
+          description: `Relative/Associate "${cleanRelative}" + Name`,
+        });
+
+        // Relative + keywords
+        for (const keyword of keywordList.slice(0, 2)) {
+          queries.push({
+            query: `"${cleanRelative}" "${keyword}"`,
+            type: 'keyword_relative',
+            priority: 3,
+            description: `Keyword "${keyword}" + Relative "${cleanRelative}"`,
+          });
+        }
+      }
+    }
+  }
+
+  // ========== LOCATION COMBINATIONS ==========
   if (state) {
     queries.push({
       query: `${quotedPrimary} ${state}`,
@@ -132,7 +284,6 @@ function buildDorkQueries(
     });
   }
 
-  // 4. Name + Full location (city, state)
   if (city && state) {
     queries.push({
       query: `${quotedPrimary} "${city}" "${state}"`,
@@ -142,48 +293,14 @@ function buildDorkQueries(
     });
   }
 
-  // 5. Name + Each keyword separately (more likely to get results than combining all)
-  for (const keyword of keywordList.slice(0, 3)) {
-    queries.push({
-      query: `${quotedPrimary} "${keyword}"`,
-      type: 'keyword_specific',
-      priority: 2,
-      description: `Keyword: ${keyword}`,
-    });
-  }
-
-  // 6. Email (direct match)
-  if (email && email !== 'provided') {
-    queries.push({
-      query: `"${stripOuterQuotes(email)}"`,
-      type: 'email_direct',
-      priority: 1,
-      description: `Email search: ${email}`,
-    });
-  }
-
-  // 7. Phone (digits only for best match)
-  if (phone && phone !== 'provided') {
-    const cleanPhone = phone.replace(/\D/g, '');
-    if (cleanPhone.length >= 10) {
-      queries.push({
-        query: `"${cleanPhone}"`,
-        type: 'phone_direct',
-        priority: 1,
-        description: `Phone search: ${phone}`,
-      });
-    }
-  }
-
-  // 8. LinkedIn specific (high value for professional info)
+  // ========== SITE-SPECIFIC SEARCHES ==========
   queries.push({
     query: `${quotedPrimary} site:linkedin.com`,
     type: 'linkedin',
-    priority: 2,
+    priority: 3,
     description: 'LinkedIn profiles',
   });
 
-  // 9. Facebook specific
   queries.push({
     query: `${quotedPrimary} site:facebook.com`,
     type: 'facebook',
@@ -191,7 +308,6 @@ function buildDorkQueries(
     description: 'Facebook profiles',
   });
 
-  // 10. Government/official sources
   queries.push({
     query: `${quotedPrimary} site:gov`,
     type: 'gov_sites',
@@ -199,7 +315,6 @@ function buildDorkQueries(
     description: 'Government sites',
   });
 
-  // 11. PDF/Documents
   queries.push({
     query: `${quotedPrimary} filetype:pdf`,
     type: 'documents',
@@ -207,7 +322,6 @@ function buildDorkQueries(
     description: 'PDF documents',
   });
 
-  // 12. People search sites
   queries.push({
     query: `${quotedPrimary} site:whitepages.com OR site:spokeo.com OR site:truepeoplesearch.com`,
     type: 'people_finders',
@@ -260,13 +374,16 @@ Deno.serve(async (req) => {
     const phone = searchData?.phone;
     const keywords = searchData?.keywords;
     
-    console.log('Parsed inputs - Name:', searchName, 'Location:', location, 'Keywords:', keywords);
+    const username = searchData?.username;
+    const relatives = searchData?.relatives || searchData?.associates || [];
     
-    // Build targeted dork queries including keywords + preserve any seed query passed in target
-    const dorkQueries = buildDorkQueries(searchName, location, email, phone, keywords, seedQuery);
+    console.log('Parsed inputs - Name:', searchName, 'Location:', location, 'Keywords:', keywords, 'Username:', username, 'Relatives:', relatives?.length || 0);
+    
+    // Build targeted dork queries with keywords combined with all data points
+    const dorkQueries = buildDorkQueries(searchName, location, email, phone, keywords, seedQuery, username, relatives);
 
-    // Execute MORE queries for comprehensive coverage (up to 8)
-    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 8);
+    // Execute MORE queries for comprehensive coverage (up to 10 for keyword combinations)
+    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 10);
     
     console.log('Will execute', sortedQueries.length, 'queries:');
     sortedQueries.forEach((q, i) => console.log(`  ${i+1}. [${q.type}] ${q.query.slice(0, 60)}...`));
