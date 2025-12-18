@@ -130,7 +130,9 @@ Deno.serve(async (req) => {
     }
 
     // Username-based platform checks (for username searches)
-    if (searchType === 'username' || !fullName) {
+    // Skip if target looks like an email - Holehe handles email platform enumeration
+    const isEmail = target && target.includes('@');
+    if ((searchType === 'username' || !fullName) && !isEmail) {
       const cleanUsername = target.replace(/\s+/g, '').trim();
 
       const platforms = [
