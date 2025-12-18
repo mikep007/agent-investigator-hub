@@ -13,6 +13,7 @@ import InvestigativeAssistant from "./InvestigativeAssistant";
 import AddressResults from "./AddressResults";
 import BreachResults from "./BreachResults";
 import { ResultsDisplay, FindingData, GoogleSearchResults } from "./results";
+import DeepDiveResultsCard from "./results/DeepDiveResultsCard";
 import { exportWebResultsToCSV } from "@/utils/csvExport";
 import {
   Tooltip,
@@ -2686,11 +2687,10 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                 <Clock className="h-8 w-8 animate-pulse text-primary" />
               </div>
             ) : deepDiveResults ? (
-              <div className="space-y-4">
-                <pre className="text-sm bg-muted p-4 rounded-lg overflow-auto max-h-96">
-                  {JSON.stringify(deepDiveResults, null, 2)}
-                </pre>
-              </div>
+              <DeepDiveResultsCard 
+                results={deepDiveResults} 
+                platform={deepDiveDialog?.platform || ''} 
+              />
             ) : null}
           </div>
         </DialogContent>
