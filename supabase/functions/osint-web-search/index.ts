@@ -48,6 +48,53 @@ const STATE_BUSINESS_REGISTRIES: Record<string, { domain: string; name: string; 
   'MARYLAND': { domain: 'egov.maryland.gov', name: 'Maryland Business Express', searchTypes: ['officer', 'agent', 'business'] },
 };
 
+// State property appraiser/assessor domains for property records searches
+const STATE_PROPERTY_ASSESSORS: Record<string, { domains: string[]; name: string }> = {
+  'FL': { domains: ['appraiser.miamidade.gov', 'bcpa.net', 'pabroward.gov', 'ocpafl.org', 'hcpafl.org', 'pcpao.org', 'leepa.org', 'scpafl.org', 'ccappraiser.com'], name: 'Florida Property Appraiser' },
+  'FLORIDA': { domains: ['appraiser.miamidade.gov', 'bcpa.net', 'pabroward.gov', 'ocpafl.org', 'hcpafl.org', 'pcpao.org', 'leepa.org', 'scpafl.org', 'ccappraiser.com'], name: 'Florida Property Appraiser' },
+  'CA': { domains: ['assessor.lacounty.gov', 'sccassessor.org', 'assr.sfdlg.org', 'acgov.org', 'sdcounty.ca.gov'], name: 'California Assessor' },
+  'CALIFORNIA': { domains: ['assessor.lacounty.gov', 'sccassessor.org', 'assr.sfdlg.org', 'acgov.org', 'sdcounty.ca.gov'], name: 'California Assessor' },
+  'TX': { domains: ['hcad.org', 'dallascad.org', 'bcad.org', 'taad.org', 'traviscad.org', 'collincad.org'], name: 'Texas Appraisal District' },
+  'TEXAS': { domains: ['hcad.org', 'dallascad.org', 'bcad.org', 'taad.org', 'traviscad.org', 'collincad.org'], name: 'Texas Appraisal District' },
+  'NY': { domains: ['nyc.gov/finance', 'nassaucountyny.gov', 'suffolkcountyny.gov', 'westchestergov.com'], name: 'NY Property Records' },
+  'NEW YORK': { domains: ['nyc.gov/finance', 'nassaucountyny.gov', 'suffolkcountyny.gov', 'westchestergov.com'], name: 'NY Property Records' },
+  'PA': { domains: ['philadelphiarealestate.phila.gov', 'alleghenycounty.us/real-estate', 'montcopa.org'], name: 'PA Property Assessment' },
+  'PENNSYLVANIA': { domains: ['philadelphiarealestate.phila.gov', 'alleghenycounty.us/real-estate', 'montcopa.org'], name: 'PA Property Assessment' },
+  'NJ': { domains: ['njactb.org', 'tax1.co.monmouth.nj.us', 'bergencounty.com'], name: 'NJ Property Tax Records' },
+  'NEW JERSEY': { domains: ['njactb.org', 'tax1.co.monmouth.nj.us', 'bergencounty.com'], name: 'NJ Property Tax Records' },
+  'IL': { domains: ['cookcountyassessor.com', 'cciillinois.org'], name: 'Illinois Assessor' },
+  'ILLINOIS': { domains: ['cookcountyassessor.com', 'cciillinois.org'], name: 'Illinois Assessor' },
+  'OH': { domains: ['fiscalofficer.cuyahogacounty.us', 'auditor.franklincountyohio.gov', 'hamiltoncountyauditor.org'], name: 'Ohio Auditor/Assessor' },
+  'OHIO': { domains: ['fiscalofficer.cuyahogacounty.us', 'auditor.franklincountyohio.gov', 'hamiltoncountyauditor.org'], name: 'Ohio Auditor/Assessor' },
+  'GA': { domains: ['qpublic.net', 'fultoncountyga.gov', 'cobbassessor.org', 'dekalbcountyga.gov'], name: 'Georgia Property Records' },
+  'GEORGIA': { domains: ['qpublic.net', 'fultoncountyga.gov', 'cobbassessor.org', 'dekalbcountyga.gov'], name: 'Georgia Property Records' },
+  'NC': { domains: ['wake.gov', 'mecklenburgcountync.gov', 'guilfordcountync.gov'], name: 'NC Property Tax' },
+  'NORTH CAROLINA': { domains: ['wake.gov', 'mecklenburgcountync.gov', 'guilfordcountync.gov'], name: 'NC Property Tax' },
+  'AZ': { domains: ['mcassessor.maricopa.gov', 'asr.pima.gov', 'assessor.pinal.gov'], name: 'Arizona Assessor' },
+  'ARIZONA': { domains: ['mcassessor.maricopa.gov', 'asr.pima.gov', 'assessor.pinal.gov'], name: 'Arizona Assessor' },
+  'NV': { domains: ['clarkcountynv.gov', 'washoecounty.us/assessor'], name: 'Nevada Assessor' },
+  'NEVADA': { domains: ['clarkcountynv.gov', 'washoecounty.us/assessor'], name: 'Nevada Assessor' },
+  'CO': { domains: ['denvergov.org/assessor', 'arapahoegov.com/assessor', 'elpasoco.com/assessor'], name: 'Colorado Assessor' },
+  'COLORADO': { domains: ['denvergov.org/assessor', 'arapahoegov.com/assessor', 'elpasoco.com/assessor'], name: 'Colorado Assessor' },
+  'WA': { domains: ['kingcounty.gov/assessor', 'co.pierce.wa.us/assessor', 'snoco.org/assessor'], name: 'Washington Assessor' },
+  'WASHINGTON': { domains: ['kingcounty.gov/assessor', 'co.pierce.wa.us/assessor', 'snoco.org/assessor'], name: 'Washington Assessor' },
+  'MI': { domains: ['waynecounty.com', 'oakgov.com/treasury', 'accesskent.com'], name: 'Michigan Property Records' },
+  'MICHIGAN': { domains: ['waynecounty.com', 'oakgov.com/treasury', 'accesskent.com'], name: 'Michigan Property Records' },
+  'VA': { domains: ['fairfaxcounty.gov/tax', 'loudoun.gov/commissioner', 'henrico.us/real-estate'], name: 'Virginia Property Records' },
+  'VIRGINIA': { domains: ['fairfaxcounty.gov/tax', 'loudoun.gov/commissioner', 'henrico.us/real-estate'], name: 'Virginia Property Records' },
+  'MA': { domains: ['cityofboston.gov/assessing', 'sec.state.ma.us/rod'], name: 'Massachusetts Property Records' },
+  'MASSACHUSETTS': { domains: ['cityofboston.gov/assessing', 'sec.state.ma.us/rod'], name: 'Massachusetts Property Records' },
+  'MD': { domains: ['sdat.dat.maryland.gov', 'baltimorecity.gov/real-property'], name: 'Maryland Property Records' },
+  'MARYLAND': { domains: ['sdat.dat.maryland.gov', 'baltimorecity.gov/real-property'], name: 'Maryland Property Records' },
+};
+
+// Get property assessor info from state
+function getPropertyAssessors(stateInput: string): { domains: string[]; name: string } | null {
+  if (!stateInput) return null;
+  const normalized = stateInput.toUpperCase().trim();
+  return STATE_PROPERTY_ASSESSORS[normalized] || null;
+}
+
 // Get state registry info from state name or abbreviation
 function getStateRegistry(stateInput: string): { domain: string; name: string; searchTypes: string[] } | null {
   if (!stateInput) return null;
@@ -388,7 +435,71 @@ function buildDorkQueries(
     }
   }
 
-  // General business/corporate searches (all states)
+  // ========== PROPERTY RECORDS / COUNTY ASSESSOR SEARCHES ==========
+  const propertyAssessors = getPropertyAssessors(state);
+  if (propertyAssessors) {
+    console.log(`Adding property assessor searches for ${propertyAssessors.name}`);
+    
+    // Build site filter for all county assessor domains
+    const siteFilter = propertyAssessors.domains.slice(0, 5).map(d => `site:${d}`).join(' OR ');
+    
+    // Name search on property assessor sites
+    queries.push({
+      query: `${quotedPrimary} (${siteFilter})`,
+      type: 'property_owner_name',
+      priority: 2,
+      description: `${propertyAssessors.name} - Property Owner Search`,
+    });
+
+    // Address/location + property assessor
+    if (city) {
+      queries.push({
+        query: `${quotedPrimary} "${city}" (${siteFilter})`,
+        type: 'property_owner_city',
+        priority: 2,
+        description: `${propertyAssessors.name} - Property in ${city}`,
+      });
+    }
+
+    // Property records with address components
+    queries.push({
+      query: `${quotedPrimary} "property" OR "owner" OR "parcel" (${siteFilter})`,
+      type: 'property_parcel',
+      priority: 3,
+      description: `${propertyAssessors.name} - Parcel/Property Records`,
+    });
+
+    // Tax records search
+    queries.push({
+      query: `${quotedPrimary} "tax" OR "assessment" OR "appraised" (${siteFilter})`,
+      type: 'property_tax',
+      priority: 3,
+      description: `${propertyAssessors.name} - Tax Assessment Records`,
+    });
+  }
+
+  // General property record searches (national sites)
+  queries.push({
+    query: `${quotedPrimary} "property owner" OR "real estate" OR "deed" site:gov`,
+    type: 'property_records_gov',
+    priority: 3,
+    description: 'Property records on .gov sites',
+  });
+
+  queries.push({
+    query: `${quotedPrimary} site:zillow.com OR site:redfin.com OR site:realtor.com`,
+    type: 'property_listings',
+    priority: 4,
+    description: 'Real estate listing sites',
+  });
+
+  queries.push({
+    query: `${quotedPrimary} site:propertyshark.com OR site:county-taxes.com`,
+    type: 'property_aggregators',
+    priority: 4,
+    description: 'Property data aggregators',
+  });
+
   queries.push({
     query: `${quotedPrimary} "officer" OR "director" OR "president" OR "CEO" site:gov`,
     type: 'business_officer_gov',
