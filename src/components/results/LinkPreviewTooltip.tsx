@@ -72,10 +72,10 @@ const LinkPreviewTooltip: React.FC<LinkPreviewTooltipProps> = ({
               </div>
             )}
             {/* Confidence Badge Overlay */}
-            {confidence !== undefined && (
+            {confidence !== undefined && confidence > 0 && (
               <div className="absolute top-2 right-2 bg-background/90 backdrop-blur-sm rounded-full px-2 py-1 flex items-center gap-1">
                 <Shield className="h-3 w-3 text-primary" />
-                <span className="text-xs font-medium">{Math.round(confidence * 100)}%</span>
+                <span className="text-xs font-medium">{Math.round(confidence <= 1 ? confidence * 100 : confidence)}%</span>
               </div>
             )}
           </div>
