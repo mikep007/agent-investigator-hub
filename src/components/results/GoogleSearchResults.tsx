@@ -251,7 +251,7 @@ const GoogleSearchResults = ({
           {/* Match indicators */}
           <div className="flex items-center gap-2 flex-wrap mb-3">
             {item.confidenceScore !== undefined && (
-              <ConfidenceScoreBadge score={item.confidenceScore} />
+              <ConfidenceScoreBadge score={item.confidenceScore <= 1 ? item.confidenceScore * 100 : item.confidenceScore} />
             )}
             {item.isExactMatch && (
               <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs gap-1">
