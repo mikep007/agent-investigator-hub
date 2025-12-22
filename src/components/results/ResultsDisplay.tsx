@@ -44,6 +44,8 @@ const ResultsDisplay = ({
           <OSINTResultsGrid 
             findings={findings} 
             targetName={targetName}
+            inputKeywords={inputKeywords}
+            aiSuggestedPersons={aiSuggestedPersons}
             onVerify={onVerifyPlatform}
             onDeepDive={onDeepDive}
           />
@@ -63,6 +65,8 @@ const ResultsDisplay = ({
           <OSINTResultsGrid 
             findings={findings} 
             targetName={targetName}
+            inputKeywords={inputKeywords}
+            aiSuggestedPersons={aiSuggestedPersons}
             onVerify={onVerifyPlatform}
             onDeepDive={onDeepDive}
           />
