@@ -4,9 +4,19 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Brain, Network, LogOut, FileText, Activity, CheckCircle2, Search, GitCompare, FolderOpen, Share2, Clock } from "lucide-react";
+import { Brain, Network, LogOut, FileText, Activity, CheckCircle2, Search, GitCompare, FolderOpen, Share2, Clock, Save, ArrowRight, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import InvestigationAnalysis from "@/components/InvestigationAnalysis";
 import InvestigationPanel from "@/components/InvestigationPanel";
 import ReportDisplay from "@/components/ReportDisplay";
@@ -14,6 +24,7 @@ import ComprehensiveSearchForm from "@/components/ComprehensiveSearchForm";
 import RelationshipGraph from "@/components/RelationshipGraph";
 import OSINTLinkMap, { PivotData } from "@/components/OSINTLinkMap";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import SaveToCaseDialog from "@/components/cases/SaveToCaseDialog";
 
 interface SearchFormRef {
   setSearchData: (data: Partial<SearchData>) => void;
@@ -27,6 +38,11 @@ interface SearchData {
   username?: string;
 }
 
+interface PendingPivot {
+  type: string;
+  value: string;
+}
+
 const Index = () => {
   const [activeInvestigation, setActiveInvestigation] = useState(false);
   const [currentInvestigationId, setCurrentInvestigationId] = useState<string | null>(null);
@@ -35,6 +51,9 @@ const Index = () => {
   const [report, setReport] = useState<{ report: string; target: string; generatedAt: string; findingsCount: number } | null>(null);
   const [targetName, setTargetName] = useState<string>("");
   const [pivotSearchData, setPivotSearchData] = useState<Partial<SearchData> | null>(null);
+  const [pivotConfirmDialog, setPivotConfirmDialog] = useState(false);
+  const [pendingPivot, setPendingPivot] = useState<PendingPivot | null>(null);
+  const [showSaveDialog, setShowSaveDialog] = useState(false);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -128,7 +147,19 @@ const Index = () => {
     const type = typeof pivotDataOrType === 'string' ? pivotDataOrType : pivotDataOrType.type;
     const value = typeof pivotDataOrType === 'string' ? valueArg! : pivotDataOrType.value;
     
-    // Build search data based on pivot type
+    // If there's an active investigation, show confirmation dialog
+    if (activeInvestigation && currentInvestigationId) {
+      setPendingPivot({ type, value });
+      setPivotConfirmDialog(true);
+      return;
+    }
+    
+    // No active investigation, proceed directly
+    executePivot(type, value);
+  };
+
+  // Execute the pivot after confirmation
+  const executePivot = (type: string, value: string) => {
     const newSearchData: Partial<SearchData> = {};
     
     switch (type) {
@@ -150,6 +181,8 @@ const Index = () => {
     }
     
     setPivotSearchData(newSearchData);
+    setPivotConfirmDialog(false);
+    setPendingPivot(null);
     
     // Scroll to search form
     window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -158,6 +191,20 @@ const Index = () => {
       title: "Pivot Ready",
       description: `Search pre-filled with ${type}: "${value}". Click Start Investigation to begin.`,
     });
+  };
+
+  // Handle save and pivot
+  const handleSaveAndPivot = () => {
+    setPivotConfirmDialog(false);
+    setShowSaveDialog(true);
+  };
+
+  // After saving, execute the pivot
+  const handleAfterSave = () => {
+    setShowSaveDialog(false);
+    if (pendingPivot) {
+      executePivot(pendingPivot.type, pendingPivot.value);
+    }
   };
 
 
@@ -396,6 +443,69 @@ const Index = () => {
             </div>
           </Card>
         </main>
+
+        {/* Pivot Confirmation Dialog */}
+        <AlertDialog open={pivotConfirmDialog} onOpenChange={setPivotConfirmDialog}>
+          <AlertDialogContent>
+            <AlertDialogHeader>
+              <AlertDialogTitle className="flex items-center gap-2">
+                <Search className="h-5 w-5 text-primary" />
+                Start New Investigation?
+              </AlertDialogTitle>
+              <AlertDialogDescription className="space-y-2">
+                <p>
+                  You're about to pivot to investigate: <strong className="text-foreground">{pendingPivot?.value}</strong>
+                </p>
+                <p className="text-muted-foreground">
+                  You have an active investigation for "{targetName}". Would you like to save it to a case before starting the new investigation?
+                </p>
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter className="flex-col sm:flex-row gap-2">
+              <AlertDialogCancel className="flex items-center gap-2">
+                <X className="h-4 w-4" />
+                Cancel
+              </AlertDialogCancel>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  if (pendingPivot) {
+                    executePivot(pendingPivot.type, pendingPivot.value);
+                  }
+                }}
+                className="flex items-center gap-2"
+              >
+                <ArrowRight className="h-4 w-4" />
+                Pivot Without Saving
+              </Button>
+              <Button
+                onClick={handleSaveAndPivot}
+                className="flex items-center gap-2"
+              >
+                <Save className="h-4 w-4" />
+                Save & Pivot
+              </Button>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
+
+        {/* Save to Case Dialog */}
+        <SaveToCaseDialog
+          open={showSaveDialog}
+          onOpenChange={(open) => {
+            setShowSaveDialog(open);
+            if (!open && pendingPivot) {
+              executePivot(pendingPivot.type, pendingPivot.value);
+            }
+          }}
+          item={currentInvestigationId ? {
+            item_type: 'finding',
+            title: `Investigation: ${targetName}`,
+            content: { investigationId: currentInvestigationId, targetName },
+            source_investigation_id: currentInvestigationId,
+            tags: ['pivoted-from'],
+          } : null}
+        />
       </div>
     </TooltipProvider>
   );
