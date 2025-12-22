@@ -134,6 +134,88 @@ function checkNameMatch(text: string, fullName: string): { exact: boolean; parti
   return { exact: false, partial: false };
 }
 
+// Extract potential relative names from text (especially obituaries)
+function extractPotentialRelatives(text: string, primaryName: string): string[] {
+  const relatives: string[] = [];
+  const textLower = text.toLowerCase();
+  const primaryNameLower = primaryName.toLowerCase();
+  
+  // Get last name from primary name for surname matching
+  const primaryParts = primaryName.split(/\s+/).filter(p => p.length > 1);
+  const primaryLastName = primaryParts.length > 1 ? primaryParts[primaryParts.length - 1].toLowerCase() : '';
+  const primaryFirstName = primaryParts[0]?.toLowerCase() || '';
+  
+  // Common relative indicators in obituaries
+  const relativePatterns = [
+    /(?:wife|husband|spouse|partner)[\s,]+(?:of\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+    /(?:son|daughter|child)(?:\s+of)?[\s,]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+    /(?:father|mother|parent)[\s,]+(?:of\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+    /(?:brother|sister|sibling)[\s,]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+    /(?:survived by|preceded in death by|leaves behind)[\s:,]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+    /(?:married to|wed to)[\s,]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
+  ];
+  
+  for (const pattern of relativePatterns) {
+    let match;
+    while ((match = pattern.exec(text)) !== null) {
+      const name = match[1]?.trim();
+      if (name && name.length > 3 && name.toLowerCase() !== primaryNameLower) {
+        // Validate it looks like a name (2+ words, not too long)
+        const words = name.split(/\s+/);
+        if (words.length >= 2 && words.length <= 4 && name.length < 40) {
+          relatives.push(name);
+        }
+      }
+    }
+  }
+  
+  // Also look for other people with same last name mentioned
+  if (primaryLastName && primaryLastName.length > 2) {
+    // Pattern: First name + Same Last Name (e.g., "Moira Petrie" when searching "Michael Petrie")
+    const sameSurnamePattern = new RegExp(`\\b([A-Z][a-z]+)\\s+${primaryLastName}\\b`, 'gi');
+    let match;
+    while ((match = sameSurnamePattern.exec(text)) !== null) {
+      const firstName = match[1];
+      if (firstName && firstName.toLowerCase() !== primaryFirstName && firstName.length > 2) {
+        const fullName = `${firstName} ${primaryParts[primaryParts.length - 1]}`;
+        if (!relatives.includes(fullName) && fullName.toLowerCase() !== primaryNameLower) {
+          relatives.push(fullName);
+        }
+      }
+    }
+  }
+  
+  // Dedupe and return
+  return [...new Set(relatives)].slice(0, 10);
+}
+
+// Check if a keyword matches a potential relative pattern (same last name)
+function isKeywordPotentialRelative(keyword: string, primaryName: string): boolean {
+  const primaryParts = primaryName.split(/\s+/).filter(p => p.length > 1);
+  const primaryLastName = primaryParts.length > 1 ? primaryParts[primaryParts.length - 1].toLowerCase() : '';
+  
+  if (!primaryLastName || primaryLastName.length < 2) return false;
+  
+  // Check if keyword contains the same last name
+  const keywordLower = keyword.toLowerCase();
+  const keywordParts = keywordLower.split(/\s+/).filter(p => p.length > 1);
+  
+  // If keyword has 2+ words and shares the last name, likely a relative
+  if (keywordParts.length >= 2) {
+    const keywordLastName = keywordParts[keywordParts.length - 1];
+    if (keywordLastName === primaryLastName) {
+      return true;
+    }
+  }
+  
+  // Also check if keyword IS just the last name
+  if (keywordLower === primaryLastName) {
+    return true;
+  }
+  
+  return false;
+}
+
 // Build Google Dork queries for comprehensive OSINT with keywords combined with all data points
 function buildDorkQueries(
   name: string,
@@ -687,6 +769,18 @@ Deno.serve(async (req) => {
       ? keywords.split(',').map((k: string) => k.trim().toLowerCase()).filter((k: string) => k.length > 1)
       : [];
     
+    // Track potential relatives found across all results
+    const allFoundRelatives: Set<string> = new Set();
+    
+    // Check which keywords might be potential relative names (share last name with target)
+    const relativeKeywords: string[] = [];
+    for (const keyword of keywordList) {
+      if (isKeywordPotentialRelative(keyword, searchName)) {
+        relativeKeywords.push(keyword);
+        console.log(`Keyword "${keyword}" identified as potential relative (shares surname with "${searchName}")`);
+      }
+    }
+    
     for (const result of searchResults) {
       if (!result || !result.items) continue;
       
@@ -696,6 +790,28 @@ Deno.serve(async (req) => {
         
         const textToCheck = `${item.title} ${item.snippet}`;
         const nameMatch = checkNameMatch(textToCheck, searchName);
+        
+        // Extract potential relatives from this result (especially obituaries)
+        const isObituaryOrPeopleSearch = 
+          item.link?.includes('obituar') || 
+          item.link?.includes('legacy.com') ||
+          item.link?.includes('obradley') ||
+          item.link?.includes('findagrave') ||
+          item.link?.includes('tributes') ||
+          item.link?.includes('whitepages') ||
+          item.link?.includes('spokeo') ||
+          item.link?.includes('truepeoplesearch') ||
+          item.title?.toLowerCase().includes('obituary') ||
+          item.snippet?.toLowerCase().includes('survived by');
+        
+        let foundRelatives: string[] = [];
+        if (isObituaryOrPeopleSearch) {
+          foundRelatives = extractPotentialRelatives(textToCheck, searchName);
+          foundRelatives.forEach(r => allFoundRelatives.add(r));
+          if (foundRelatives.length > 0) {
+            console.log(`Found potential relatives in "${item.link}":`, foundRelatives);
+          }
+        }
         
         // Check location presence
         let locationPresent = false;
@@ -708,9 +824,14 @@ Deno.serve(async (req) => {
         
         // Check keyword matches
         const keywordMatches: string[] = [];
+        let hasRelativeKeywordMatch = false;
         for (const keyword of keywordList) {
           if (textToCheck.toLowerCase().includes(keyword)) {
             keywordMatches.push(keyword);
+            // Check if this matched keyword is a potential relative
+            if (relativeKeywords.includes(keyword)) {
+              hasRelativeKeywordMatch = true;
+            }
           }
         }
         
@@ -739,13 +860,21 @@ Deno.serve(async (req) => {
           confidenceScore = 0.35;
         }
         
+        // BIG BOOST for relative keyword match - if a keyword (like "Moira Petrie") appears
+        // and shares the same surname as the target, this is very likely a relevant result
+        if (hasRelativeKeywordMatch) {
+          confidenceScore += 0.35; // Significant boost for relative connection
+          console.log(`Boosting confidence for "${item.link}" - matched relative keyword`);
+        }
+        
         // Boost for location co-occurrence (+15%)
         if (locationPresent) {
           confidenceScore += 0.15;
         }
         
         // Boost for keyword matches (+10% per keyword, max +20%)
-        if (keywordMatches.length > 0) {
+        if (keywordMatches.length > 0 && !hasRelativeKeywordMatch) {
+          // Only add standard keyword boost if we didn't already add relative boost
           confidenceScore += Math.min(0.20, keywordMatches.length * 0.10);
         }
         
@@ -770,6 +899,11 @@ Deno.serve(async (req) => {
           confidenceScore += 0.05;
         }
         
+        // Boost for obituary/people search sources that found relatives
+        if (isObituaryOrPeopleSearch && foundRelatives.length > 0) {
+          confidenceScore += 0.10;
+        }
+        
         // Cap at 0.98
         confidenceScore = Math.min(0.98, confidenceScore);
         
@@ -783,6 +917,8 @@ Deno.serve(async (req) => {
           hasLocation: locationPresent,
           hasKeywords: keywordMatches.length > 0,
           keywordMatches,
+          hasRelativeMatch: hasRelativeKeywordMatch,
+          foundRelatives: foundRelatives.length > 0 ? foundRelatives : undefined,
           hasPhone: phonePresent,
           hasEmail: emailPresent,
           sourceType: result.queryType,
@@ -801,15 +937,23 @@ Deno.serve(async (req) => {
     confirmedResults.sort((a, b) => b.confidenceScore - a.confidenceScore);
     possibleResults.sort((a, b) => b.confidenceScore - a.confidenceScore);
     
+    // Compile all found relatives
+    const discoveredRelatives = Array.from(allFoundRelatives);
+    if (discoveredRelatives.length > 0) {
+      console.log('Total potential relatives discovered:', discoveredRelatives);
+    }
+    
     const results = {
       searchInformation: {
         totalResults: String(confirmedResults.length + possibleResults.length),
         queriesExecuted: sortedQueries.map(q => q.type),
-        keywordsSearched: keywordList
+        keywordsSearched: keywordList,
+        relativeKeywordsIdentified: relativeKeywords,
       },
       confirmedItems: confirmedResults,
       possibleItems: possibleResults,
       items: [...confirmedResults, ...possibleResults],
+      discoveredRelatives: discoveredRelatives.length > 0 ? discoveredRelatives : undefined,
       queriesUsed: sortedQueries.map(q => ({ 
         type: q.type, 
         query: q.query,
@@ -819,6 +963,7 @@ Deno.serve(async (req) => {
     
     console.log('Web search complete:', confirmedResults.length, 'confirmed,', possibleResults.length, 'possible');
     console.log('Keywords matched in results:', keywordList.length > 0 ? 'yes' : 'none provided');
+    console.log('Relative keywords identified:', relativeKeywords.length > 0 ? relativeKeywords.join(', ') : 'none');
 
     return new Response(JSON.stringify(results), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
