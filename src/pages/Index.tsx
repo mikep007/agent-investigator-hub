@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -12,8 +12,20 @@ import InvestigationPanel from "@/components/InvestigationPanel";
 import ReportDisplay from "@/components/ReportDisplay";
 import ComprehensiveSearchForm from "@/components/ComprehensiveSearchForm";
 import RelationshipGraph from "@/components/RelationshipGraph";
-import OSINTLinkMap from "@/components/OSINTLinkMap";
+import OSINTLinkMap, { PivotData } from "@/components/OSINTLinkMap";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+
+interface SearchFormRef {
+  setSearchData: (data: Partial<SearchData>) => void;
+}
+
+interface SearchData {
+  fullName?: string;
+  address?: string;
+  email?: string;
+  phone?: string;
+  username?: string;
+}
 
 const Index = () => {
   const [activeInvestigation, setActiveInvestigation] = useState(false);
@@ -22,6 +34,7 @@ const Index = () => {
   const [generatingReport, setGeneratingReport] = useState(false);
   const [report, setReport] = useState<{ report: string; target: string; generatedAt: string; findingsCount: number } | null>(null);
   const [targetName, setTargetName] = useState<string>("");
+  const [pivotSearchData, setPivotSearchData] = useState<Partial<SearchData> | null>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -109,6 +122,40 @@ const Index = () => {
     }
   };
 
+  // Handle pivot from link map
+  const handlePivot = (pivotData: PivotData) => {
+    // Build search data based on pivot type
+    const newSearchData: Partial<SearchData> = {};
+    
+    switch (pivotData.type) {
+      case 'username':
+        newSearchData.username = pivotData.value;
+        break;
+      case 'email':
+        newSearchData.email = pivotData.value;
+        break;
+      case 'phone':
+        newSearchData.phone = pivotData.value;
+        break;
+      case 'name':
+        newSearchData.fullName = pivotData.value;
+        break;
+      case 'address':
+        newSearchData.address = pivotData.value;
+        break;
+    }
+    
+    setPivotSearchData(newSearchData);
+    
+    // Scroll to search form
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    toast({
+      title: "Pivot Ready",
+      description: `Search pre-filled with ${pivotData.type}: "${pivotData.value}". Click Start Investigation to begin.`,
+    });
+  };
+
 
   return (
     <TooltipProvider>
@@ -171,6 +218,8 @@ const Index = () => {
           <ComprehensiveSearchForm 
             onStartInvestigation={startComprehensiveInvestigation}
             loading={loading}
+            pivotData={pivotSearchData}
+            onPivotConsumed={() => setPivotSearchData(null)}
           />
 
 
@@ -245,6 +294,7 @@ const Index = () => {
                       active={activeInvestigation} 
                       investigationId={currentInvestigationId}
                       targetName={targetName}
+                      onPivot={handlePivot}
                     />
                   </div>
                 </TabsContent>
