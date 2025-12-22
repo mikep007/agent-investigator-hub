@@ -67,6 +67,43 @@ const RelatedPersonsCard = ({
           }
         });
       }
+
+      // Extract relatives discovered from web search (obituaries, news articles, etc.)
+      if (finding.agent_type === 'Web' && finding.data?.discoveredRelatives) {
+        finding.data.discoveredRelatives.forEach((rel: any) => {
+          const name = typeof rel === 'string' ? rel : rel.name;
+          const relationship = typeof rel === 'object' ? rel.relationship : 'Web search discovery';
+          if (name && !confirmed.find(c => c.name.toLowerCase() === name.toLowerCase())) {
+            confirmed.push({
+              name,
+              source: 'confirmed',
+              relationship,
+              confidence: finding.confidence_score || 0.65
+            });
+          }
+        });
+      }
+
+      // Also check web search results text for mentioned relatives
+      if (finding.agent_type === 'Web' && finding.data?.results) {
+        finding.data.results.forEach((result: any) => {
+          // Check if result has extracted relatives
+          if (result.relatives) {
+            result.relatives.forEach((rel: any) => {
+              const name = typeof rel === 'string' ? rel : rel.name;
+              const relationship = typeof rel === 'object' ? rel.relationship : 'Mentioned in web result';
+              if (name && !confirmed.find(c => c.name.toLowerCase() === name.toLowerCase())) {
+                confirmed.push({
+                  name,
+                  source: 'confirmed',
+                  relationship,
+                  confidence: result.confidence || 0.6
+                });
+              }
+            });
+          }
+        });
+      }
     });
 
     return confirmed;

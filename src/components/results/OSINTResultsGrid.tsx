@@ -4,11 +4,14 @@ import OSINTPlatformCard from "./OSINTPlatformCard";
 import ResultsSummaryBar from "./ResultsSummaryBar";
 import SourceStatusIndicator from "./SourceStatusIndicator";
 import VisualTimeline from "./VisualTimeline";
+import RelatedPersonsCard from "./RelatedPersonsCard";
 import { useMemo } from "react";
 
 interface OSINTResultsGridProps {
   findings: FindingData[];
   targetName?: string;
+  inputKeywords?: string[];
+  aiSuggestedPersons?: string[];
   onVerify?: (platformUrl: string, status: 'verified' | 'inaccurate') => void;
   onDeepDive?: (platform: string, findingId: string) => void;
 }
@@ -35,6 +38,8 @@ interface ExtractedPlatform {
 const OSINTResultsGrid = ({ 
   findings, 
   targetName, 
+  inputKeywords = [],
+  aiSuggestedPersons = [],
   onVerify, 
   onDeepDive 
 }: OSINTResultsGridProps) => {
@@ -170,6 +175,13 @@ const OSINTResultsGrid = ({
 
         {/* Source Status Indicator */}
         <SourceStatusIndicator findings={findings} />
+
+        {/* Relatives & Associates Section */}
+        <RelatedPersonsCard 
+          findings={findings}
+          inputKeywords={inputKeywords}
+          aiSuggestedPersons={aiSuggestedPersons}
+        />
 
         {/* Visual Timeline */}
         <VisualTimeline findings={findings} />
