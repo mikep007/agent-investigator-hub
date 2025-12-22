@@ -32,6 +32,7 @@ import {
 interface InvestigationPanelProps {
   active: boolean;
   investigationId: string | null;
+  onPivot?: (type: string, value: string) => void;
 }
 
 interface SearchData {
@@ -56,7 +57,7 @@ interface LogEntry {
   confidence_score?: number;
 }
 
-const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps) => {
+const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationPanelProps) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
@@ -2160,6 +2161,7 @@ const InvestigationPanel = ({ active, investigationId }: InvestigationPanelProps
                   }
                 }}
                 onDeepDive={handleDeepDive}
+                onPivot={onPivot}
               />
             </div>
           </TabsContent>

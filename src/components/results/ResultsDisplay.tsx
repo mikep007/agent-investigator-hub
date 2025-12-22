@@ -14,6 +14,7 @@ interface ResultsDisplayProps {
   aiSuggestedPersons?: string[];
   onVerifyPlatform?: (platformUrl: string, status: 'verified' | 'inaccurate') => void;
   onDeepDive?: (platform: string, findingId: string) => void;
+  onPivot?: (type: string, value: string) => void;
 }
 
 const ResultsDisplay = ({ 
@@ -23,7 +24,8 @@ const ResultsDisplay = ({
   inputKeywords = [],
   aiSuggestedPersons = [],
   onVerifyPlatform,
-  onDeepDive 
+  onDeepDive,
+  onPivot
 }: ResultsDisplayProps) => {
   // Default to OSINT Industries-style grid view
   const [viewMode, setViewMode] = useState<ViewMode>('grid');
@@ -48,6 +50,7 @@ const ResultsDisplay = ({
             aiSuggestedPersons={aiSuggestedPersons}
             onVerify={onVerifyPlatform}
             onDeepDive={onDeepDive}
+            onPivot={onPivot}
           />
         );
       case 'timeline':
@@ -69,6 +72,7 @@ const ResultsDisplay = ({
             aiSuggestedPersons={aiSuggestedPersons}
             onVerify={onVerifyPlatform}
             onDeepDive={onDeepDive}
+            onPivot={onPivot}
           />
         );
     }

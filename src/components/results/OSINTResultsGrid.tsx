@@ -14,6 +14,7 @@ interface OSINTResultsGridProps {
   aiSuggestedPersons?: string[];
   onVerify?: (platformUrl: string, status: 'verified' | 'inaccurate') => void;
   onDeepDive?: (platform: string, findingId: string) => void;
+  onPivot?: (type: string, value: string) => void;
 }
 
 interface ExtractedPlatform {
@@ -41,7 +42,8 @@ const OSINTResultsGrid = ({
   inputKeywords = [],
   aiSuggestedPersons = [],
   onVerify, 
-  onDeepDive 
+  onDeepDive,
+  onPivot
 }: OSINTResultsGridProps) => {
   // Extract all platforms from findings into OSINT Industries format
   const platforms = useMemo(() => {
@@ -181,6 +183,7 @@ const OSINTResultsGrid = ({
           findings={findings}
           inputKeywords={inputKeywords}
           aiSuggestedPersons={aiSuggestedPersons}
+          onPivot={onPivot}
         />
 
         {/* Visual Timeline */}

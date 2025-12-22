@@ -122,26 +122,30 @@ const Index = () => {
     }
   };
 
-  // Handle pivot from link map
-  const handlePivot = (pivotData: PivotData) => {
+  // Handle pivot from link map or relatives card
+  const handlePivot = (pivotDataOrType: PivotData | string, valueArg?: string) => {
+    // Normalize the pivot data format - can be called with PivotData object or (type, value) args
+    const type = typeof pivotDataOrType === 'string' ? pivotDataOrType : pivotDataOrType.type;
+    const value = typeof pivotDataOrType === 'string' ? valueArg! : pivotDataOrType.value;
+    
     // Build search data based on pivot type
     const newSearchData: Partial<SearchData> = {};
     
-    switch (pivotData.type) {
+    switch (type) {
       case 'username':
-        newSearchData.username = pivotData.value;
+        newSearchData.username = value;
         break;
       case 'email':
-        newSearchData.email = pivotData.value;
+        newSearchData.email = value;
         break;
       case 'phone':
-        newSearchData.phone = pivotData.value;
+        newSearchData.phone = value;
         break;
       case 'name':
-        newSearchData.fullName = pivotData.value;
+        newSearchData.fullName = value;
         break;
       case 'address':
-        newSearchData.address = pivotData.value;
+        newSearchData.address = value;
         break;
     }
     
@@ -152,7 +156,7 @@ const Index = () => {
     
     toast({
       title: "Pivot Ready",
-      description: `Search pre-filled with ${pivotData.type}: "${pivotData.value}". Click Start Investigation to begin.`,
+      description: `Search pre-filled with ${type}: "${value}". Click Start Investigation to begin.`,
     });
   };
 
@@ -258,7 +262,7 @@ const Index = () => {
                 )}
               </div>
             </div>
-            <InvestigationPanel active={activeInvestigation} investigationId={currentInvestigationId} />
+            <InvestigationPanel active={activeInvestigation} investigationId={currentInvestigationId} onPivot={handlePivot} />
           </Card>
 
           {/* Visualization and Analysis Grid */}
