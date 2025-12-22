@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { 
   Mail, Phone, User, AtSign, MapPin, Users, Globe, Shield, 
   AlertTriangle, Maximize2, Minimize2, Eye, Play, Pause, RotateCcw,
-  ZoomIn, ZoomOut, Move, Home
+  ZoomIn, ZoomOut, Move, Home, Search, ExternalLink
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,11 +14,25 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
+
+export interface PivotData {
+  type: 'username' | 'email' | 'phone' | 'name' | 'address';
+  value: string;
+  source?: string;
+}
 
 interface OSINTLinkMapProps {
   investigationId: string | null;
   targetName?: string;
   active: boolean;
+  onPivot?: (pivotData: PivotData) => void;
 }
 
 interface NodeData {
@@ -52,6 +66,8 @@ interface PhysicsNode {
   icon: React.ReactNode;
   metadata?: NodeData["metadata"];
   parentId?: string;
+  pivotType?: PivotData['type'];
+  pivotValue?: string;
 }
 
 interface PhysicsLink {
@@ -90,7 +106,7 @@ const CENTER_STRENGTH = 0.01;
 const DAMPING = 0.9;
 const MIN_VELOCITY = 0.01;
 
-const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps) => {
+const OSINTLinkMap = ({ investigationId, targetName, active, onPivot }: OSINTLinkMapProps) => {
   const [findings, setFindings] = useState<Finding[]>([]);
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -194,8 +210,9 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
     findings.forEach((finding) => {
       const data = finding.data as any;
 
-      // Process Holehe
+      // Process Holehe (email-based)
       if (finding.agent_type === "Holehe" && data.found) {
+        const emailValue = data.email || finding.source;
         data.results?.forEach((result: any) => {
           if (result.exists) {
             categories.email.nodes.push({
@@ -211,13 +228,16 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
               icon: <Globe className="h-3 w-3" />,
               metadata: { source: "Holehe", platform: result.platform, verified: true },
               parentId: "cat-email",
+              pivotType: "username",
+              pivotValue: result.username || result.platform,
             });
           }
         });
       }
 
-      // Process Sherlock
+      // Process Sherlock (username-based)
       if (finding.agent_type === "Sherlock" && data.found) {
+        const usernameValue = data.username || finding.source;
         data.platforms?.forEach((platform: any) => {
           if (platform.exists) {
             categories.username.nodes.push({
@@ -233,6 +253,8 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
               icon: <Globe className="h-3 w-3" />,
               metadata: { source: "Sherlock", platform: platform.platform, url: platform.url, verified: true },
               parentId: "cat-username",
+              pivotType: "username",
+              pivotValue: usernameValue,
             });
           }
         });
@@ -255,6 +277,8 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
               icon: <Globe className="h-3 w-3" />,
               metadata: { source: "Social Search", platform: profile.platform, url: profile.url },
               parentId: "cat-social",
+              pivotType: "username",
+              pivotValue: profile.username || profile.platform,
             });
           }
         });
@@ -262,6 +286,7 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
 
       // Process Phone
       if (finding.agent_type === "Phone" && data.valid) {
+        const phoneNumber = data.number || data.carrier || "Phone Found";
         categories.phone.nodes.push({
           id: `phone-${finding.id}`,
           x: centerX + (Math.random() - 0.5) * 300,
@@ -270,16 +295,19 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
           vy: 0,
           radius: 10,
           color: NODE_COLORS.phone,
-          label: data.number || data.carrier || "Phone Found",
+          label: phoneNumber,
           type: "discovery",
           icon: <Phone className="h-3 w-3" />,
           metadata: { source: finding.source, confidence: finding.confidence_score },
           parentId: "cat-phone",
+          pivotType: "phone",
+          pivotValue: data.number || "",
         });
       }
 
       // Process Address
       if (finding.agent_type === "Address" && data.found) {
+        const addressValue = data.location || data.address || "Address Found";
         categories.address.nodes.push({
           id: `address-${finding.id}`,
           x: centerX + (Math.random() - 0.5) * 300,
@@ -288,17 +316,20 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
           vy: 0,
           radius: 10,
           color: NODE_COLORS.address,
-          label: data.location || data.address || "Address Found",
+          label: addressValue,
           type: "discovery",
           icon: <MapPin className="h-3 w-3" />,
           metadata: { source: finding.source },
           parentId: "cat-address",
+          pivotType: "address",
+          pivotValue: addressValue,
         });
       }
 
       // Process Relatives
       if (finding.agent_type === "People_search" && data.relatives) {
         data.relatives.forEach((relative: any, idx: number) => {
+          const relativeName = typeof relative === "string" ? relative : relative.name || "Unknown";
           categories.relatives.nodes.push({
             id: `relative-${idx}-${finding.id}`,
             x: centerX + (Math.random() - 0.5) * 300,
@@ -307,11 +338,13 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
             vy: 0,
             radius: 10,
             color: NODE_COLORS.relatives,
-            label: typeof relative === "string" ? relative : relative.name || "Unknown",
+            label: relativeName,
             type: "discovery",
             icon: <User className="h-3 w-3" />,
             metadata: { source: "People Search", confidence: finding.confidence_score },
             parentId: "cat-relatives",
+            pivotType: "name",
+            pivotValue: relativeName,
           });
         });
       }
@@ -919,7 +952,7 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
                 if (!node) return null;
 
                 return (
-                  <div className="space-y-1">
+                  <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <div
                         className="p-1.5 rounded"
@@ -934,28 +967,49 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
                         Source: {node.metadata.source}
                       </p>
                     )}
-                    {node.metadata?.url && (
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <a
-                            href={node.metadata.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-xs text-primary hover:underline flex items-center gap-1"
-                          >
-                            <Globe className="h-3 w-3" />
-                            View Profile
-                          </a>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <p className="text-xs">{node.metadata.url}</p>
-                        </TooltipContent>
-                      </Tooltip>
-                    )}
-                    {node.metadata?.verified && (
-                      <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-600">
-                        Verified
-                      </Badge>
+                    <div className="flex flex-wrap gap-1.5">
+                      {node.metadata?.url && (
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <a
+                              href={node.metadata.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-xs text-primary hover:underline flex items-center gap-1"
+                            >
+                              <ExternalLink className="h-3 w-3" />
+                              View Profile
+                            </a>
+                          </TooltipTrigger>
+                          <TooltipContent>
+                            <p className="text-xs">{node.metadata.url}</p>
+                          </TooltipContent>
+                        </Tooltip>
+                      )}
+                      {node.metadata?.verified && (
+                        <Badge variant="secondary" className="text-xs bg-green-500/10 text-green-600">
+                          Verified
+                        </Badge>
+                      )}
+                    </div>
+                    
+                    {/* Pivot Investigation Button */}
+                    {node.pivotType && node.pivotValue && onPivot && (
+                      <Button
+                        size="sm"
+                        className="w-full mt-2 gap-2"
+                        onClick={() => {
+                          onPivot({
+                            type: node.pivotType!,
+                            value: node.pivotValue!,
+                            source: node.metadata?.source,
+                          });
+                          setSelectedNode(null);
+                        }}
+                      >
+                        <Search className="h-3 w-3" />
+                        Pivot Investigation
+                      </Button>
                     )}
                   </div>
                 );

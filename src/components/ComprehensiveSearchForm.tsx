@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -60,9 +60,11 @@ interface ValidationState {
 interface ComprehensiveSearchFormProps {
   onStartInvestigation: (searchData: SearchData) => void;
   loading: boolean;
+  pivotData?: Partial<SearchData> | null;
+  onPivotConsumed?: () => void;
 }
 
-const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: ComprehensiveSearchFormProps) => {
+const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onPivotConsumed }: ComprehensiveSearchFormProps) => {
   const [searchMode, setSearchMode] = useState<SearchMode>('comprehensive');
   const [searchData, setSearchData] = useState<SearchData>({
     fullName: "",
@@ -82,6 +84,30 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading }: Comprehensiv
   });
   
   const { toast } = useToast();
+
+  // Handle pivot data injection
+  useEffect(() => {
+    if (pivotData) {
+      setSearchData(prev => ({
+        ...prev,
+        ...pivotData,
+      }));
+      
+      // Update validation for any pivot fields
+      if (pivotData.email) {
+        setValidation(prev => ({ ...prev, email: validateEmail(pivotData.email!) }));
+      }
+      if (pivotData.phone) {
+        setValidation(prev => ({ ...prev, phone: validatePhone(pivotData.phone!) }));
+      }
+      if (pivotData.username) {
+        setValidation(prev => ({ ...prev, username: validateUsername(pivotData.username!) }));
+      }
+      
+      // Notify parent that pivot has been consumed
+      onPivotConsumed?.();
+    }
+  }, [pivotData, onPivotConsumed]);
 
   const validateEmail = (email: string): 'valid' | 'invalid' | 'empty' => {
     if (!email.trim()) return 'empty';
