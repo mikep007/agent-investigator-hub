@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Brain, Network, LogOut, FileText, Activity, CheckCircle2, Search, GitCompare, FolderOpen } from "lucide-react";
+import { Brain, Network, LogOut, FileText, Activity, CheckCircle2, Search, GitCompare, FolderOpen, Share2, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import InvestigationAnalysis from "@/components/InvestigationAnalysis";
@@ -12,6 +12,7 @@ import InvestigationPanel from "@/components/InvestigationPanel";
 import ReportDisplay from "@/components/ReportDisplay";
 import ComprehensiveSearchForm from "@/components/ComprehensiveSearchForm";
 import RelationshipGraph from "@/components/RelationshipGraph";
+import OSINTLinkMap from "@/components/OSINTLinkMap";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const Index = () => {
@@ -213,30 +214,51 @@ const Index = () => {
 
           {/* Visualization and Analysis Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Graph Visualization */}
+            {/* Graph Visualization with Tabs */}
             <Card className="p-6 bg-card/80 backdrop-blur border-border/50">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-xl font-bold flex items-center gap-2">
-                  <Network className="w-5 h-5 text-primary" />
-                  Digital Footprint Timeline
-                </h2>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge variant="outline" className="border-success text-success cursor-help">
-                      <CheckCircle2 className="w-3 h-3 mr-1" />
-                      Connected to MCP
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent>MCP Server integration active</TooltipContent>
-                </Tooltip>
-              </div>
-              <div className="min-h-[500px]">
-                <RelationshipGraph 
-                  active={activeInvestigation} 
-                  investigationId={currentInvestigationId}
-                  targetName={targetName}
-                />
-              </div>
+              <Tabs defaultValue="linkmap" className="w-full">
+                <div className="flex items-center justify-between mb-4">
+                  <TabsList className="grid grid-cols-2 w-auto">
+                    <TabsTrigger value="linkmap" className="gap-2">
+                      <Share2 className="w-4 h-4" />
+                      Link Map
+                    </TabsTrigger>
+                    <TabsTrigger value="timeline" className="gap-2">
+                      <Clock className="w-4 h-4" />
+                      Timeline
+                    </TabsTrigger>
+                  </TabsList>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Badge variant="outline" className="border-success text-success cursor-help">
+                        <CheckCircle2 className="w-3 h-3 mr-1" />
+                        Connected to MCP
+                      </Badge>
+                    </TooltipTrigger>
+                    <TooltipContent>MCP Server integration active</TooltipContent>
+                  </Tooltip>
+                </div>
+                
+                <TabsContent value="linkmap" className="mt-0">
+                  <div className="min-h-[500px]">
+                    <OSINTLinkMap 
+                      active={activeInvestigation} 
+                      investigationId={currentInvestigationId}
+                      targetName={targetName}
+                    />
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="timeline" className="mt-0">
+                  <div className="min-h-[500px]">
+                    <RelationshipGraph 
+                      active={activeInvestigation} 
+                      investigationId={currentInvestigationId}
+                      targetName={targetName}
+                    />
+                  </div>
+                </TabsContent>
+              </Tabs>
             </Card>
 
             {/* AI Analysis */}
