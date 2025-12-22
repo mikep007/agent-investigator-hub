@@ -1,10 +1,11 @@
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { 
   Users, UserCheck, Tag, Brain, 
   CheckCircle2, HelpCircle, Sparkles,
-  ExternalLink
+  ExternalLink, Search
 } from "lucide-react";
 import { FindingData } from "./types";
 
@@ -12,6 +13,7 @@ interface RelatedPersonsCardProps {
   findings: FindingData[];
   inputKeywords?: string[];
   aiSuggestedPersons?: string[];
+  onPivot?: (type: string, value: string) => void;
 }
 
 interface PersonCategory {
@@ -24,7 +26,8 @@ interface PersonCategory {
 const RelatedPersonsCard = ({ 
   findings, 
   inputKeywords = [], 
-  aiSuggestedPersons = [] 
+  aiSuggestedPersons = [],
+  onPivot
 }: RelatedPersonsCardProps) => {
   
   // Extract confirmed relatives from people search findings
@@ -226,13 +229,25 @@ const RelatedPersonsCard = ({
                   <TooltipProvider key={idx}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Badge 
-                          variant="outline" 
-                          className="bg-white border-green-300 text-green-800 hover:bg-green-100 cursor-pointer transition-colors"
-                        >
-                          <CheckCircle2 className="h-3 w-3 mr-1 text-green-600" />
-                          {person.name}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Badge 
+                            variant="outline" 
+                            className="bg-white border-green-300 text-green-800 hover:bg-green-100 cursor-pointer transition-colors"
+                          >
+                            <CheckCircle2 className="h-3 w-3 mr-1 text-green-600" />
+                            {person.name}
+                          </Badge>
+                          {onPivot && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 hover:bg-green-100"
+                              onClick={() => onPivot('name', person.name)}
+                            >
+                              <Search className="h-3 w-3 text-green-600" />
+                            </Button>
+                          )}
+                        </div>
                       </TooltipTrigger>
                       <TooltipContent>
                         <div className="text-xs space-y-1">
@@ -242,6 +257,10 @@ const RelatedPersonsCard = ({
                           )}
                           <p className="text-green-600">
                             Confidence: {Math.round((person.confidence || 0) * 100)}%
+                          </p>
+                          <p className="text-primary flex items-center gap-1 mt-1">
+                            <Search className="h-3 w-3" />
+                            Click search icon to investigate
                           </p>
                         </div>
                       </TooltipContent>
@@ -268,13 +287,25 @@ const RelatedPersonsCard = ({
                   <TooltipProvider key={idx}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Badge 
-                          variant="outline" 
-                          className="bg-white border-blue-300 text-blue-800 hover:bg-blue-100 cursor-pointer transition-colors"
-                        >
-                          <Tag className="h-3 w-3 mr-1 text-blue-600" />
-                          {person.name}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Badge 
+                            variant="outline" 
+                            className="bg-white border-blue-300 text-blue-800 hover:bg-blue-100 cursor-pointer transition-colors"
+                          >
+                            <Tag className="h-3 w-3 mr-1 text-blue-600" />
+                            {person.name}
+                          </Badge>
+                          {onPivot && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 hover:bg-blue-100"
+                              onClick={() => onPivot('name', person.name)}
+                            >
+                              <Search className="h-3 w-3 text-blue-600" />
+                            </Button>
+                          )}
+                        </div>
                       </TooltipTrigger>
                       <TooltipContent>
                         <div className="text-xs space-y-1">
@@ -282,9 +313,9 @@ const RelatedPersonsCard = ({
                           <p className="text-muted-foreground">
                             You entered this as a search keyword/associate
                           </p>
-                          <p className="text-blue-600 flex items-center gap-1">
-                            <ExternalLink className="h-3 w-3" />
-                            Click to investigate this person
+                          <p className="text-primary flex items-center gap-1">
+                            <Search className="h-3 w-3" />
+                            Click search icon to investigate
                           </p>
                         </div>
                       </TooltipContent>
@@ -312,13 +343,25 @@ const RelatedPersonsCard = ({
                   <TooltipProvider key={idx}>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <Badge 
-                          variant="outline" 
-                          className="bg-white border-purple-300 text-purple-800 hover:bg-purple-100 cursor-pointer transition-colors"
-                        >
-                          <Sparkles className="h-3 w-3 mr-1 text-purple-600" />
-                          {person.name}
-                        </Badge>
+                        <div className="flex items-center gap-1">
+                          <Badge 
+                            variant="outline" 
+                            className="bg-white border-purple-300 text-purple-800 hover:bg-purple-100 cursor-pointer transition-colors"
+                          >
+                            <Sparkles className="h-3 w-3 mr-1 text-purple-600" />
+                            {person.name}
+                          </Badge>
+                          {onPivot && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 hover:bg-purple-100"
+                              onClick={() => onPivot('name', person.name)}
+                            >
+                              <Search className="h-3 w-3 text-purple-600" />
+                            </Button>
+                          )}
+                        </div>
                       </TooltipTrigger>
                       <TooltipContent>
                         <div className="text-xs space-y-1">
@@ -329,8 +372,9 @@ const RelatedPersonsCard = ({
                           <p className="text-purple-600">
                             Confidence: {Math.round((person.confidence || 0) * 100)}%
                           </p>
-                          <p className="text-xs text-muted-foreground italic mt-1">
-                            Requires manual verification
+                          <p className="text-primary flex items-center gap-1 mt-1">
+                            <Search className="h-3 w-3" />
+                            Click search icon to investigate
                           </p>
                         </div>
                       </TooltipContent>
