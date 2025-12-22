@@ -3,7 +3,8 @@ import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { 
   Mail, Phone, User, AtSign, MapPin, Users, Globe, Shield, 
-  AlertTriangle, Maximize2, Minimize2, Eye, Play, Pause, RotateCcw
+  AlertTriangle, Maximize2, Minimize2, Eye, Play, Pause, RotateCcw,
+  ZoomIn, ZoomOut, Move, Home
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -98,11 +99,19 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
   const [nodes, setNodes] = useState<PhysicsNode[]>([]);
   const [links, setLinks] = useState<PhysicsLink[]>([]);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [isPanning, setIsPanning] = useState(false);
+  const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const animationRef = useRef<number>();
   const nodesRef = useRef<PhysicsNode[]>([]);
+
+  const MIN_ZOOM = 0.25;
+  const MAX_ZOOM = 3;
+  const ZOOM_STEP = 0.2;
 
   const dimensions = useMemo(() => ({
     width: isFullscreen ? window.innerWidth - 32 : 800,
@@ -534,6 +543,49 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
     setIsSimulating(true);
   }, [buildGraph]);
 
+  // Zoom controls
+  const handleZoomIn = useCallback(() => {
+    setZoom((z) => Math.min(MAX_ZOOM, z + ZOOM_STEP));
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    setZoom((z) => Math.max(MIN_ZOOM, z - ZOOM_STEP));
+  }, []);
+
+  const handleResetView = useCallback(() => {
+    setZoom(1);
+    setPan({ x: 0, y: 0 });
+  }, []);
+
+  // Mouse wheel zoom
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -ZOOM_STEP : ZOOM_STEP;
+    setZoom((z) => Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, z + delta)));
+  }, []);
+
+  // Pan controls
+  const handlePanStart = useCallback((e: React.MouseEvent) => {
+    if (e.button === 1 || (e.button === 0 && e.altKey)) {
+      e.preventDefault();
+      setIsPanning(true);
+      setPanStart({ x: e.clientX - pan.x, y: e.clientY - pan.y });
+    }
+  }, [pan]);
+
+  const handlePanMove = useCallback((e: React.MouseEvent) => {
+    if (isPanning) {
+      setPan({
+        x: e.clientX - panStart.x,
+        y: e.clientY - panStart.y,
+      });
+    }
+  }, [isPanning, panStart]);
+
+  const handlePanEnd = useCallback(() => {
+    setIsPanning(false);
+  }, []);
+
   const totalDiscoveries = useMemo(() => {
     return nodes.filter((n) => n.type === "discovery").length;
   }, [nodes]);
@@ -578,6 +630,40 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
           <Badge variant="outline" className="text-xs">
             {categoryCount} categories
           </Badge>
+          <div className="h-4 w-px bg-border/50" />
+          <Badge variant="secondary" className="text-xs font-mono">
+            {Math.round(zoom * 100)}%
+          </Badge>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={handleZoomOut}
+            disabled={zoom <= MIN_ZOOM}
+            title="Zoom out"
+          >
+            <ZoomOut className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={handleZoomIn}
+            disabled={zoom >= MAX_ZOOM}
+            title="Zoom in"
+          >
+            <ZoomIn className="h-4 w-4" />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={handleResetView}
+            title="Reset view"
+          >
+            <Home className="h-4 w-4" />
+          </Button>
+          <div className="h-4 w-px bg-border/50" />
           <Button
             variant="ghost"
             size="icon"
@@ -634,15 +720,33 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
       </div>
 
       {/* Graph Area */}
-      <div className={cn("w-full overflow-hidden", isFullscreen ? "h-[calc(100vh-200px)]" : "h-[350px]")}>
+      <div 
+        className={cn(
+          "w-full overflow-hidden relative", 
+          isFullscreen ? "h-[calc(100vh-200px)]" : "h-[350px]",
+          isPanning && "cursor-grabbing"
+        )}
+      >
         <svg
           ref={svgRef}
           width={dimensions.width}
           height={dimensions.height}
           className="w-full h-full"
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-          onMouseLeave={handleMouseUp}
+          onMouseMove={(e) => {
+            handleMouseMove(e);
+            handlePanMove(e);
+          }}
+          onMouseUp={() => {
+            handleMouseUp();
+            handlePanEnd();
+          }}
+          onMouseLeave={() => {
+            handleMouseUp();
+            handlePanEnd();
+          }}
+          onMouseDown={handlePanStart}
+          onWheel={handleWheel}
+          style={{ cursor: isPanning ? 'grabbing' : 'default' }}
         >
           {/* Background grid */}
           <defs>
@@ -665,8 +769,13 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
           </defs>
           <rect width={dimensions.width} height={dimensions.height} fill="url(#physics-grid)" />
 
-          {/* Links */}
-          {links.map((link) => {
+          {/* Zoomable/Pannable group */}
+          <g 
+            transform={`translate(${pan.x + dimensions.width / 2 * (1 - zoom)}, ${pan.y + dimensions.height / 2 * (1 - zoom)}) scale(${zoom})`}
+            style={{ transformOrigin: 'center' }}
+          >
+            {/* Links */}
+            {links.map((link) => {
             const sourceNode = nodes.find((n) => n.id === link.source);
             const targetNode = nodes.find((n) => n.id === link.target);
             if (!sourceNode || !targetNode) return null;
@@ -779,7 +888,14 @@ const OSINTLinkMap = ({ investigationId, targetName, active }: OSINTLinkMapProps
               </g>
             );
           })}
+          </g>
         </svg>
+
+        {/* Pan hint */}
+        <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2 py-1 rounded bg-background/80 border border-border/30 text-xs text-muted-foreground backdrop-blur-sm">
+          <Move className="h-3 w-3" />
+          <span>Alt+drag or scroll to navigate</span>
+        </div>
       </div>
 
       {/* Selected Node Details */}
