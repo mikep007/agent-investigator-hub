@@ -30,13 +30,38 @@ const LinkPreviewTooltip: React.FC<LinkPreviewTooltipProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
   
-  // Domains that block screenshot/embed services
+  // Domains that block screenshot/embed services (X-Frame-Options: DENY or CSP restrictions)
   const blockedDomains = [
-    'facebook.com', 'www.facebook.com', 'fb.com',
-    'instagram.com', 'www.instagram.com',
-    'linkedin.com', 'www.linkedin.com',
-    'twitter.com', 'www.twitter.com', 'x.com',
-    'tiktok.com', 'www.tiktok.com'
+    // Meta platforms
+    'facebook.com', 'fb.com', 'messenger.com',
+    'instagram.com', 'threads.net',
+    'whatsapp.com', 'wa.me',
+    // Twitter/X
+    'twitter.com', 'x.com', 't.co',
+    // Microsoft/LinkedIn
+    'linkedin.com',
+    // TikTok/ByteDance
+    'tiktok.com', 'douyin.com',
+    // Reddit
+    'reddit.com', 'redd.it',
+    // Pinterest
+    'pinterest.com', 'pin.it',
+    // Snapchat
+    'snapchat.com', 'snap.com',
+    // Discord
+    'discord.com', 'discord.gg', 'discordapp.com',
+    // Telegram
+    'telegram.org', 't.me', 'web.telegram.org',
+    // YouTube/Google
+    'youtube.com', 'youtu.be',
+    // Other platforms with strict embedding policies
+    'tumblr.com',
+    'quora.com',
+    'medium.com',
+    'substack.com',
+    'patreon.com',
+    'onlyfans.com',
+    'twitch.tv',
   ];
   
   // Extract domain for favicon
