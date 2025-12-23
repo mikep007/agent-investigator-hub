@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { RefreshCw, User, Mail, AtSign, Users, ChevronDown, ChevronUp, Sparkles, Plus, X } from 'lucide-react';
+import { RefreshCw, User, Mail, AtSign, Users, ChevronDown, ChevronUp, Sparkles, Plus, X, ClipboardPaste } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
@@ -7,6 +7,7 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { Input } from '@/components/ui/input';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
 
 interface DiscoveredData {
   usernames: string[];
@@ -37,6 +38,14 @@ interface EnrichInvestigationProps {
     additionalEmails?: string[];
   }) => void;
 }
+
+// Parse bulk input (comma, newline, semicolon, or space separated)
+const parseBulkInput = (input: string): string[] => {
+  return input
+    .split(/[,;\n\r\t]+/)
+    .map(item => item.trim())
+    .filter(item => item.length > 0);
+};
 
 const EnrichInvestigation = ({ findings, originalSearchData, onRerun }: EnrichInvestigationProps) => {
   const [isOpen, setIsOpen] = useState(false);
@@ -191,16 +200,26 @@ const EnrichInvestigation = ({ findings, originalSearchData, onRerun }: EnrichIn
     const trimmedValue = newEntryValue.trim();
     if (!trimmedValue) return;
 
-    // Check for duplicates
-    const isDuplicate = manualEntries.some(
-      e => e.type === newEntryType && e.value.toLowerCase() === trimmedValue.toLowerCase()
-    );
-    if (isDuplicate) {
-      setNewEntryValue('');
-      return;
-    }
+    // Parse for bulk input (comma, newline, semicolon separated)
+    const values = parseBulkInput(trimmedValue);
+    
+    const newEntries: ManualEntry[] = [];
+    values.forEach(value => {
+      // Check for duplicates
+      const isDuplicate = manualEntries.some(
+        e => e.type === newEntryType && e.value.toLowerCase() === value.toLowerCase()
+      ) || newEntries.some(
+        e => e.type === newEntryType && e.value.toLowerCase() === value.toLowerCase()
+      );
+      
+      if (!isDuplicate && value.length > 0) {
+        newEntries.push({ type: newEntryType, value });
+      }
+    });
 
-    setManualEntries(prev => [...prev, { type: newEntryType, value: trimmedValue }]);
+    if (newEntries.length > 0) {
+      setManualEntries(prev => [...prev, ...newEntries]);
+    }
     setNewEntryValue('');
   };
 
@@ -212,6 +231,35 @@ const EnrichInvestigation = ({ findings, originalSearchData, onRerun }: EnrichIn
     if (e.key === 'Enter') {
       e.preventDefault();
       addManualEntry();
+    }
+  };
+
+  // Handle paste event for bulk input
+  const handlePaste = (e: React.ClipboardEvent) => {
+    const pastedText = e.clipboardData.getData('text');
+    const values = parseBulkInput(pastedText);
+    
+    // If multiple values detected, prevent default and handle bulk
+    if (values.length > 1) {
+      e.preventDefault();
+      
+      const newEntries: ManualEntry[] = [];
+      values.forEach(value => {
+        const isDuplicate = manualEntries.some(
+          entry => entry.type === newEntryType && entry.value.toLowerCase() === value.toLowerCase()
+        ) || newEntries.some(
+          entry => entry.type === newEntryType && entry.value.toLowerCase() === value.toLowerCase()
+        );
+        
+        if (!isDuplicate && value.length > 0) {
+          newEntries.push({ type: newEntryType, value });
+        }
+      });
+
+      if (newEntries.length > 0) {
+        setManualEntries(prev => [...prev, ...newEntries]);
+      }
+      setNewEntryValue('');
     }
   };
 
@@ -288,22 +336,35 @@ const EnrichInvestigation = ({ findings, originalSearchData, onRerun }: EnrichIn
                   <SelectTrigger className="w-[130px] h-9 bg-background">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent>
+                  <SelectContent className="bg-background border border-border z-50">
                     <SelectItem value="username">Username</SelectItem>
                     <SelectItem value="email">Email</SelectItem>
                     <SelectItem value="phone">Phone</SelectItem>
                     <SelectItem value="relative">Name</SelectItem>
                   </SelectContent>
                 </Select>
-                <Input
-                  value={newEntryValue}
-                  onChange={(e) => setNewEntryValue(e.target.value)}
-                  onKeyPress={handleKeyPress}
-                  placeholder={getTypePlaceholder(newEntryType)}
-                  className="flex-1 h-9 bg-background"
-                />
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <div className="flex-1 relative">
+                        <Input
+                          value={newEntryValue}
+                          onChange={(e) => setNewEntryValue(e.target.value)}
+                          onKeyPress={handleKeyPress}
+                          onPaste={handlePaste}
+                          placeholder={getTypePlaceholder(newEntryType)}
+                          className="flex-1 h-9 bg-background pr-8"
+                        />
+                        <ClipboardPaste className="absolute right-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-muted-foreground/50" />
+                      </div>
+                    </TooltipTrigger>
+                    <TooltipContent side="bottom" className="bg-popover border border-border">
+                      <p className="text-xs">Supports bulk paste: comma, newline, or semicolon separated</p>
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
                 <Button 
-                  size="sm" 
+                  size="sm"
                   onClick={addManualEntry}
                   disabled={!newEntryValue.trim()}
                   className="h-9 px-3"
