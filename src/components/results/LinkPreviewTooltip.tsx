@@ -43,7 +43,7 @@ const LinkPreviewTooltip: React.FC<LinkPreviewTooltipProps> = ({
   const getDomain = (urlString: string) => {
     try {
       const urlObj = new URL(urlString);
-      return urlObj.hostname;
+      return urlObj.hostname.replace(/^www\./, '').toLowerCase();
     } catch {
       return '';
     }
@@ -52,10 +52,13 @@ const LinkPreviewTooltip: React.FC<LinkPreviewTooltipProps> = ({
   const domain = getDomain(url);
   const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=32` : '';
   
-  // Check if domain blocks screenshots
-  const isBlockedDomain = blockedDomains.some(blocked => domain.includes(blocked));
+  // Check if domain blocks screenshots (normalize both sides for comparison)
+  const isBlockedDomain = blockedDomains.some(blocked => {
+    const normalizedBlocked = blocked.replace(/^www\./, '').toLowerCase();
+    return domain === normalizedBlocked || domain.endsWith('.' + normalizedBlocked);
+  });
   
-  // Generate a screenshot preview URL using a free service (skip for blocked domains)
+  // Never attempt screenshots for blocked domains - they will fail with CORS/X-Frame-Options errors
   const screenshotUrl = isBlockedDomain ? null : `https://image.thum.io/get/width/300/crop/200/${encodeURIComponent(url)}`;
 
   return (
