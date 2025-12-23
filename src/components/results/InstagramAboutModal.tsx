@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -67,13 +67,33 @@ interface IntelligenceResponse {
   tips: string[];
 }
 
+// Session cache for Instagram About data
+const sessionCache = new Map<string, IntelligenceResponse>();
+
 const InstagramAboutModal = ({ username }: InstagramAboutModalProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [data, setData] = useState<IntelligenceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Check cache on mount
+  useEffect(() => {
+    const cached = sessionCache.get(username.toLowerCase());
+    if (cached) {
+      setData(cached);
+    }
+  }, [username]);
+
   const fetchAboutData = async () => {
+    // Check cache first
+    const cacheKey = username.toLowerCase();
+    const cached = sessionCache.get(cacheKey);
+    if (cached) {
+      setData(cached);
+      toast.success('About Account data loaded from cache');
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     
@@ -85,7 +105,12 @@ const InstagramAboutModal = ({ username }: InstagramAboutModalProps) => {
 
       if (fetchError) throw fetchError;
       
-      setData(response as IntelligenceResponse);
+      const responseData = response as IntelligenceResponse;
+      setData(responseData);
+      
+      // Store in session cache
+      sessionCache.set(cacheKey, responseData);
+      
       toast.success('About Account data retrieved');
     } catch (err) {
       console.error('Error fetching Instagram About data:', err);
