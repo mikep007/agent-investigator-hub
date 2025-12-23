@@ -4,11 +4,12 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   ExternalLink, CheckCircle2, XCircle, HelpCircle, 
-  Download, Image, Video, FileText, BookmarkPlus
+  Download, Image, Video, FileText, BookmarkPlus, Info
 } from "lucide-react";
 import { FindingData, PlatformAccount } from "./types";
 import PlatformLogo from "../PlatformLogo";
 import SaveToCaseButton from "./SaveToCaseButton";
+import InstagramAboutModal from "./InstagramAboutModal";
 import {
   Tooltip,
   TooltipContent,
@@ -143,6 +144,11 @@ const PlatformGrid = ({ findings, onVerify, onDeepDive }: PlatformGridProps) => 
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+
+          {/* Instagram About Account Button */}
+          {platform.platform.toLowerCase() === 'instagram' && platform.username && (
+            <InstagramAboutModal username={platform.username} />
+          )}
 
           {onDeepDive && (
             <TooltipProvider>
