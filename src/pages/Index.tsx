@@ -26,6 +26,7 @@ import OSINTLinkMap, { PivotData } from "@/components/OSINTLinkMap";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SaveToCaseDialog from "@/components/cases/SaveToCaseDialog";
 import InvestigationBreadcrumb from "@/components/InvestigationBreadcrumb";
+import EnrichInvestigation from "@/components/EnrichInvestigation";
 
 interface InvestigationHistoryItem {
   id: string;
@@ -62,6 +63,8 @@ const Index = () => {
   const [pendingPivot, setPendingPivot] = useState<PendingPivot | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
   const [investigationHistory, setInvestigationHistory] = useState<InvestigationHistoryItem[]>([]);
+  const [originalSearchData, setOriginalSearchData] = useState<SearchData | null>(null);
+  const [findings, setFindings] = useState<any[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -80,6 +83,46 @@ const Index = () => {
     navigate("/auth");
   };
 
+  // Fetch findings when investigation changes
+  useEffect(() => {
+    if (!currentInvestigationId) {
+      setFindings([]);
+      return;
+    }
+
+    const fetchFindings = async () => {
+      const { data } = await supabase
+        .from('findings')
+        .select('*')
+        .eq('investigation_id', currentInvestigationId);
+      
+      if (data) {
+        setFindings(data);
+      }
+    };
+
+    fetchFindings();
+
+    // Subscribe to new findings
+    const channel = supabase
+      .channel(`findings-${currentInvestigationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'findings',
+          filter: `investigation_id=eq.${currentInvestigationId}`,
+        },
+        () => fetchFindings()
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [currentInvestigationId]);
+
   const startComprehensiveInvestigation = async (searchData: {
     fullName: string;
     address: string;
@@ -90,6 +133,8 @@ const Index = () => {
     setLoading(true);
     const name = searchData.fullName || searchData.username || searchData.email || "Target";
     setTargetName(name);
+    setOriginalSearchData(searchData);
+    setFindings([]); // Reset findings for new investigation
     try {
       const { data, error } = await supabase.functions.invoke('osint-comprehensive-investigation', {
         body: searchData
@@ -226,6 +271,20 @@ const Index = () => {
     }
   };
 
+  // Handle enriched re-run
+  const handleEnrichedRerun = (enrichedData: any) => {
+    // Reset investigation and pre-fill with enriched data
+    setActiveInvestigation(false);
+    setCurrentInvestigationId(null);
+    setPivotSearchData(enrichedData);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    
+    toast({
+      title: "Re-run Ready",
+      description: "Search form updated with selected data. Click Start Investigation to begin.",
+    });
+  };
+
   // Navigate to a previous investigation in the history
   const handleHistoryNavigate = (index: number) => {
     const item = investigationHistory[index];
@@ -353,6 +412,17 @@ const Index = () => {
             </div>
             <InvestigationPanel active={activeInvestigation} investigationId={currentInvestigationId} onPivot={handlePivot} />
           </Card>
+
+          {/* Enrich & Re-run Investigation */}
+          {activeInvestigation && originalSearchData && findings.length > 0 && (
+            <div className="mb-6">
+              <EnrichInvestigation
+                findings={findings}
+                originalSearchData={originalSearchData}
+                onRerun={handleEnrichedRerun}
+              />
+            </div>
+          )}
 
           {/* Visualization and Analysis Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
