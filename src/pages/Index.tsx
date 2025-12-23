@@ -25,6 +25,13 @@ import RelationshipGraph from "@/components/RelationshipGraph";
 import OSINTLinkMap, { PivotData } from "@/components/OSINTLinkMap";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SaveToCaseDialog from "@/components/cases/SaveToCaseDialog";
+import InvestigationBreadcrumb from "@/components/InvestigationBreadcrumb";
+
+interface InvestigationHistoryItem {
+  id: string;
+  name: string;
+  investigationId: string | null;
+}
 
 interface SearchFormRef {
   setSearchData: (data: Partial<SearchData>) => void;
@@ -54,6 +61,7 @@ const Index = () => {
   const [pivotConfirmDialog, setPivotConfirmDialog] = useState(false);
   const [pendingPivot, setPendingPivot] = useState<PendingPivot | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
+  const [investigationHistory, setInvestigationHistory] = useState<InvestigationHistoryItem[]>([]);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -80,7 +88,8 @@ const Index = () => {
     username: string;
   }) => {
     setLoading(true);
-    setTargetName(searchData.fullName || searchData.username || searchData.email || "Target");
+    const name = searchData.fullName || searchData.username || searchData.email || "Target";
+    setTargetName(name);
     try {
       const { data, error } = await supabase.functions.invoke('osint-comprehensive-investigation', {
         body: searchData
@@ -90,6 +99,16 @@ const Index = () => {
 
       setActiveInvestigation(true);
       setCurrentInvestigationId(data.investigationId);
+      
+      // Add to investigation history
+      setInvestigationHistory(prev => [
+        ...prev,
+        {
+          id: crypto.randomUUID(),
+          name,
+          investigationId: data.investigationId,
+        }
+      ]);
     } catch (error: any) {
       toast({
         title: "Error",
@@ -207,7 +226,21 @@ const Index = () => {
     }
   };
 
-
+  // Navigate to a previous investigation in the history
+  const handleHistoryNavigate = (index: number) => {
+    const item = investigationHistory[index];
+    if (item && item.investigationId) {
+      setCurrentInvestigationId(item.investigationId);
+      setTargetName(item.name);
+      setActiveInvestigation(true);
+      // Trim history to this point
+      setInvestigationHistory(prev => prev.slice(0, index + 1));
+      toast({
+        title: "Navigated Back",
+        description: `Viewing investigation for "${item.name}"`,
+      });
+    }
+  };
   return (
     <TooltipProvider>
       <div className="min-h-screen bg-background grid-bg">
@@ -273,6 +306,15 @@ const Index = () => {
             onPivotConsumed={() => setPivotSearchData(null)}
           />
 
+          {/* Investigation History Breadcrumb */}
+          {investigationHistory.length > 0 && (
+            <div className="mb-6">
+              <InvestigationBreadcrumb 
+                history={investigationHistory}
+                onNavigate={handleHistoryNavigate}
+              />
+            </div>
+          )}
 
           {/* Investigation Log - Full Width Landscape */}
           <Card className="bg-card/80 backdrop-blur border-border/50 overflow-hidden mb-6">
