@@ -1,16 +1,23 @@
 import { useState, useEffect } from 'react';
-import { RefreshCw, User, Mail, AtSign, Users, ChevronDown, ChevronUp, Sparkles } from 'lucide-react';
+import { RefreshCw, User, Mail, AtSign, Users, ChevronDown, ChevronUp, Sparkles, Plus, X } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Card } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Input } from '@/components/ui/input';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 interface DiscoveredData {
   usernames: string[];
   emails: string[];
   phones: string[];
   relatives: string[];
+}
+
+interface ManualEntry {
+  type: 'username' | 'email' | 'phone' | 'relative';
+  value: string;
 }
 
 interface EnrichInvestigationProps {
@@ -42,6 +49,11 @@ const EnrichInvestigation = ({ findings, originalSearchData, onRerun }: EnrichIn
   const [selectedUsernames, setSelectedUsernames] = useState<string[]>([]);
   const [selectedEmails, setSelectedEmails] = useState<string[]>([]);
   const [selectedRelatives, setSelectedRelatives] = useState<string[]>([]);
+  
+  // Manual input state
+  const [manualEntries, setManualEntries] = useState<ManualEntry[]>([]);
+  const [newEntryType, setNewEntryType] = useState<ManualEntry['type']>('username');
+  const [newEntryValue, setNewEntryValue] = useState('');
 
   // Extract discovered data from findings
   useEffect(() => {
@@ -115,28 +127,38 @@ const EnrichInvestigation = ({ findings, originalSearchData, onRerun }: EnrichIn
     });
   }, [findings, originalSearchData]);
 
+  // Get manual entries by type
+  const manualUsernames = manualEntries.filter(e => e.type === 'username').map(e => e.value);
+  const manualEmails = manualEntries.filter(e => e.type === 'email').map(e => e.value);
+  const manualRelatives = manualEntries.filter(e => e.type === 'relative').map(e => e.value);
+
   const totalDiscovered = 
     discovered.usernames.length + 
     discovered.emails.length + 
-    discovered.relatives.length;
+    discovered.relatives.length +
+    manualEntries.length;
 
   const totalSelected = 
     selectedUsernames.length + 
     selectedEmails.length + 
     selectedRelatives.length;
 
-  if (totalDiscovered === 0) {
-    return null;
-  }
+  // Allow component to show if there are manual entries even if no discoveries
+  const hasContent = totalDiscovered > 0 || manualEntries.length > 0;
 
   const handleRerun = () => {
+    // Combine discovered selections with manual entries
+    const allUsernames = [...selectedUsernames, ...manualUsernames];
+    const allEmails = [...selectedEmails, ...manualEmails];
+    const allRelatives = [...selectedRelatives, ...manualRelatives];
+
     onRerun({
       ...originalSearchData,
-      additionalUsernames: selectedUsernames,
-      additionalEmails: selectedEmails,
+      additionalUsernames: allUsernames,
+      additionalEmails: allEmails,
       // If a relative is selected, use them as the primary name
-      fullName: selectedRelatives.length > 0 
-        ? selectedRelatives[0] 
+      fullName: allRelatives.length > 0 
+        ? allRelatives[0] 
         : originalSearchData.fullName,
     });
   };
@@ -165,6 +187,53 @@ const EnrichInvestigation = ({ findings, originalSearchData, onRerun }: EnrichIn
     );
   };
 
+  const addManualEntry = () => {
+    const trimmedValue = newEntryValue.trim();
+    if (!trimmedValue) return;
+
+    // Check for duplicates
+    const isDuplicate = manualEntries.some(
+      e => e.type === newEntryType && e.value.toLowerCase() === trimmedValue.toLowerCase()
+    );
+    if (isDuplicate) {
+      setNewEntryValue('');
+      return;
+    }
+
+    setManualEntries(prev => [...prev, { type: newEntryType, value: trimmedValue }]);
+    setNewEntryValue('');
+  };
+
+  const removeManualEntry = (index: number) => {
+    setManualEntries(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addManualEntry();
+    }
+  };
+
+  const getTypeIcon = (type: ManualEntry['type']) => {
+    switch (type) {
+      case 'username': return <AtSign className="w-3 h-3" />;
+      case 'email': return <Mail className="w-3 h-3" />;
+      case 'phone': return <User className="w-3 h-3" />;
+      case 'relative': return <Users className="w-3 h-3" />;
+    }
+  };
+
+  const getTypePlaceholder = (type: ManualEntry['type']) => {
+    switch (type) {
+      case 'username': return 'Enter username...';
+      case 'email': return 'Enter email address...';
+      case 'phone': return 'Enter phone number...';
+      case 'relative': return 'Enter name...';
+    }
+  };
+
+  // Always show component (to allow manual input even without discoveries)
   return (
     <Card className="bg-card/80 backdrop-blur border-primary/20 overflow-hidden">
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
@@ -180,14 +249,23 @@ const EnrichInvestigation = ({ findings, originalSearchData, onRerun }: EnrichIn
               <div className="text-left">
                 <h3 className="font-medium text-sm">Enrich & Re-run Investigation</h3>
                 <p className="text-xs text-muted-foreground">
-                  {totalDiscovered} new data points discovered
+                  {totalDiscovered > 0 
+                    ? `${totalDiscovered} data points available` 
+                    : 'Add data points manually'}
                 </p>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="text-xs">
-                {totalDiscovered} found
-              </Badge>
+              {totalDiscovered > 0 && (
+                <Badge variant="secondary" className="text-xs">
+                  {totalDiscovered} found
+                </Badge>
+              )}
+              {manualEntries.length > 0 && (
+                <Badge variant="outline" className="text-xs">
+                  +{manualEntries.length} manual
+                </Badge>
+              )}
               {isOpen ? (
                 <ChevronUp className="w-4 h-4 text-muted-foreground" />
               ) : (
@@ -199,6 +277,63 @@ const EnrichInvestigation = ({ findings, originalSearchData, onRerun }: EnrichIn
         
         <CollapsibleContent>
           <div className="px-4 pb-4 space-y-4">
+            {/* Manual Input Section */}
+            <div className="space-y-3 p-3 rounded-lg bg-muted/50 border border-border">
+              <div className="flex items-center gap-2 text-sm font-medium">
+                <Plus className="w-4 h-4 text-primary" />
+                <span>Add Data Point Manually</span>
+              </div>
+              <div className="flex gap-2">
+                <Select value={newEntryType} onValueChange={(v) => setNewEntryType(v as ManualEntry['type'])}>
+                  <SelectTrigger className="w-[130px] h-9 bg-background">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="username">Username</SelectItem>
+                    <SelectItem value="email">Email</SelectItem>
+                    <SelectItem value="phone">Phone</SelectItem>
+                    <SelectItem value="relative">Name</SelectItem>
+                  </SelectContent>
+                </Select>
+                <Input
+                  value={newEntryValue}
+                  onChange={(e) => setNewEntryValue(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  placeholder={getTypePlaceholder(newEntryType)}
+                  className="flex-1 h-9 bg-background"
+                />
+                <Button 
+                  size="sm" 
+                  onClick={addManualEntry}
+                  disabled={!newEntryValue.trim()}
+                  className="h-9 px-3"
+                >
+                  <Plus className="w-4 h-4" />
+                </Button>
+              </div>
+              
+              {/* Display Manual Entries */}
+              {manualEntries.length > 0 && (
+                <div className="flex flex-wrap gap-2 pt-2">
+                  {manualEntries.map((entry, index) => (
+                    <div
+                      key={`${entry.type}-${entry.value}-${index}`}
+                      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-primary/10 border border-primary/20 text-xs"
+                    >
+                      {getTypeIcon(entry.type)}
+                      <span>{entry.value}</span>
+                      <button
+                        onClick={() => removeManualEntry(index)}
+                        className="ml-1 p-0.5 rounded-full hover:bg-destructive/20 transition-colors"
+                      >
+                        <X className="w-3 h-3 text-muted-foreground hover:text-destructive" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Discovered Usernames */}
             {discovered.usernames.length > 0 && (
               <div className="space-y-2">
@@ -278,15 +413,15 @@ const EnrichInvestigation = ({ findings, originalSearchData, onRerun }: EnrichIn
             <div className="pt-2 border-t border-border">
               <Button
                 onClick={handleRerun}
-                disabled={totalSelected === 0}
+                disabled={totalSelected === 0 && manualEntries.length === 0}
                 className="w-full"
               >
                 <RefreshCw className="w-4 h-4 mr-2" />
-                Re-run with {totalSelected} Selected Item{totalSelected !== 1 ? 's' : ''}
+                Re-run with {totalSelected + manualEntries.length} Item{(totalSelected + manualEntries.length) !== 1 ? 's' : ''}
               </Button>
-              {totalSelected === 0 && (
+              {totalSelected === 0 && manualEntries.length === 0 && (
                 <p className="text-xs text-muted-foreground text-center mt-2">
-                  Select items above to include in re-run
+                  Select items above or add data manually to include in re-run
                 </p>
               )}
             </div>
