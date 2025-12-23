@@ -8,6 +8,7 @@ import {
 import PlatformLogo from "../PlatformLogo";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import InstagramAboutModal from "./InstagramAboutModal";
 
 interface OSINTPlatformCardProps {
   platform: string;
@@ -217,6 +218,11 @@ const OSINTPlatformCard = ({
             View Account
             <ExternalLink className="h-3 w-3 ml-1" />
           </Button>
+
+          {/* Instagram About Account Button */}
+          {platform.toLowerCase() === 'instagram' && username && (
+            <InstagramAboutModal username={username} />
+          )}
           
           <Button
             variant="outline"
