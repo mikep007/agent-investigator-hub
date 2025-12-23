@@ -12,10 +12,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle, Info, Building2 } from "lucide-react";
+import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle, Info, Building2, ClipboardPaste, X, Plus } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SearchHelpModal } from "./SearchHelpModal";
 import AddressAutocomplete from "./AddressAutocomplete";
+import { Badge } from "@/components/ui/badge";
 
 // US States for dropdown
 const US_STATES = [
@@ -51,6 +52,14 @@ interface SearchData {
   state?: string;
 }
 
+// Parse bulk input (comma, newline, semicolon separated)
+const parseBulkInput = (input: string): string[] => {
+  return input
+    .split(/[,;\n\r\t]+/)
+    .map(item => item.trim())
+    .filter(item => item.length > 0);
+};
+
 interface ValidationState {
   email: 'valid' | 'invalid' | 'empty';
   phone: 'valid' | 'invalid' | 'empty';
@@ -82,6 +91,10 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
     phone: 'empty',
     username: 'empty',
   });
+
+  // Bulk entries for emails and usernames
+  const [bulkEmails, setBulkEmails] = useState<string[]>([]);
+  const [bulkUsernames, setBulkUsernames] = useState<string[]>([]);
   
   const { toast } = useToast();
 
@@ -142,6 +155,60 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
     }
   };
 
+  // Handle bulk paste for emails
+  const handleEmailPaste = (e: React.ClipboardEvent) => {
+    const pastedText = e.clipboardData.getData('text');
+    const values = parseBulkInput(pastedText);
+    
+    if (values.length > 1) {
+      e.preventDefault();
+      const validEmails = values.filter(v => validateEmail(v) === 'valid');
+      const uniqueEmails = validEmails.filter(
+        email => !bulkEmails.includes(email.toLowerCase()) && 
+                 email.toLowerCase() !== searchData.email?.toLowerCase()
+      );
+      
+      if (uniqueEmails.length > 0) {
+        setBulkEmails(prev => [...prev, ...uniqueEmails.map(e => e.toLowerCase())]);
+        toast({
+          title: "Emails Added",
+          description: `Added ${uniqueEmails.length} email${uniqueEmails.length > 1 ? 's' : ''} to search`,
+        });
+      }
+    }
+  };
+
+  // Handle bulk paste for usernames
+  const handleUsernamePaste = (e: React.ClipboardEvent) => {
+    const pastedText = e.clipboardData.getData('text');
+    const values = parseBulkInput(pastedText);
+    
+    if (values.length > 1) {
+      e.preventDefault();
+      const validUsernames = values.filter(v => validateUsername(v) === 'valid');
+      const uniqueUsernames = validUsernames.filter(
+        username => !bulkUsernames.includes(username.toLowerCase()) && 
+                    username.toLowerCase() !== searchData.username?.toLowerCase()
+      );
+      
+      if (uniqueUsernames.length > 0) {
+        setBulkUsernames(prev => [...prev, ...uniqueUsernames]);
+        toast({
+          title: "Usernames Added",
+          description: `Added ${uniqueUsernames.length} username${uniqueUsernames.length > 1 ? 's' : ''} to search`,
+        });
+      }
+    }
+  };
+
+  const removeBulkEmail = (email: string) => {
+    setBulkEmails(prev => prev.filter(e => e !== email));
+  };
+
+  const removeBulkUsername = (username: string) => {
+    setBulkUsernames(prev => prev.filter(u => u !== username));
+  };
+
   const validateAndSubmit = () => {
     // Different validation based on search mode
     if (searchMode === 'location_only') {
@@ -177,6 +244,8 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
       searchData.phone?.trim() || 
       searchData.username?.trim() || 
       searchData.address?.trim() ||
+      bulkEmails.length > 0 ||
+      bulkUsernames.length > 0 ||
       (searchData.city?.trim() && searchData.state?.trim());
 
     if (!hasAtLeastOneField) {
@@ -253,7 +322,7 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
       searchData.phone,
       searchData.username,
       searchData.keywords
-    ].filter(field => field?.trim()).length;
+    ].filter(field => field?.trim()).length + bulkEmails.length + bulkUsernames.length;
 
     toast({
       title: "Investigation Started",
@@ -261,9 +330,19 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
     });
 
     // If city/state provided but not address, construct address
+    // Include bulk entries in the search data
+    const allEmails = [searchData.email, ...bulkEmails].filter(Boolean).join(', ');
+    const allUsernames = [searchData.username, ...bulkUsernames].filter(Boolean);
+    
     const finalSearchData = {
       ...searchData,
+      email: allEmails || searchData.email,
+      username: allUsernames[0] || searchData.username, // Primary username
       address: searchData.address || (searchData.city && searchData.state ? `${searchData.city.trim()}, ${searchData.state}` : ''),
+      // Pass additional usernames via keywords if needed
+      keywords: allUsernames.length > 1 
+        ? `${searchData.keywords || ''} ${allUsernames.slice(1).join(' ')}`.trim()
+        : searchData.keywords,
     };
 
     onStartInvestigation(finalSearchData);
@@ -423,15 +502,24 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
             <Label htmlFor="email" className="flex items-center gap-2">
               <Mail className="w-4 h-4 text-muted-foreground" />
               Email Address
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <ClipboardPaste className="w-3.5 h-3.5 text-muted-foreground/50 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="bg-popover border border-border">
+                  <p className="text-xs">Paste multiple emails (comma or newline separated)</p>
+                </TooltipContent>
+              </Tooltip>
             </Label>
             <div className="relative">
               <Input
                 id="email"
                 type="email"
-                placeholder="john@example.com"
+                placeholder="john@example.com (or paste multiple)"
                 value={searchData.email}
                 onChange={(e) => handleChange("email", e.target.value)}
                 onKeyDown={handleKeyPress}
+                onPaste={handleEmailPaste}
                 className={`bg-background/50 pr-10 ${
                   validation.email === 'invalid' ? 'border-destructive' : 
                   validation.email === 'valid' ? 'border-green-500' : ''
@@ -446,8 +534,28 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
                 <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-destructive" />
               )}
             </div>
+            {bulkEmails.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {bulkEmails.map((email, idx) => (
+                  <Badge 
+                    key={`${email}-${idx}`} 
+                    variant="secondary" 
+                    className="text-xs flex items-center gap-1 pr-1"
+                  >
+                    {email}
+                    <button
+                      onClick={() => removeBulkEmail(email)}
+                      className="ml-0.5 p-0.5 rounded-full hover:bg-destructive/20"
+                      disabled={loading}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
             <p className="text-xs text-muted-foreground">
-              Format: username@domain.com (e.g., john.doe@gmail.com)
+              Format: username@domain.com • Paste multiple separated by commas or newlines
             </p>
           </div>
 
@@ -489,14 +597,23 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
             <Label htmlFor="username" className="flex items-center gap-2">
               <User className="w-4 h-4 text-muted-foreground" />
               Username
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <ClipboardPaste className="w-3.5 h-3.5 text-muted-foreground/50 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="bg-popover border border-border">
+                  <p className="text-xs">Paste multiple usernames (comma or newline separated)</p>
+                </TooltipContent>
+              </Tooltip>
             </Label>
             <div className="relative">
               <Input
                 id="username"
-                placeholder="johnsmith007"
+                placeholder="johnsmith007 (or paste multiple)"
                 value={searchData.username}
                 onChange={(e) => handleChange("username", e.target.value)}
                 onKeyDown={handleKeyPress}
+                onPaste={handleUsernamePaste}
                 className={`bg-background/50 pr-10 ${
                   validation.username === 'invalid' ? 'border-destructive' : 
                   validation.username === 'valid' ? 'border-green-500' : ''
@@ -511,9 +628,29 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
                 <XCircle className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-destructive" />
               )}
             </div>
+            {bulkUsernames.length > 0 && (
+              <div className="flex flex-wrap gap-1.5 pt-1">
+                {bulkUsernames.map((username, idx) => (
+                  <Badge 
+                    key={`${username}-${idx}`} 
+                    variant="secondary" 
+                    className="text-xs flex items-center gap-1 pr-1"
+                  >
+                    @{username}
+                    <button
+                      onClick={() => removeBulkUsername(username)}
+                      className="ml-0.5 p-0.5 rounded-full hover:bg-destructive/20"
+                      disabled={loading}
+                    >
+                      <X className="w-3 h-3" />
+                    </button>
+                  </Badge>
+                ))}
+              </div>
+            )}
             <div className="flex items-center justify-between">
               <p className="text-xs text-muted-foreground">
-                3-30 characters: letters, numbers, dots, underscores, hyphens only
+                3-30 chars • Paste multiple separated by commas or newlines
               </p>
               <p className={`text-xs ${
                 searchData.username.length > 25 ? 'text-destructive' : 'text-muted-foreground'
