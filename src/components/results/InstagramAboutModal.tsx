@@ -70,24 +70,56 @@ interface IntelligenceResponse {
 // Session cache for Instagram About data
 const sessionCache = new Map<string, IntelligenceResponse>();
 
+// Extract username from Instagram URL or return as-is if already a username
+const extractUsername = (input: string): string | null => {
+  if (!input) return null;
+  
+  // If it's a URL, extract the username
+  const urlPatterns = [
+    /(?:https?:\/\/)?(?:www\.)?instagram\.com\/([a-zA-Z0-9._]+)\/?/,
+    /(?:https?:\/\/)?(?:www\.)?instagr\.am\/([a-zA-Z0-9._]+)\/?/,
+  ];
+  
+  for (const pattern of urlPatterns) {
+    const match = input.match(pattern);
+    if (match && match[1]) {
+      // Filter out non-profile paths
+      const extracted = match[1].toLowerCase();
+      if (!['p', 'reel', 'stories', 'explore', 'accounts', 'direct'].includes(extracted)) {
+        return extracted;
+      }
+    }
+  }
+  
+  // If not a URL, clean and return as username
+  return input.replace(/^@/, '').trim().toLowerCase() || null;
+};
+
 const InstagramAboutModal = ({ username }: InstagramAboutModalProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [data, setData] = useState<IntelligenceResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const extractedUsername = extractUsername(username);
+
   // Check cache on mount
   useEffect(() => {
-    const cached = sessionCache.get(username.toLowerCase());
+    if (!extractedUsername) return;
+    const cached = sessionCache.get(extractedUsername);
     if (cached) {
       setData(cached);
     }
-  }, [username]);
+  }, [extractedUsername]);
 
   const fetchAboutData = async () => {
+    if (!extractedUsername) {
+      setError('Could not extract username');
+      return;
+    }
+
     // Check cache first
-    const cacheKey = username.toLowerCase();
-    const cached = sessionCache.get(cacheKey);
+    const cached = sessionCache.get(extractedUsername);
     if (cached) {
       setData(cached);
       toast.success('About Account data loaded from cache');
@@ -100,7 +132,7 @@ const InstagramAboutModal = ({ username }: InstagramAboutModalProps) => {
     try {
       const { data: response, error: fetchError } = await supabase.functions.invoke(
         'osint-instagram-about',
-        { body: { target: username } }
+        { body: { target: extractedUsername } }
       );
 
       if (fetchError) throw fetchError;
@@ -109,7 +141,7 @@ const InstagramAboutModal = ({ username }: InstagramAboutModalProps) => {
       setData(responseData);
       
       // Store in session cache
-      sessionCache.set(cacheKey, responseData);
+      sessionCache.set(extractedUsername, responseData);
       
       toast.success('About Account data retrieved');
     } catch (err) {
@@ -123,10 +155,13 @@ const InstagramAboutModal = ({ username }: InstagramAboutModalProps) => {
 
   const handleOpen = (open: boolean) => {
     setIsOpen(open);
-    if (open && !data) {
+    if (open && !data && extractedUsername) {
       fetchAboutData();
     }
   };
+
+  // Don't render if no valid username
+  if (!extractedUsername) return null;
 
   const about = data?.aboutData;
 
@@ -146,7 +181,7 @@ const InstagramAboutModal = ({ username }: InstagramAboutModalProps) => {
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <span className="text-pink-500">📷</span>
-            About @{username}
+            About @{extractedUsername}
           </DialogTitle>
         </DialogHeader>
 
@@ -171,13 +206,13 @@ const InstagramAboutModal = ({ username }: InstagramAboutModalProps) => {
                 {about.profilePicUrl && (
                   <img 
                     src={about.profilePicUrl} 
-                    alt={username}
+                    alt={extractedUsername}
                     className="h-16 w-16 rounded-full object-cover border-2 border-border"
                   />
                 )}
                 <div className="flex-1">
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-semibold text-lg">@{username}</span>
+                    <span className="font-semibold text-lg">@{extractedUsername}</span>
                     {about.isVerified && (
                       <Badge className="bg-blue-500/10 text-blue-500 border-blue-500/30 text-xs">
                         <UserCheck className="h-3 w-3 mr-1" />
