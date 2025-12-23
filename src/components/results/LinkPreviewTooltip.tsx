@@ -30,6 +30,15 @@ const LinkPreviewTooltip: React.FC<LinkPreviewTooltipProps> = ({
 }) => {
   const [imageError, setImageError] = useState(false);
   
+  // Domains that block screenshot/embed services
+  const blockedDomains = [
+    'facebook.com', 'www.facebook.com', 'fb.com',
+    'instagram.com', 'www.instagram.com',
+    'linkedin.com', 'www.linkedin.com',
+    'twitter.com', 'www.twitter.com', 'x.com',
+    'tiktok.com', 'www.tiktok.com'
+  ];
+  
   // Extract domain for favicon
   const getDomain = (urlString: string) => {
     try {
@@ -43,8 +52,11 @@ const LinkPreviewTooltip: React.FC<LinkPreviewTooltipProps> = ({
   const domain = getDomain(url);
   const faviconUrl = domain ? `https://www.google.com/s2/favicons?domain=${domain}&sz=32` : '';
   
-  // Generate a screenshot preview URL using a free service
-  const screenshotUrl = `https://image.thum.io/get/width/300/crop/200/${encodeURIComponent(url)}`;
+  // Check if domain blocks screenshots
+  const isBlockedDomain = blockedDomains.some(blocked => domain.includes(blocked));
+  
+  // Generate a screenshot preview URL using a free service (skip for blocked domains)
+  const screenshotUrl = isBlockedDomain ? null : `https://image.thum.io/get/width/300/crop/200/${encodeURIComponent(url)}`;
 
   return (
     <TooltipProvider delayDuration={300}>
@@ -59,7 +71,7 @@ const LinkPreviewTooltip: React.FC<LinkPreviewTooltipProps> = ({
         >
           {/* Screenshot Preview */}
           <div className="relative w-full h-36 bg-muted">
-            {!imageError ? (
+            {!imageError && screenshotUrl ? (
               <img
                 src={screenshotUrl}
                 alt="Page preview"
@@ -67,8 +79,20 @@ const LinkPreviewTooltip: React.FC<LinkPreviewTooltipProps> = ({
                 onError={() => setImageError(true)}
               />
             ) : (
-              <div className="w-full h-full flex items-center justify-center bg-muted">
-                <Globe className="h-12 w-12 text-muted-foreground/50" />
+              <div className="w-full h-full flex flex-col items-center justify-center bg-muted gap-2">
+                {faviconUrl ? (
+                  <img 
+                    src={faviconUrl} 
+                    alt="" 
+                    className="w-10 h-10"
+                    onError={(e) => (e.currentTarget.style.display = 'none')}
+                  />
+                ) : (
+                  <Globe className="h-12 w-12 text-muted-foreground/50" />
+                )}
+                {isBlockedDomain && (
+                  <span className="text-xs text-muted-foreground">Preview blocked by site</span>
+                )}
               </div>
             )}
             {/* Confidence Badge Overlay */}
