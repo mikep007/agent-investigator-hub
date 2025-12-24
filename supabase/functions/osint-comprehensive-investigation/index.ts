@@ -338,6 +338,17 @@ Deno.serve(async (req) => {
       );
       searchTypes.push('address');
 
+      // Property records search for ownership, tax, and sales history
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-property-records', {
+          body: { 
+            address: searchData.address,
+            ownerName: searchData.fullName,
+          }
+        })
+      );
+      searchTypes.push('property_records');
+
       // Web search for owner/property information with name+address context
       searchPromises.push(
         supabaseClient.functions.invoke('osint-web-search', {
@@ -371,12 +382,18 @@ Deno.serve(async (req) => {
       const caMatch = searchData.address.match(/,\s*California\s*/i);
       const nyMatch = searchData.address.match(/,\s*New\s*York\s*/i);
       const txMatch = searchData.address.match(/,\s*Texas\s*/i);
+      const nvMatch = searchData.address.match(/,\s*Nevada\s*/i);
+      const gaMatch = searchData.address.match(/,\s*Georgia\s*/i);
+      const azMatch = searchData.address.match(/,\s*Arizona\s*/i);
       
       const stateCode = detectedState || 
                         (flMatch ? 'FL' : null) ||
                         (caMatch ? 'CA' : null) ||
                         (nyMatch ? 'NY' : null) ||
-                        (txMatch ? 'TX' : null);
+                        (txMatch ? 'TX' : null) ||
+                        (nvMatch ? 'NV' : null) ||
+                        (gaMatch ? 'GA' : null) ||
+                        (azMatch ? 'AZ' : null);
       
       if (stateCode === 'FL') {
         console.log('Florida address detected - running Sunbiz search');
@@ -394,7 +411,7 @@ Deno.serve(async (req) => {
           })
         );
         searchTypes.push('sunbiz');
-      } else if (stateCode === 'CA' || stateCode === 'NY' || stateCode === 'TX' || stateCode === 'NV' || stateCode === 'DE' || stateCode === 'GA') {
+      } else if (stateCode === 'CA' || stateCode === 'NY' || stateCode === 'TX' || stateCode === 'NV' || stateCode === 'DE' || stateCode === 'GA' || stateCode === 'AZ') {
         console.log(`${stateCode} address detected - running state business search`);
         searchPromises.push(
           supabaseClient.functions.invoke('osint-state-business-search', {
