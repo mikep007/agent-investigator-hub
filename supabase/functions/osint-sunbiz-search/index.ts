@@ -366,16 +366,28 @@ async function searchSunbizViaGoogle(
   try {
     const queries: string[] = [];
     
-    // Build search queries for Sunbiz
+    // Build search queries for Sunbiz - more comprehensive queries
     if (searchTerms.name) {
       queries.push(`site:search.sunbiz.org "${searchTerms.name}"`);
+      // Also search for last name + LLC/Inc patterns
+      const nameParts = searchTerms.name.split(/\s+/);
+      if (nameParts.length > 1) {
+        const lastName = nameParts[nameParts.length - 1];
+        queries.push(`site:search.sunbiz.org "${lastName}" LLC OR Inc OR Corp`);
+      }
     }
     if (searchTerms.officerName) {
-      queries.push(`site:search.sunbiz.org "${searchTerms.officerName}" officer OR agent OR member`);
+      queries.push(`site:search.sunbiz.org "${searchTerms.officerName}"`);
+      queries.push(`site:search.sunbiz.org "${searchTerms.officerName}" officer OR agent OR member OR manager`);
     }
     if (searchTerms.address) {
       const street = extractStreetAddress(searchTerms.address);
       queries.push(`site:search.sunbiz.org "${street}"`);
+      // Also try just the street number and name without unit/apt
+      const streetParts = street.match(/^(\d+\s+[\w\s]+?)(?:\s+(?:apt|unit|#|suite|ste).*)?$/i);
+      if (streetParts && streetParts[1]) {
+        queries.push(`site:sunbiz.org "${streetParts[1]}"`);
+      }
     }
     
     console.log('Searching Sunbiz via Google with queries:', queries);
@@ -400,37 +412,78 @@ async function searchSunbizViaGoogle(
           const title = item.title || '';
           const snippet = item.snippet || '';
           
-          // Only process Sunbiz detail pages
-          if (!link.includes('sunbiz.org') || !link.includes('SearchResultDetail')) {
+          // Accept any sunbiz.org page - don't filter too strictly
+          if (!link.includes('sunbiz.org')) {
             continue;
           }
+          
+          console.log(`Processing Sunbiz result: ${title} - ${link}`);
           
           // Extract document number from URL or content
           const docNumMatch = link.match(/[A-Z]\d{8,}/) || title.match(/[A-Z]\d{8,}/) || snippet.match(/[A-Z]\d{8,}/);
           const docNumber = docNumMatch ? docNumMatch[0] : `SUNBIZ_${Date.now()}_${results.length}`;
           
-          // Extract entity name from title
-          const entityName = title
-            .replace(/- Florida.*$/i, '')
-            .replace(/Corporation.*$/i, '')
-            .replace(/FeiEin.*$/i, '')
-            .trim() || 'Unknown Entity';
+          // Extract entity name from title - improved parsing
+          let entityName = title
+            .replace(/\s*-\s*Florida.*$/i, '')
+            .replace(/\s*\|\s*Florida.*$/i, '')
+            .replace(/\s*Corporation Search.*$/i, '')
+            .replace(/\s*FeiEin.*$/i, '')
+            .replace(/\s*Detail.*$/i, '')
+            .trim();
+          
+          // If title doesn't have good entity name, try snippet
+          if (!entityName || entityName.length < 3 || entityName.toLowerCase().includes('search')) {
+            // Look for LLC, Inc, Corp patterns in snippet
+            const entityMatch = snippet.match(/([A-Z][A-Z0-9\s&.,'-]+(?:LLC|L\.L\.C\.|INC|CORP|LP|LLP|COMPANY|CO\.))/i);
+            if (entityMatch) {
+              entityName = entityMatch[1].trim();
+            }
+          }
+          
+          if (!entityName || entityName.length < 2) {
+            entityName = 'Unknown Entity';
+          }
           
           // Determine status from snippet
           const statusMatch = snippet.match(/(?:Status|Filing Status)[:\s]*(Active|Inactive|Dissolved|Revoked)/i) 
             || snippet.match(/\b(Active|Inactive|Dissolved|Revoked)\b/i);
           const status = statusMatch ? statusMatch[1] : 'Unknown';
           
-          // Determine filing type
-          const filingMatch = snippet.match(/(?:Florida Limited Liability|LLC|Corporation|Inc\.|LP|LLP)/i);
+          // Determine filing type - improved patterns
+          const filingMatch = snippet.match(/(?:Florida Limited Liability|Limited Liability Company|LLC|L\.L\.C\.|Corporation|Inc\.|LP|LLP|Profit Corporation|Non-Profit)/i)
+            || title.match(/(?:LLC|L\.L\.C\.|Inc\.|Corp\.)/i);
           const filingType = filingMatch ? filingMatch[0] : 'Unknown';
           
           // Determine match type
           let matchType: 'address' | 'officer' | 'name' = 'name';
-          if (searchTerms.officerName && (snippet.toLowerCase().includes(searchTerms.officerName.toLowerCase()) || title.toLowerCase().includes(searchTerms.officerName.toLowerCase()))) {
-            matchType = 'officer';
-          } else if (searchTerms.address && snippet.toLowerCase().includes(extractStreetAddress(searchTerms.address).toLowerCase())) {
-            matchType = 'address';
+          const snippetLower = snippet.toLowerCase();
+          const titleLower = title.toLowerCase();
+          
+          if (searchTerms.officerName) {
+            const officerLower = searchTerms.officerName.toLowerCase();
+            const officerParts = officerLower.split(/\s+/);
+            const hasOfficerMatch = officerParts.some(part => 
+              part.length > 2 && (snippetLower.includes(part) || titleLower.includes(part))
+            );
+            if (hasOfficerMatch) {
+              matchType = 'officer';
+            }
+          }
+          
+          if (searchTerms.address && matchType === 'name') {
+            const streetLower = extractStreetAddress(searchTerms.address).toLowerCase();
+            const streetParts = streetLower.split(/\s+/).filter(p => p.length > 2 && !/^\d+$/.test(p));
+            const hasAddressMatch = streetParts.some(part => snippetLower.includes(part));
+            if (hasAddressMatch || snippetLower.includes(streetLower)) {
+              matchType = 'address';
+            }
+          }
+          
+          // Build proper detail URL if we have a document number
+          let detailUrl = link;
+          if (docNumMatch && !link.includes('SearchResultDetail')) {
+            detailUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResultDetail?inquirytype=EntityName&directionType=Initial&searchNameOrder=${docNumber}`;
           }
           
           results.push({
@@ -438,9 +491,9 @@ async function searchSunbizViaGoogle(
             entityName: entityName,
             status: status,
             filingType: filingType,
-            detailUrl: link,
+            detailUrl: detailUrl,
             matchType: matchType,
-            confidence: 0.8,
+            confidence: matchType === 'address' ? 0.85 : (matchType === 'officer' ? 0.9 : 0.75),
           });
         }
       } catch (err) {
@@ -448,7 +501,18 @@ async function searchSunbizViaGoogle(
       }
     }
     
-    return results;
+    // Deduplicate by document number
+    const uniqueResults = new Map<string, BusinessResult>();
+    for (const result of results) {
+      const key = result.documentNumber.startsWith('SUNBIZ_') 
+        ? result.entityName.toLowerCase().replace(/[^a-z0-9]/g, '')
+        : result.documentNumber;
+      if (!uniqueResults.has(key)) {
+        uniqueResults.set(key, result);
+      }
+    }
+    
+    return Array.from(uniqueResults.values());
   } catch (error) {
     console.error('Error in searchSunbizViaGoogle:', error);
     return [];
