@@ -77,3 +77,6 @@ verify_jwt = true
 
 [functions.osint-sunbiz-search]
 verify_jwt = true
+
+[functions.osint-state-business-search]
+verify_jwt = true
