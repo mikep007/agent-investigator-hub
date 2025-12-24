@@ -360,13 +360,25 @@ Deno.serve(async (req) => {
       );
       searchTypes.push('address_residents_search');
 
-      // Florida Sunbiz business search - search by address and officer name
-      // Extract state from address to check if it's Florida
-      const addressStateMatch = searchData.address.match(/,\s*FL\s*\d{5}/i) ||
-                                searchData.address.match(/,\s*FL\s*$/i) ||
-                                searchData.address.match(/,\s*Florida\s*/i);
+      // State business registry searches based on address state
+      // Extract state abbreviation from address
+      const stateMatch = searchData.address.match(/,\s*([A-Z]{2})\s*\d{5}/i) ||
+                         searchData.address.match(/,\s*([A-Z]{2})\s*$/i);
+      const detectedState = stateMatch ? stateMatch[1].toUpperCase() : null;
       
-      if (addressStateMatch) {
+      // Also check for full state names
+      const flMatch = searchData.address.match(/,\s*Florida\s*/i);
+      const caMatch = searchData.address.match(/,\s*California\s*/i);
+      const nyMatch = searchData.address.match(/,\s*New\s*York\s*/i);
+      const txMatch = searchData.address.match(/,\s*Texas\s*/i);
+      
+      const stateCode = detectedState || 
+                        (flMatch ? 'FL' : null) ||
+                        (caMatch ? 'CA' : null) ||
+                        (nyMatch ? 'NY' : null) ||
+                        (txMatch ? 'TX' : null);
+      
+      if (stateCode === 'FL') {
         console.log('Florida address detected - running Sunbiz search');
         searchPromises.push(
           supabaseClient.functions.invoke('osint-sunbiz-search', {
@@ -382,6 +394,23 @@ Deno.serve(async (req) => {
           })
         );
         searchTypes.push('sunbiz');
+      } else if (stateCode === 'CA' || stateCode === 'NY' || stateCode === 'TX') {
+        console.log(`${stateCode} address detected - running state business search`);
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-state-business-search', {
+            body: { 
+              state: stateCode,
+              address: searchData.address,
+              officerName: searchData.fullName,
+              fullContext: {
+                fullName: searchData.fullName,
+                phone: searchData.phone,
+                email: searchData.email,
+              }
+            }
+          })
+        );
+        searchTypes.push(`state_business_${stateCode.toLowerCase()}`);
       }
     }
 
@@ -402,6 +431,55 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('sunbiz_officer');
+      
+      // Also search other major state registries by officer name
+      // California
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-state-business-search', {
+          body: { 
+            state: 'CA',
+            officerName: searchData.fullName,
+            fullContext: {
+              fullName: searchData.fullName,
+              phone: searchData.phone,
+              email: searchData.email,
+            }
+          }
+        })
+      );
+      searchTypes.push('state_business_ca_officer');
+      
+      // New York
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-state-business-search', {
+          body: { 
+            state: 'NY',
+            officerName: searchData.fullName,
+            fullContext: {
+              fullName: searchData.fullName,
+              phone: searchData.phone,
+              email: searchData.email,
+            }
+          }
+        })
+      );
+      searchTypes.push('state_business_ny_officer');
+      
+      // Texas
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-state-business-search', {
+          body: { 
+            state: 'TX',
+            officerName: searchData.fullName,
+            fullContext: {
+              fullName: searchData.fullName,
+              phone: searchData.phone,
+              email: searchData.email,
+            }
+          }
+        })
+      );
+      searchTypes.push('state_business_tx_officer');
     }
 
     // Court Records search - criminal and civil records
