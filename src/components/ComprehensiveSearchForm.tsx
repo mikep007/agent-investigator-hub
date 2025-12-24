@@ -535,23 +535,32 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
               )}
             </div>
             {bulkEmails.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {bulkEmails.map((email, idx) => (
-                  <Badge 
-                    key={`${email}-${idx}`} 
-                    variant="secondary" 
-                    className="text-xs flex items-center gap-1 pr-1"
-                  >
-                    {email}
-                    <button
-                      onClick={() => removeBulkEmail(email)}
-                      className="ml-0.5 p-0.5 rounded-full hover:bg-destructive/20"
-                      disabled={loading}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex flex-wrap gap-1.5">
+                  {bulkEmails.map((email, idx) => (
+                    <Badge 
+                      key={`${email}-${idx}`} 
+                      variant="secondary" 
+                      className="text-xs flex items-center gap-1 pr-1"
                     >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </Badge>
-                ))}
+                      {email}
+                      <button
+                        onClick={() => removeBulkEmail(email)}
+                        className="ml-0.5 p-0.5 rounded-full hover:bg-destructive/20"
+                        disabled={loading}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setBulkEmails([])}
+                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  disabled={loading}
+                >
+                  Clear all ({bulkEmails.length})
+                </button>
               </div>
             )}
             <p className="text-xs text-muted-foreground">
@@ -629,23 +638,32 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
               )}
             </div>
             {bulkUsernames.length > 0 && (
-              <div className="flex flex-wrap gap-1.5 pt-1">
-                {bulkUsernames.map((username, idx) => (
-                  <Badge 
-                    key={`${username}-${idx}`} 
-                    variant="secondary" 
-                    className="text-xs flex items-center gap-1 pr-1"
-                  >
-                    @{username}
-                    <button
-                      onClick={() => removeBulkUsername(username)}
-                      className="ml-0.5 p-0.5 rounded-full hover:bg-destructive/20"
-                      disabled={loading}
+              <div className="space-y-1.5 pt-1">
+                <div className="flex flex-wrap gap-1.5">
+                  {bulkUsernames.map((username, idx) => (
+                    <Badge 
+                      key={`${username}-${idx}`} 
+                      variant="secondary" 
+                      className="text-xs flex items-center gap-1 pr-1"
                     >
-                      <X className="w-3 h-3" />
-                    </button>
-                  </Badge>
-                ))}
+                      @{username}
+                      <button
+                        onClick={() => removeBulkUsername(username)}
+                        className="ml-0.5 p-0.5 rounded-full hover:bg-destructive/20"
+                        disabled={loading}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setBulkUsernames([])}
+                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  disabled={loading}
+                >
+                  Clear all ({bulkUsernames.length})
+                </button>
               </div>
             )}
             <div className="flex items-center justify-between">
