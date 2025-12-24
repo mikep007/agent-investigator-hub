@@ -394,7 +394,7 @@ Deno.serve(async (req) => {
           })
         );
         searchTypes.push('sunbiz');
-      } else if (stateCode === 'CA' || stateCode === 'NY' || stateCode === 'TX') {
+      } else if (stateCode === 'CA' || stateCode === 'NY' || stateCode === 'TX' || stateCode === 'NV' || stateCode === 'DE' || stateCode === 'GA') {
         console.log(`${stateCode} address detected - running state business search`);
         searchPromises.push(
           supabaseClient.functions.invoke('osint-state-business-search', {
@@ -480,6 +480,54 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('state_business_tx_officer');
+      
+      // Nevada
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-state-business-search', {
+          body: { 
+            state: 'NV',
+            officerName: searchData.fullName,
+            fullContext: {
+              fullName: searchData.fullName,
+              phone: searchData.phone,
+              email: searchData.email,
+            }
+          }
+        })
+      );
+      searchTypes.push('state_business_nv_officer');
+      
+      // Delaware
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-state-business-search', {
+          body: { 
+            state: 'DE',
+            officerName: searchData.fullName,
+            fullContext: {
+              fullName: searchData.fullName,
+              phone: searchData.phone,
+              email: searchData.email,
+            }
+          }
+        })
+      );
+      searchTypes.push('state_business_de_officer');
+      
+      // Georgia
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-state-business-search', {
+          body: { 
+            state: 'GA',
+            officerName: searchData.fullName,
+            fullContext: {
+              fullName: searchData.fullName,
+              phone: searchData.phone,
+              email: searchData.email,
+            }
+          }
+        })
+      );
+      searchTypes.push('state_business_ga_officer');
     }
 
     // Court Records search - criminal and civil records
