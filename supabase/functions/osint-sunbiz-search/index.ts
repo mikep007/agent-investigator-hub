@@ -55,76 +55,59 @@ function extractZipCode(fullAddress: string) {
 }
 
 // Parse Sunbiz search results from HTML/markdown
-function parseSearchResults(content: string, matchType: 'address' | 'officer' | 'name' | 'zip'): BusinessResult[] {
+function parseSearchResults(
+  content: string,
+  matchType: 'address' | 'officer' | 'name' | 'zip'
+): BusinessResult[] {
   const results: BusinessResult[] = [];
-  
-  // Look for table rows with entity information
-  // Sunbiz returns results in a table format
-  
-  // Pattern for entity rows - they contain Document Number, Entity Name, Status, etc.
-  // The format typically has: Document Number | Entity Name | Status | Filing Type | Date
-  const tableRowPattern = /\[([A-Z]\d{8,})\]\(([^)]+)\)\s*\|\s*([^|]+)\|/gi;
-  let match;
-  
-  while ((match = tableRowPattern.exec(content)) !== null) {
-    const docNumber = match[1];
-    const detailUrl = match[2];
-    const entityName = match[3].trim();
-    
-    // Look for status and filing type in the same area
-    const contextAfter = content.slice(match.index, match.index + 300);
-    
-    const statusMatch = contextAfter.match(/(?:Active|Inactive|Dissolved|Revoked)/i);
-    const status = statusMatch ? statusMatch[0] : 'Unknown';
-    
-    const filingTypeMatch = contextAfter.match(/(?:Florida Limited Liability|Domestic Limited Liability|Foreign Limited Liability|Corporation|Fictitious Name|Florida Profit Corporation|Florida Non-Profit|Limited Partnership)/i);
-    const filingType = filingTypeMatch ? filingTypeMatch[0] : 'Unknown';
-    
+
+  // Firecrawl markdown for SearchResults typically looks like:
+  // | Corporate Name | Document Number | Status |
+  // | [THE COMPANY, LLC](https://...SearchResultDetail?...searchNameOrder=...&listNameOrder=...) | L00000005662 | Active |
+
+  const rowPattern = /\|\s*\[([^\]]+?)\]\((https?:\/\/[^)]+SearchResultDetail[^)]+)\)\s*\|\s*([A-Z0-9]{4,})\s*\|\s*([^|\n]+?)\s*\|/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = rowPattern.exec(content)) !== null) {
+    const entityName = match[1].trim();
+    const detailUrl = match[2].trim();
+    const documentNumber = match[3].trim();
+    const status = match[4].trim();
+
     results.push({
-      documentNumber: docNumber,
-      entityName: entityName,
-      status: status,
-      filingType: filingType,
-      detailUrl: detailUrl.startsWith('http') ? detailUrl : `https://search.sunbiz.org${detailUrl}`,
-      matchType: matchType,
-      confidence: matchType === 'address' ? 0.85 : (matchType === 'officer' ? 0.9 : 0.75),
+      documentNumber,
+      entityName,
+      status,
+      filingType: 'Unknown',
+      detailUrl,
+      matchType,
+      confidence: matchType === 'address' ? 0.85 : matchType === 'officer' ? 0.9 : matchType === 'zip' ? 0.7 : 0.75,
     });
   }
-  
-  // Alternative parsing for plain text results
+
+  // Fallback: try to infer from SearchResultDetail links even if table separators are missing
   if (results.length === 0) {
-    // Look for document numbers in the content
-    const docNumbers = content.match(/[A-Z]\d{8,}/g) || [];
-    const entityNames = content.match(/(?:LLC|INC|CORP|LP|LLP|CORPORATION|COMPANY|ENTERPRISES|GROUP|HOLDINGS)[\w\s,.-]*/gi) || [];
-    
-    // Match document numbers with entity names where possible
-    const seenDocNumbers = new Set<string>();
-    for (const docNum of docNumbers) {
-      if (!seenDocNumbers.has(docNum)) {
-        seenDocNumbers.add(docNum);
-        
-        // Find entity name near this document number
-        const docIndex = content.indexOf(docNum);
-        const contextArea = content.slice(Math.max(0, docIndex - 200), docIndex + 200);
-        
-        // Look for business name patterns
-        const nameMatch = contextArea.match(/([A-Z][A-Z0-9\s&.,'-]+(?:LLC|INC|CORP|LP|LLP|CORPORATION|COMPANY|ENTERPRISES|GROUP|HOLDINGS))/i);
-        
-        if (nameMatch) {
-          results.push({
-            documentNumber: docNum,
-            entityName: nameMatch[1].trim(),
-            status: 'Unknown',
-            filingType: 'Unknown',
-            detailUrl: `https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResultDetail?inquirytype=EntityName&directionType=Initial&searchNameOrder=${docNum}`,
-            matchType: matchType,
-            confidence: matchType === 'address' ? 0.7 : (matchType === 'officer' ? 0.8 : 0.65),
-          });
-        }
-      }
+    const linkPattern = /\[([^\]]+?)\]\((https?:\/\/[^)]+SearchResultDetail[^)]+)\)/g;
+    while ((match = linkPattern.exec(content)) !== null) {
+      const entityName = match[1].trim();
+      const detailUrl = match[2].trim();
+
+      // Best-effort doc number extraction from querystring
+      const docMatch = detailUrl.match(/searchNameOrder=([^&]+)/i);
+      const documentNumber = docMatch ? decodeURIComponent(docMatch[1]).trim() : `SUNBIZ_${Date.now()}_${results.length}`;
+
+      results.push({
+        documentNumber,
+        entityName,
+        status: 'Unknown',
+        filingType: 'Unknown',
+        detailUrl,
+        matchType,
+        confidence: matchType === 'address' ? 0.7 : matchType === 'officer' ? 0.8 : 0.65,
+      });
     }
   }
-  
+
   return results;
 }
 
@@ -222,11 +205,11 @@ async function fetchBusinessDetails(detailUrl: string, firecrawlKey: string): Pr
 async function searchByAddress(address: string, firecrawlKey: string): Promise<BusinessResult[]> {
   const streetAddress = extractStreetAddress(address);
   console.log('Searching Sunbiz by address:', streetAddress);
-  
-  const searchUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/ByAddress`;
-  
+
+  // IMPORTANT: /ByAddress is a form page; results are served from /SearchResults.
+  const resultsUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResults?InquiryType=ByAddress&SearchTerm=${encodeURIComponent(streetAddress)}`;
+
   try {
-    // First, we need to POST to the search form
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
       headers: {
@@ -234,30 +217,29 @@ async function searchByAddress(address: string, firecrawlKey: string): Promise<B
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: `${searchUrl}?searchTerm=${encodeURIComponent(streetAddress)}`,
+        url: resultsUrl,
         formats: ['markdown', 'html'],
         onlyMainContent: true,
-        waitFor: 3000,
+        waitFor: 2000,
       }),
     });
-    
+
     if (!response.ok) {
       console.error('Sunbiz address search request failed:', response.status);
       return [];
     }
-    
+
     const data = await response.json();
     const markdown = data.data?.markdown || data.markdown || '';
     const html = data.data?.html || data.html || '';
-    
+
     console.log('Sunbiz address search response length:', markdown.length);
-    
-    // Check for no results message
+
     if (markdown.includes('No records found') || markdown.includes('No entities found') || markdown.length < 100) {
       console.log('No Sunbiz results found for address');
       return [];
     }
-    
+
     return parseSearchResults(markdown + '\n' + html, 'address');
   } catch (error) {
     console.error('Error in Sunbiz address search:', error);
@@ -268,9 +250,10 @@ async function searchByAddress(address: string, firecrawlKey: string): Promise<B
 // Search Sunbiz by officer/registered agent name
 async function searchByOfficer(name: string, firecrawlKey: string): Promise<BusinessResult[]> {
   console.log('Searching Sunbiz by officer/registered agent:', name);
-  
-  const searchUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/ByOfficerOrRegisteredAgent`;
-  
+
+  // /ByOfficerOrRegisteredAgent is a form page; results are served from /SearchResults.
+  const resultsUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResults?InquiryType=OfficerRegisteredAgent&SearchTerm=${encodeURIComponent(name)}`;
+
   try {
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
@@ -279,29 +262,29 @@ async function searchByOfficer(name: string, firecrawlKey: string): Promise<Busi
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: `${searchUrl}?searchTerm=${encodeURIComponent(name)}`,
+        url: resultsUrl,
         formats: ['markdown', 'html'],
         onlyMainContent: true,
-        waitFor: 3000,
+        waitFor: 2000,
       }),
     });
-    
+
     if (!response.ok) {
       console.error('Sunbiz officer search request failed:', response.status);
       return [];
     }
-    
+
     const data = await response.json();
     const markdown = data.data?.markdown || data.markdown || '';
     const html = data.data?.html || data.html || '';
-    
+
     console.log('Sunbiz officer search response length:', markdown.length);
-    
+
     if (markdown.includes('No records found') || markdown.includes('No entities found') || markdown.length < 100) {
       console.log('No Sunbiz results found for officer');
       return [];
     }
-    
+
     return parseSearchResults(markdown + '\n' + html, 'officer');
   } catch (error) {
     console.error('Error in Sunbiz officer search:', error);
@@ -312,9 +295,10 @@ async function searchByOfficer(name: string, firecrawlKey: string): Promise<Busi
 // Search Sunbiz by zip code
 async function searchByZip(zipCode: string, firecrawlKey: string): Promise<BusinessResult[]> {
   console.log('Searching Sunbiz by zip code:', zipCode);
-  
-  const searchUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/ByZip`;
-  
+
+  // /ByZip is a form page; results are served from /SearchResults.
+  const resultsUrl = `https://search.sunbiz.org/Inquiry/CorporationSearch/SearchResults?InquiryType=ZipCode&SearchTerm=${encodeURIComponent(zipCode)}`;
+
   try {
     const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
       method: 'POST',
@@ -323,30 +307,29 @@ async function searchByZip(zipCode: string, firecrawlKey: string): Promise<Busin
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        url: `${searchUrl}?searchTerm=${encodeURIComponent(zipCode)}`,
+        url: resultsUrl,
         formats: ['markdown', 'html'],
         onlyMainContent: true,
-        waitFor: 3000,
+        waitFor: 2000,
       }),
     });
-    
+
     if (!response.ok) {
       console.error('Sunbiz zip search request failed:', response.status);
       return [];
     }
-    
+
     const data = await response.json();
     const markdown = data.data?.markdown || data.markdown || '';
     const html = data.data?.html || data.html || '';
-    
+
     console.log('Sunbiz zip search response length:', markdown.length);
-    
+
     if (markdown.includes('No records found') || markdown.includes('No entities found') || markdown.length < 100) {
       console.log('No Sunbiz results found for zip');
       return [];
     }
-    
-    // Limit zip search results as there can be many
+
     const results = parseSearchResults(markdown + '\n' + html, 'zip');
     return results.slice(0, 20);
   } catch (error) {
