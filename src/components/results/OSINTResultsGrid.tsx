@@ -5,6 +5,7 @@ import ResultsSummaryBar from "./ResultsSummaryBar";
 import SourceStatusIndicator from "./SourceStatusIndicator";
 import VisualTimeline from "./VisualTimeline";
 import RelatedPersonsCard from "./RelatedPersonsCard";
+import BusinessRegistryCard from "./BusinessRegistryCard";
 import { useMemo } from "react";
 
 interface OSINTResultsGridProps {
@@ -183,6 +184,12 @@ const OSINTResultsGrid = ({
           findings={findings}
           inputKeywords={inputKeywords}
           aiSuggestedPersons={aiSuggestedPersons}
+          onPivot={onPivot}
+        />
+
+        {/* Business Affiliations */}
+        <BusinessRegistryCard 
+          findings={findings}
           onPivot={onPivot}
         />
 
