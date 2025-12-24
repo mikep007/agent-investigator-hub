@@ -6,7 +6,7 @@ const corsHeaders = {
 };
 
 interface StateBusinessSearchParams {
-  state: 'CA' | 'NY' | 'TX' | 'FL';
+  state: 'CA' | 'NY' | 'TX' | 'FL' | 'NV' | 'DE' | 'GA';
   name?: string;
   address?: string;
   officerName?: string;
@@ -320,13 +320,271 @@ async function searchTexasBusiness(params: StateBusinessSearchParams, firecrawlK
   return results;
 }
 
+// Nevada Secretary of State - esos.nv.gov
+async function searchNevadaBusiness(params: StateBusinessSearchParams, firecrawlKey: string): Promise<BusinessResult[]> {
+  const results: BusinessResult[] = [];
+  
+  const searchTerm = params.officerName || params.name || '';
+  if (!searchTerm) return results;
+  
+  console.log('Searching Nevada SOS for:', searchTerm);
+  
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${firecrawlKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: `https://esos.nv.gov/EntitySearch/OnlineEntitySearch`,
+        formats: ['markdown', 'html'],
+        onlyMainContent: true,
+        waitFor: 3000,
+      }),
+    });
+    
+    if (!response.ok) {
+      console.error('Nevada SOS search failed:', response.status);
+      return results;
+    }
+    
+    const data = await response.json();
+    const content = data.data?.markdown || data.markdown || '';
+    
+    // Nevada entity numbers typically start with NV followed by digits
+    const entityPattern = /(NV\d{8,11}|\d{8,11})/g;
+    const entities = new Set<string>();
+    let match;
+    
+    while ((match = entityPattern.exec(content)) !== null) {
+      entities.add(match[1]);
+    }
+    
+    const namePattern = /([A-Z][A-Z0-9\s&.,'-]+(?:LLC|INC|CORP|LP|LLP|CORPORATION|COMPANY))/gi;
+    const names: string[] = [];
+    while ((match = namePattern.exec(content)) !== null) {
+      names.push(match[1].trim());
+    }
+    
+    let idx = 0;
+    for (const entityNum of entities) {
+      const entityName = names[idx] || `Entity ${entityNum}`;
+      results.push({
+        entityNumber: entityNum,
+        entityName: entityName,
+        status: 'Unknown',
+        entityType: 'Business Entity',
+        jurisdiction: 'Nevada',
+        detailUrl: `https://esos.nv.gov/EntitySearch/BusinessInformation?businessId=${entityNum}`,
+        matchType: params.officerName ? 'officer' : 'name',
+        confidence: 0.7,
+        state: 'NV',
+      });
+      idx++;
+    }
+    
+    console.log(`Nevada search found ${results.length} results`);
+  } catch (error) {
+    console.error('Nevada search error:', error);
+  }
+  
+  if (results.length === 0) {
+    results.push({
+      entityNumber: 'MANUAL_SEARCH',
+      entityName: `Search Nevada SOS for "${searchTerm}"`,
+      status: 'Manual Search Required',
+      entityType: 'Link',
+      jurisdiction: 'Nevada',
+      detailUrl: `https://esos.nv.gov/EntitySearch/OnlineEntitySearch`,
+      matchType: 'name',
+      confidence: 0,
+      state: 'NV',
+    });
+  }
+  
+  return results;
+}
+
+// Delaware Division of Corporations - icis.corp.delaware.gov
+async function searchDelawareBusiness(params: StateBusinessSearchParams, firecrawlKey: string): Promise<BusinessResult[]> {
+  const results: BusinessResult[] = [];
+  
+  const searchTerm = params.officerName || params.name || '';
+  if (!searchTerm) return results;
+  
+  console.log('Searching Delaware Division of Corporations for:', searchTerm);
+  
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${firecrawlKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: `https://icis.corp.delaware.gov/ecorp/entitysearch/namesearch.aspx`,
+        formats: ['markdown', 'html'],
+        onlyMainContent: true,
+        waitFor: 3000,
+      }),
+    });
+    
+    if (!response.ok) {
+      console.error('Delaware search failed:', response.status);
+      return results;
+    }
+    
+    const data = await response.json();
+    const content = data.data?.markdown || data.markdown || '';
+    
+    // Delaware file numbers are typically 7-digit numbers
+    const entityPattern = /(\d{7})/g;
+    const entities = new Set<string>();
+    let match;
+    
+    while ((match = entityPattern.exec(content)) !== null) {
+      entities.add(match[1]);
+    }
+    
+    const namePattern = /([A-Z][A-Z0-9\s&.,'-]+(?:LLC|INC|CORP|LP|LLP|CORPORATION|COMPANY))/gi;
+    const names: string[] = [];
+    while ((match = namePattern.exec(content)) !== null) {
+      names.push(match[1].trim());
+    }
+    
+    let idx = 0;
+    for (const entityNum of entities) {
+      const entityName = names[idx] || `Entity ${entityNum}`;
+      results.push({
+        entityNumber: entityNum,
+        entityName: entityName,
+        status: 'Unknown',
+        entityType: 'Business Entity',
+        jurisdiction: 'Delaware',
+        detailUrl: `https://icis.corp.delaware.gov/ecorp/entitysearch/namesearch.aspx`,
+        matchType: params.officerName ? 'officer' : 'name',
+        confidence: 0.7,
+        state: 'DE',
+      });
+      idx++;
+    }
+    
+    console.log(`Delaware search found ${results.length} results`);
+  } catch (error) {
+    console.error('Delaware search error:', error);
+  }
+  
+  if (results.length === 0) {
+    results.push({
+      entityNumber: 'MANUAL_SEARCH',
+      entityName: `Search Delaware Division of Corporations for "${searchTerm}"`,
+      status: 'Manual Search Required',
+      entityType: 'Link',
+      jurisdiction: 'Delaware',
+      detailUrl: `https://icis.corp.delaware.gov/ecorp/entitysearch/namesearch.aspx`,
+      matchType: 'name',
+      confidence: 0,
+      state: 'DE',
+    });
+  }
+  
+  return results;
+}
+
+// Georgia Secretary of State - ecorp.sos.ga.gov
+async function searchGeorgiaBusiness(params: StateBusinessSearchParams, firecrawlKey: string): Promise<BusinessResult[]> {
+  const results: BusinessResult[] = [];
+  
+  const searchTerm = params.officerName || params.name || '';
+  if (!searchTerm) return results;
+  
+  console.log('Searching Georgia SOS for:', searchTerm);
+  
+  try {
+    const response = await fetch('https://api.firecrawl.dev/v1/scrape', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${firecrawlKey}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        url: `https://ecorp.sos.ga.gov/BusinessSearch`,
+        formats: ['markdown', 'html'],
+        onlyMainContent: true,
+        waitFor: 3000,
+      }),
+    });
+    
+    if (!response.ok) {
+      console.error('Georgia SOS search failed:', response.status);
+      return results;
+    }
+    
+    const data = await response.json();
+    const content = data.data?.markdown || data.markdown || '';
+    
+    // Georgia control numbers are typically 8 digits
+    const entityPattern = /(\d{8})/g;
+    const entities = new Set<string>();
+    let match;
+    
+    while ((match = entityPattern.exec(content)) !== null) {
+      entities.add(match[1]);
+    }
+    
+    const namePattern = /([A-Z][A-Z0-9\s&.,'-]+(?:LLC|INC|CORP|LP|LLP|CORPORATION|COMPANY))/gi;
+    const names: string[] = [];
+    while ((match = namePattern.exec(content)) !== null) {
+      names.push(match[1].trim());
+    }
+    
+    let idx = 0;
+    for (const entityNum of entities) {
+      const entityName = names[idx] || `Entity ${entityNum}`;
+      results.push({
+        entityNumber: entityNum,
+        entityName: entityName,
+        status: 'Unknown',
+        entityType: 'Business Entity',
+        jurisdiction: 'Georgia',
+        detailUrl: `https://ecorp.sos.ga.gov/BusinessSearch/BusinessInformation?businessId=${entityNum}`,
+        matchType: params.officerName ? 'officer' : 'name',
+        confidence: 0.7,
+        state: 'GA',
+      });
+      idx++;
+    }
+    
+    console.log(`Georgia search found ${results.length} results`);
+  } catch (error) {
+    console.error('Georgia search error:', error);
+  }
+  
+  if (results.length === 0) {
+    results.push({
+      entityNumber: 'MANUAL_SEARCH',
+      entityName: `Search Georgia SOS for "${searchTerm}"`,
+      status: 'Manual Search Required',
+      entityType: 'Link',
+      jurisdiction: 'Georgia',
+      detailUrl: `https://ecorp.sos.ga.gov/BusinessSearch`,
+      matchType: 'name',
+      confidence: 0,
+      state: 'GA',
+    });
+  }
+  
+  return results;
+}
+
 // Alternative: Use Google to search state business databases
 async function searchViaGoogle(params: StateBusinessSearchParams, firecrawlKey: string): Promise<BusinessResult[]> {
   const results: BusinessResult[] = [];
   const searchTerm = params.officerName || params.name || '';
   if (!searchTerm) return results;
   
-  const stateConfig = {
+  const stateConfig: Record<string, { site: string; name: string; searchUrl: string }> = {
     CA: {
       site: 'bizfileonline.sos.ca.gov',
       name: 'California',
@@ -346,6 +604,21 @@ async function searchViaGoogle(params: StateBusinessSearchParams, firecrawlKey: 
       site: 'sunbiz.org',
       name: 'Florida',
       searchUrl: 'https://search.sunbiz.org/Inquiry/CorporationSearch/ByName',
+    },
+    NV: {
+      site: 'nvsos.gov',
+      name: 'Nevada',
+      searchUrl: 'https://esos.nv.gov/EntitySearch/OnlineEntitySearch',
+    },
+    DE: {
+      site: 'icis.corp.delaware.gov',
+      name: 'Delaware',
+      searchUrl: 'https://icis.corp.delaware.gov/ecorp/entitysearch/namesearch.aspx',
+    },
+    GA: {
+      site: 'ecorp.sos.ga.gov',
+      name: 'Georgia',
+      searchUrl: 'https://ecorp.sos.ga.gov/BusinessSearch',
     },
   };
   
@@ -538,6 +811,48 @@ Deno.serve(async (req) => {
         }
         break;
         
+      case 'NV':
+        try {
+          const nvResults = await searchNevadaBusiness(params, firecrawlKey);
+          allResults.push(...nvResults);
+          
+          if (nvResults.length <= 1 || nvResults[0]?.entityNumber === 'MANUAL_SEARCH') {
+            const googleResults = await searchViaGoogle(params, firecrawlKey);
+            allResults.push(...googleResults);
+          }
+        } catch (err) {
+          errors.push(`Nevada search failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+        break;
+        
+      case 'DE':
+        try {
+          const deResults = await searchDelawareBusiness(params, firecrawlKey);
+          allResults.push(...deResults);
+          
+          if (deResults.length <= 1 || deResults[0]?.entityNumber === 'MANUAL_SEARCH') {
+            const googleResults = await searchViaGoogle(params, firecrawlKey);
+            allResults.push(...googleResults);
+          }
+        } catch (err) {
+          errors.push(`Delaware search failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+        break;
+        
+      case 'GA':
+        try {
+          const gaResults = await searchGeorgiaBusiness(params, firecrawlKey);
+          allResults.push(...gaResults);
+          
+          if (gaResults.length <= 1 || gaResults[0]?.entityNumber === 'MANUAL_SEARCH') {
+            const googleResults = await searchViaGoogle(params, firecrawlKey);
+            allResults.push(...googleResults);
+          }
+        } catch (err) {
+          errors.push(`Georgia search failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+        }
+        break;
+        
       default:
         return new Response(
           JSON.stringify({ 
@@ -588,6 +903,18 @@ Deno.serve(async (req) => {
       TX: { 
         name: 'Texas Secretary of State', 
         url: 'https://direct.sos.state.tx.us/corp_search/' 
+      },
+      NV: {
+        name: 'Nevada Secretary of State',
+        url: 'https://esos.nv.gov/EntitySearch/OnlineEntitySearch'
+      },
+      DE: {
+        name: 'Delaware Division of Corporations',
+        url: 'https://icis.corp.delaware.gov/ecorp/entitysearch/namesearch.aspx'
+      },
+      GA: {
+        name: 'Georgia Secretary of State',
+        url: 'https://ecorp.sos.ga.gov/BusinessSearch'
       },
     };
 
