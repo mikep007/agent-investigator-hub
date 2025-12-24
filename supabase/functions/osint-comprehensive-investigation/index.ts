@@ -359,6 +359,49 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('address_residents_search');
+
+      // Florida Sunbiz business search - search by address and officer name
+      // Extract state from address to check if it's Florida
+      const addressStateMatch = searchData.address.match(/,\s*FL\s*\d{5}/i) ||
+                                searchData.address.match(/,\s*FL\s*$/i) ||
+                                searchData.address.match(/,\s*Florida\s*/i);
+      
+      if (addressStateMatch) {
+        console.log('Florida address detected - running Sunbiz search');
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-sunbiz-search', {
+            body: { 
+              address: searchData.address,
+              officerName: searchData.fullName,
+              fullContext: {
+                fullName: searchData.fullName,
+                phone: searchData.phone,
+                email: searchData.email,
+              }
+            }
+          })
+        );
+        searchTypes.push('sunbiz');
+      }
+    }
+
+    // Also run Sunbiz if we have a name and might be in Florida (check for FL hints)
+    if (searchData.fullName && !searchData.address) {
+      // Run Sunbiz officer search for name even without address
+      // This catches cases where someone is a registered agent/officer
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-sunbiz-search', {
+          body: { 
+            officerName: searchData.fullName,
+            fullContext: {
+              fullName: searchData.fullName,
+              phone: searchData.phone,
+              email: searchData.email,
+            }
+          }
+        })
+      );
+      searchTypes.push('sunbiz_officer');
     }
 
     // Court Records search - criminal and civil records

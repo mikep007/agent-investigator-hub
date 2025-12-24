@@ -74,3 +74,6 @@ verify_jwt = true
 
 [functions.deep-platform-investigation]
 verify_jwt = true
+
+[functions.osint-sunbiz-search]
+verify_jwt = true
