@@ -6,6 +6,7 @@ import SourceStatusIndicator from "./SourceStatusIndicator";
 import VisualTimeline from "./VisualTimeline";
 import RelatedPersonsCard from "./RelatedPersonsCard";
 import BusinessRegistryCard from "./BusinessRegistryCard";
+import PropertyRecordsCard from "./PropertyRecordsCard";
 import { useMemo } from "react";
 
 interface OSINTResultsGridProps {
@@ -193,6 +194,18 @@ const OSINTResultsGrid = ({
           targetName={targetName}
           onPivot={onPivot}
         />
+
+        {/* Property Records */}
+        {findings
+          .filter(f => (f.agent_type === 'Property_records' || f.agent_type === 'property_records') && f.data?.found)
+          .map((finding, idx) => (
+            <PropertyRecordsCard 
+              key={idx}
+              data={finding.data}
+              targetName={targetName}
+            />
+          ))
+        }
 
         {/* Visual Timeline */}
         <VisualTimeline findings={findings} />
