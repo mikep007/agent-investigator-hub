@@ -190,6 +190,7 @@ const OSINTResultsGrid = ({
         {/* Business Affiliations */}
         <BusinessRegistryCard 
           findings={findings}
+          targetName={targetName}
           onPivot={onPivot}
         />
 

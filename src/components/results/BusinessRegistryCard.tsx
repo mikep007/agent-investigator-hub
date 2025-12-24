@@ -11,40 +11,33 @@ import {
   Shield,
   Users,
   ChevronDown,
-  ChevronUp
+  ChevronUp,
+  Download,
+  FileSpreadsheet
 } from "lucide-react";
 import { FindingData } from "./types";
 import { useMemo, useState } from "react";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-
-interface BusinessResult {
-  entityNumber?: string;
-  documentNumber?: string;
-  entityName: string;
-  status: string;
-  entityType?: string;
-  filingType?: string;
-  jurisdiction?: string;
-  formationDate?: string;
-  dateField?: string;
-  address?: string;
-  principalAddress?: string;
-  mailingAddress?: string;
-  agent?: string;
-  registeredAgent?: string;
-  officers?: Array<{ title: string; name: string }>;
-  detailUrl: string;
-  matchType?: string;
-  confidence?: number;
-  state?: string;
-}
+import { 
+  exportBusinessRegistryToCSV, 
+  exportBusinessRegistryToPDF,
+  BusinessResult 
+} from "@/utils/businessRegistryExport";
+import { toast } from "sonner";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 interface BusinessRegistryCardProps {
   findings: FindingData[];
+  targetName?: string;
   onPivot?: (type: string, value: string) => void;
 }
 
-const BusinessRegistryCard = ({ findings, onPivot }: BusinessRegistryCardProps) => {
+const BusinessRegistryCard = ({ findings, targetName, onPivot }: BusinessRegistryCardProps) => {
   const [isExpanded, setIsExpanded] = useState(true);
 
   // Extract business registry results from findings
@@ -127,13 +120,33 @@ const BusinessRegistryCard = ({ findings, onPivot }: BusinessRegistryCardProps) 
     );
   };
 
+  const handleExportCSV = () => {
+    try {
+      exportBusinessRegistryToCSV(businessResults, targetName);
+      toast.success(`Exported ${businessResults.length} business records to CSV`);
+    } catch (error) {
+      toast.error('Failed to export CSV');
+      console.error('CSV export error:', error);
+    }
+  };
+
+  const handleExportPDF = () => {
+    try {
+      exportBusinessRegistryToPDF(businessResults, targetName);
+      toast.success(`Exported ${businessResults.length} business records to PDF`);
+    } catch (error) {
+      toast.error('Failed to export PDF');
+      console.error('PDF export error:', error);
+    }
+  };
+
   return (
     <Card className="border-primary/20 bg-gradient-to-br from-primary/5 to-transparent">
       <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
         <CardHeader className="pb-3">
-          <CollapsibleTrigger asChild>
-            <div className="flex items-center justify-between cursor-pointer hover:opacity-80 transition-opacity">
-              <div className="flex items-center gap-3">
+          <div className="flex items-center justify-between">
+            <CollapsibleTrigger asChild>
+              <div className="flex items-center gap-3 cursor-pointer hover:opacity-80 transition-opacity flex-1">
                 <div className="p-2 bg-primary/10 rounded-lg">
                   <Building2 className="h-5 w-5 text-primary" />
                 </div>
@@ -149,13 +162,37 @@ const BusinessRegistryCard = ({ findings, onPivot }: BusinessRegistryCardProps) 
                   </p>
                 </div>
               </div>
-              {isExpanded ? (
-                <ChevronUp className="h-5 w-5 text-muted-foreground" />
-              ) : (
-                <ChevronDown className="h-5 w-5 text-muted-foreground" />
-              )}
+            </CollapsibleTrigger>
+            <div className="flex items-center gap-2">
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm" className="h-8">
+                    <Download className="h-3.5 w-3.5 mr-1.5" />
+                    Export
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={handleExportCSV}>
+                    <FileSpreadsheet className="h-4 w-4 mr-2" />
+                    Export as CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={handleExportPDF}>
+                    <FileText className="h-4 w-4 mr-2" />
+                    Export as PDF
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="icon" className="h-8 w-8">
+                  {isExpanded ? (
+                    <ChevronUp className="h-4 w-4 text-muted-foreground" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4 text-muted-foreground" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
             </div>
-          </CollapsibleTrigger>
+          </div>
         </CardHeader>
 
         <CollapsibleContent>
