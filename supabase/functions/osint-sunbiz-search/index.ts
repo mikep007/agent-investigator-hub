@@ -355,6 +355,106 @@ async function searchByZip(zipCode: string, firecrawlKey: string): Promise<Busin
   }
 }
 
+// Search Sunbiz via Google (fallback when direct scraping fails)
+async function searchSunbizViaGoogle(
+  searchTerms: { name?: string; address?: string; officerName?: string },
+  googleApiKey: string,
+  googleSearchEngineId: string
+): Promise<BusinessResult[]> {
+  const results: BusinessResult[] = [];
+  
+  try {
+    const queries: string[] = [];
+    
+    // Build search queries for Sunbiz
+    if (searchTerms.name) {
+      queries.push(`site:search.sunbiz.org "${searchTerms.name}"`);
+    }
+    if (searchTerms.officerName) {
+      queries.push(`site:search.sunbiz.org "${searchTerms.officerName}" officer OR agent OR member`);
+    }
+    if (searchTerms.address) {
+      const street = extractStreetAddress(searchTerms.address);
+      queries.push(`site:search.sunbiz.org "${street}"`);
+    }
+    
+    console.log('Searching Sunbiz via Google with queries:', queries);
+    
+    for (const query of queries) {
+      try {
+        const url = `https://www.googleapis.com/customsearch/v1?key=${googleApiKey}&cx=${googleSearchEngineId}&q=${encodeURIComponent(query)}&num=10`;
+        
+        const response = await fetch(url);
+        if (!response.ok) {
+          console.error('Google search failed:', response.status);
+          continue;
+        }
+        
+        const data = await response.json();
+        const items = data.items || [];
+        
+        console.log(`Google Sunbiz search returned ${items.length} results for: ${query}`);
+        
+        for (const item of items) {
+          const link = item.link || '';
+          const title = item.title || '';
+          const snippet = item.snippet || '';
+          
+          // Only process Sunbiz detail pages
+          if (!link.includes('sunbiz.org') || !link.includes('SearchResultDetail')) {
+            continue;
+          }
+          
+          // Extract document number from URL or content
+          const docNumMatch = link.match(/[A-Z]\d{8,}/) || title.match(/[A-Z]\d{8,}/) || snippet.match(/[A-Z]\d{8,}/);
+          const docNumber = docNumMatch ? docNumMatch[0] : `SUNBIZ_${Date.now()}_${results.length}`;
+          
+          // Extract entity name from title
+          const entityName = title
+            .replace(/- Florida.*$/i, '')
+            .replace(/Corporation.*$/i, '')
+            .replace(/FeiEin.*$/i, '')
+            .trim() || 'Unknown Entity';
+          
+          // Determine status from snippet
+          const statusMatch = snippet.match(/(?:Status|Filing Status)[:\s]*(Active|Inactive|Dissolved|Revoked)/i) 
+            || snippet.match(/\b(Active|Inactive|Dissolved|Revoked)\b/i);
+          const status = statusMatch ? statusMatch[1] : 'Unknown';
+          
+          // Determine filing type
+          const filingMatch = snippet.match(/(?:Florida Limited Liability|LLC|Corporation|Inc\.|LP|LLP)/i);
+          const filingType = filingMatch ? filingMatch[0] : 'Unknown';
+          
+          // Determine match type
+          let matchType: 'address' | 'officer' | 'name' = 'name';
+          if (searchTerms.officerName && (snippet.toLowerCase().includes(searchTerms.officerName.toLowerCase()) || title.toLowerCase().includes(searchTerms.officerName.toLowerCase()))) {
+            matchType = 'officer';
+          } else if (searchTerms.address && snippet.toLowerCase().includes(extractStreetAddress(searchTerms.address).toLowerCase())) {
+            matchType = 'address';
+          }
+          
+          results.push({
+            documentNumber: docNumber,
+            entityName: entityName,
+            status: status,
+            filingType: filingType,
+            detailUrl: link,
+            matchType: matchType,
+            confidence: 0.8,
+          });
+        }
+      } catch (err) {
+        console.error('Error in Google Sunbiz search query:', err);
+      }
+    }
+    
+    return results;
+  } catch (error) {
+    console.error('Error in searchSunbizViaGoogle:', error);
+    return [];
+  }
+}
+
 // Match and score results against provided context
 function scoreResults(
   results: BusinessResult[],
@@ -430,6 +530,10 @@ Deno.serve(async (req) => {
     const allResults: BusinessResult[] = [];
     const errors: string[] = [];
 
+    // Get Google API keys for fallback search
+    const googleApiKey = Deno.env.get('GOOGLE_API_KEY');
+    const googleSearchEngineId = Deno.env.get('GOOGLE_SEARCH_ENGINE_ID');
+
     // Run address search if address provided
     if (params.address) {
       try {
@@ -459,6 +563,27 @@ Deno.serve(async (req) => {
       } catch (err) {
         console.error('Officer search error:', err);
         errors.push(`Officer search failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
+      }
+    }
+
+    // If direct scraping found no results, use Google search fallback
+    if (allResults.length === 0 && googleApiKey && googleSearchEngineId) {
+      console.log('No results from direct scraping, trying Google search fallback');
+      try {
+        const googleResults = await searchSunbizViaGoogle(
+          {
+            name: params.name,
+            address: params.address,
+            officerName: params.officerName,
+          },
+          googleApiKey,
+          googleSearchEngineId
+        );
+        console.log(`Google Sunbiz fallback found ${googleResults.length} results`);
+        allResults.push(...googleResults);
+      } catch (err) {
+        console.error('Google Sunbiz search error:', err);
+        errors.push(`Google fallback search failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
       }
     }
 
