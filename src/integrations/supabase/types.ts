@@ -285,6 +285,50 @@ export type Database = {
           },
         ]
       }
+      sunbiz_verifications: {
+        Row: {
+          created_at: string
+          entity_name: string
+          entity_number: string
+          id: string
+          investigation_id: string
+          notes: string | null
+          status: string
+          user_id: string
+          verified_at: string
+        }
+        Insert: {
+          created_at?: string
+          entity_name: string
+          entity_number: string
+          id?: string
+          investigation_id: string
+          notes?: string | null
+          status: string
+          user_id: string
+          verified_at?: string
+        }
+        Update: {
+          created_at?: string
+          entity_name?: string
+          entity_number?: string
+          id?: string
+          investigation_id?: string
+          notes?: string | null
+          status?: string
+          user_id?: string
+          verified_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "sunbiz_verifications_investigation_id_fkey"
+            columns: ["investigation_id"]
+            isOneToOne: false
+            referencedRelation: "investigations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
