@@ -13,7 +13,8 @@ import {
   ChevronDown,
   ChevronUp,
   Download,
-  FileSpreadsheet
+  FileSpreadsheet,
+  CheckSquare
 } from "lucide-react";
 import { FindingData } from "./types";
 import { useMemo, useState } from "react";
@@ -30,6 +31,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import SunbizVerificationModal from "./SunbizVerificationModal";
 
 interface BusinessRegistryCardProps {
   findings: FindingData[];
@@ -39,6 +41,7 @@ interface BusinessRegistryCardProps {
 
 const BusinessRegistryCard = ({ findings, targetName, onPivot }: BusinessRegistryCardProps) => {
   const [isExpanded, setIsExpanded] = useState(true);
+  const [verificationModalOpen, setVerificationModalOpen] = useState(false);
 
   // Extract business registry results from findings
   const businessResults = useMemo(() => {
@@ -164,6 +167,17 @@ const BusinessRegistryCard = ({ findings, targetName, onPivot }: BusinessRegistr
               </div>
             </CollapsibleTrigger>
             <div className="flex items-center gap-2">
+              {businessResults.some(r => r.detailUrl?.includes('sunbiz.org')) && (
+                <Button 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-8"
+                  onClick={() => setVerificationModalOpen(true)}
+                >
+                  <CheckSquare className="h-3.5 w-3.5 mr-1.5" />
+                  Verify
+                </Button>
+              )}
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                   <Button variant="outline" size="sm" className="h-8">
@@ -374,6 +388,20 @@ const BusinessRegistryCard = ({ findings, targetName, onPivot }: BusinessRegistr
           </CardContent>
         </CollapsibleContent>
       </Collapsible>
+
+      <SunbizVerificationModal
+        open={verificationModalOpen}
+        onOpenChange={setVerificationModalOpen}
+        results={businessResults}
+        targetName={targetName}
+        onVerify={(entityNumber, verified) => {
+          toast.success(
+            verified 
+              ? `Verified: ${entityNumber}` 
+              : `Rejected: ${entityNumber}`
+          );
+        }}
+      />
     </Card>
   );
 };
