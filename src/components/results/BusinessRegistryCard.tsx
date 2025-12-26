@@ -36,10 +36,11 @@ import SunbizVerificationModal from "./SunbizVerificationModal";
 interface BusinessRegistryCardProps {
   findings: FindingData[];
   targetName?: string;
+  investigationId?: string;
   onPivot?: (type: string, value: string) => void;
 }
 
-const BusinessRegistryCard = ({ findings, targetName, onPivot }: BusinessRegistryCardProps) => {
+const BusinessRegistryCard = ({ findings, targetName, investigationId, onPivot }: BusinessRegistryCardProps) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const [verificationModalOpen, setVerificationModalOpen] = useState(false);
 
@@ -394,12 +395,9 @@ const BusinessRegistryCard = ({ findings, targetName, onPivot }: BusinessRegistr
         onOpenChange={setVerificationModalOpen}
         results={businessResults}
         targetName={targetName}
+        investigationId={investigationId}
         onVerify={(entityNumber, verified) => {
-          toast.success(
-            verified 
-              ? `Verified: ${entityNumber}` 
-              : `Rejected: ${entityNumber}`
-          );
+          // Toast is now handled inside the modal
         }}
       />
     </Card>

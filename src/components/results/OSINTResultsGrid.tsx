@@ -12,6 +12,7 @@ import { useMemo } from "react";
 interface OSINTResultsGridProps {
   findings: FindingData[];
   targetName?: string;
+  investigationId?: string;
   inputKeywords?: string[];
   aiSuggestedPersons?: string[];
   onVerify?: (platformUrl: string, status: 'verified' | 'inaccurate') => void;
@@ -41,6 +42,7 @@ interface ExtractedPlatform {
 const OSINTResultsGrid = ({ 
   findings, 
   targetName, 
+  investigationId,
   inputKeywords = [],
   aiSuggestedPersons = [],
   onVerify, 
@@ -192,6 +194,7 @@ const OSINTResultsGrid = ({
         <BusinessRegistryCard 
           findings={findings}
           targetName={targetName}
+          investigationId={investigationId}
           onPivot={onPivot}
         />
 
