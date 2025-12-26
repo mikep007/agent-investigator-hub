@@ -264,10 +264,34 @@ function buildDorkQueries(
     state = locationParts.length > 1 ? locationParts[1] : '';
   }
 
-  // Parse keywords into array
-  const keywordList = keywords
+  // Parse keywords into array and extract site-specific domains
+  const rawKeywords = keywords
     ? keywords.split(',').map((k) => k.trim()).filter((k) => k.length > 1)
     : [];
+  
+  // Detect domain patterns (e.g., "alltrails.com", "athlinks.com", "strava.com")
+  const domainPattern = /^[a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,}$/;
+  const urlPattern = /^(?:https?:\/\/)?(?:www\.)?([a-zA-Z0-9][-a-zA-Z0-9]*\.[a-zA-Z]{2,})/i;
+  
+  const customSites: string[] = [];
+  const keywordList: string[] = [];
+  
+  for (const kw of rawKeywords) {
+    // Check if it's a domain or URL
+    if (domainPattern.test(kw)) {
+      customSites.push(kw.toLowerCase());
+    } else {
+      const urlMatch = kw.match(urlPattern);
+      if (urlMatch) {
+        customSites.push(urlMatch[1].toLowerCase());
+      } else {
+        keywordList.push(kw);
+      }
+    }
+  }
+  
+  console.log('Detected custom sites from keywords:', customSites);
+  console.log('Remaining keywords:', keywordList);
 
   // Add secondary names as keywords
   if (names.length > 1) {
@@ -304,6 +328,48 @@ function buildDorkQueries(
       priority: 1,
       description: `Name + City: ${city}`,
     });
+  }
+
+  // ========== CUSTOM SITE-SPECIFIC SEARCHES (from keywords) ==========
+  // These get HIGHEST priority since user specifically requested these sites
+  for (const site of customSites) {
+    // Full name on the custom site
+    queries.push({
+      query: `${quotedPrimary} site:${site}`,
+      type: 'custom_site',
+      priority: 1,
+      description: `Custom site search: ${site}`,
+    });
+
+    // Also try first+last name separately for profile URL matching
+    if (firstName && lastName) {
+      queries.push({
+        query: `"${firstName}" "${lastName}" site:${site}`,
+        type: 'custom_site_parts',
+        priority: 1,
+        description: `Custom site (name parts): ${site}`,
+      });
+    }
+
+    // Try username format common on activity sites: FirstName-LastName
+    if (firstName && lastName) {
+      queries.push({
+        query: `"${firstName}-${lastName}" site:${site}`,
+        type: 'custom_site_username',
+        priority: 1,
+        description: `Custom site (hyphenated): ${site}`,
+      });
+    }
+
+    // With city if available
+    if (city) {
+      queries.push({
+        query: `${quotedPrimary} "${city}" site:${site}`,
+        type: 'custom_site_city',
+        priority: 1,
+        description: `Custom site + City: ${site}`,
+      });
+    }
   }
 
   // ========== KEYWORD + NAME COMBINATIONS ==========
