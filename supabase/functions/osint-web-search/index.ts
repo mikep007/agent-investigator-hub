@@ -310,9 +310,9 @@ function buildDorkQueries(
   // Clean username
   const cleanUsername = username ? stripOuterQuotes(username).replace(/^@/, '') : '';
 
-  // ========== PRIMARY SEARCHES ==========
+  // ========== PRIMARY SEARCHES (HIGHEST PRIORITY) ==========
 
-  // 1. Full name searches
+  // 1. Full name exact phrase - most important
   queries.push({
     query: quotedPrimary,
     type: 'general_exact',
@@ -320,15 +320,63 @@ function buildDorkQueries(
     description: 'General name search (exact phrase)',
   });
 
-  // 2. Name + City
+  // 2. Full name without quotes - catches partial/loose matches Google may rank differently
+  queries.push({
+    query: `${firstName} ${lastName}`,
+    type: 'general_loose',
+    priority: 1,
+    description: 'Name search (loose matching)',
+  });
+
+  // 3. Name + City - high relevance when location known
   if (city) {
     queries.push({
-      query: `${quotedPrimary} ${city}`,
+      query: `${quotedPrimary} "${city}"`,
       type: 'location_city',
       priority: 1,
       description: `Name + City: ${city}`,
     });
+    
+    // Also without quotes for looser matching
+    queries.push({
+      query: `${firstName} ${lastName} ${city}`,
+      type: 'location_city_loose',
+      priority: 1,
+      description: `Name + City (loose): ${city}`,
+    });
   }
+
+  // 4. Broad gov/edu/org institutional search - catches public records
+  queries.push({
+    query: `${quotedPrimary} site:gov OR site:edu OR site:org`,
+    type: 'institutional',
+    priority: 1,
+    description: 'Government, Education & Org sites',
+  });
+
+  // 5. News and media coverage
+  queries.push({
+    query: `${quotedPrimary} site:news.google.com OR site:reuters.com OR site:ap.org`,
+    type: 'news_media',
+    priority: 2,
+    description: 'News and media coverage',
+  });
+
+  // 6. Court records and legal filings
+  queries.push({
+    query: `${quotedPrimary} "court" OR "case" OR "docket" OR "lawsuit" OR "plaintiff" OR "defendant"`,
+    type: 'court_records',
+    priority: 2,
+    description: 'Court records and legal filings',
+  });
+
+  // 7. Obituaries and family connections
+  queries.push({
+    query: `${quotedPrimary} "obituary" OR "survived by" OR "legacy.com" OR "tribute"`,
+    type: 'obituary_search',
+    priority: 2,
+    description: 'Obituaries and family records',
+  });
 
   // ========== CUSTOM SITE-SPECIFIC SEARCHES (from keywords) ==========
   // These get HIGHEST priority since user specifically requested these sites
@@ -678,40 +726,146 @@ function buildDorkQueries(
     description: 'Business profiles (Bloomberg, Crunchbase)',
   });
 
-  // ========== SITE-SPECIFIC SEARCHES ==========
+  // ========== SOCIAL MEDIA & PROFILE SEARCHES ==========
   queries.push({
     query: `${quotedPrimary} site:linkedin.com`,
     type: 'linkedin',
-    priority: 3,
+    priority: 2,
     description: 'LinkedIn profiles',
   });
 
   queries.push({
     query: `${quotedPrimary} site:facebook.com`,
     type: 'facebook',
-    priority: 3,
+    priority: 2,
     description: 'Facebook profiles',
   });
 
   queries.push({
-    query: `${quotedPrimary} site:gov`,
-    type: 'gov_sites',
+    query: `${quotedPrimary} site:twitter.com OR site:x.com`,
+    type: 'twitter',
     priority: 3,
-    description: 'Government sites',
+    description: 'Twitter/X profiles',
   });
 
   queries.push({
-    query: `${quotedPrimary} filetype:pdf`,
-    type: 'documents',
+    query: `${quotedPrimary} site:instagram.com`,
+    type: 'instagram',
+    priority: 3,
+    description: 'Instagram profiles',
+  });
+
+  queries.push({
+    query: `${quotedPrimary} site:youtube.com OR site:tiktok.com`,
+    type: 'video_platforms',
+    priority: 3,
+    description: 'YouTube/TikTok profiles',
+  });
+
+  queries.push({
+    query: `${quotedPrimary} site:github.com OR site:gitlab.com`,
+    type: 'developer_profiles',
     priority: 4,
+    description: 'Developer profiles (GitHub, GitLab)',
+  });
+
+  // ========== GOVERNMENT & PUBLIC RECORDS ==========
+  queries.push({
+    query: `${quotedPrimary} site:gov`,
+    type: 'gov_sites',
+    priority: 2,
+    description: 'All government sites',
+  });
+
+  queries.push({
+    query: `${quotedPrimary} site:state.fl.us OR site:myflorida.com`,
+    type: 'florida_gov',
+    priority: 3,
+    description: 'Florida state government',
+  });
+
+  // County-level government searches (most public records are at county level)
+  if (city) {
+    queries.push({
+      query: `${quotedPrimary} "${city}" site:gov "clerk" OR "recorder" OR "assessor" OR "court"`,
+      type: 'county_records',
+      priority: 2,
+      description: `County records for ${city}`,
+    });
+  }
+
+  // ========== DOCUMENT SEARCHES ==========
+  queries.push({
+    query: `${quotedPrimary} filetype:pdf`,
+    type: 'documents_pdf',
+    priority: 3,
     description: 'PDF documents',
   });
 
   queries.push({
+    query: `${quotedPrimary} filetype:doc OR filetype:docx`,
+    type: 'documents_word',
+    priority: 4,
+    description: 'Word documents',
+  });
+
+  // ========== PEOPLE FINDER SITES ==========
+  queries.push({
     query: `${quotedPrimary} site:whitepages.com OR site:spokeo.com OR site:truepeoplesearch.com`,
     type: 'people_finders',
-    priority: 3,
+    priority: 2,
     description: 'People finder sites',
+  });
+
+  queries.push({
+    query: `${quotedPrimary} site:beenverified.com OR site:intelius.com OR site:peoplefinder.com`,
+    type: 'people_finders_2',
+    priority: 3,
+    description: 'Additional people finder sites',
+  });
+
+  queries.push({
+    query: `${quotedPrimary} site:fastpeoplesearch.com OR site:thatsthem.com OR site:usphonebook.com`,
+    type: 'people_finders_3',
+    priority: 3,
+    description: 'Free people search sites',
+  });
+
+  // ========== ATHLETIC/HOBBY ACTIVITY SITES ==========
+  queries.push({
+    query: `${quotedPrimary} site:strava.com OR site:alltrails.com OR site:athlinks.com`,
+    type: 'athletic_profiles',
+    priority: 3,
+    description: 'Athletic/activity profiles',
+  });
+
+  queries.push({
+    query: `${quotedPrimary} site:runkeeper.com OR site:mapmyrun.com OR site:garmin.com`,
+    type: 'fitness_profiles',
+    priority: 4,
+    description: 'Fitness tracking profiles',
+  });
+
+  // ========== PROFESSIONAL DIRECTORIES ==========
+  queries.push({
+    query: `${quotedPrimary} site:zoominfo.com OR site:dnb.com OR site:manta.com`,
+    type: 'business_directories',
+    priority: 3,
+    description: 'Business directories',
+  });
+
+  queries.push({
+    query: `${quotedPrimary} "attorney" OR "lawyer" OR "bar association" site:gov OR site:org`,
+    type: 'legal_professional',
+    priority: 4,
+    description: 'Legal professional records',
+  });
+
+  queries.push({
+    query: `${quotedPrimary} "license" OR "certification" OR "registered" site:gov`,
+    type: 'professional_licenses',
+    priority: 3,
+    description: 'Professional licenses',
   });
 
   return queries;
@@ -778,11 +932,12 @@ Deno.serve(async (req) => {
     // Build targeted dork queries with keywords combined with all data points
     const dorkQueries = buildDorkQueries(searchName, location, email, phone, keywords, seedQuery, username, relatives);
 
-    // Execute MORE queries for comprehensive coverage (up to 12 to include business registry searches)
-    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 12);
+    // Execute MORE queries for comprehensive coverage - increased to 20 for better results
+    // Google CSE allows 100 queries/day free, then paid - 20 queries is a good balance
+    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 20);
     
-    console.log('Will execute', sortedQueries.length, 'queries:');
-    sortedQueries.forEach((q, i) => console.log(`  ${i+1}. [${q.type}] ${q.query.slice(0, 80)}...`));
+    console.log('Will execute', sortedQueries.length, 'priority queries out of', dorkQueries.length, 'total generated:');
+    sortedQueries.forEach((q, i) => console.log(`  ${i+1}. [P${q.priority}][${q.type}] ${q.query.slice(0, 70)}...`));
     
     const searchPromises = sortedQueries.map(q => 
       executeSearch(q.query, GOOGLE_API_KEY!, GOOGLE_SEARCH_ENGINE_ID!)
