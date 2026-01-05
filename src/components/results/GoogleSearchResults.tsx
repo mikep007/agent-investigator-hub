@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useRef } from "react";
+import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -20,12 +20,14 @@ import {
   AlertCircle,
   Sparkles,
   Code,
-  Hash
+  Hash,
+  BarChart3
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "../ConfidenceScoreBadge";
 import { exportWebResultsToCSV } from "@/utils/csvExport";
 import LinkPreviewTooltip from "./LinkPreviewTooltip";
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from "recharts";
 
 interface WebResultItem {
   title: string;
@@ -48,7 +50,25 @@ interface QueryInfo {
   query: string;
   description: string;
   resultCount?: number;
+  category?: string;
 }
+
+// Category display configuration
+const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
+  core: { label: 'Core Searches', color: '#3b82f6' },
+  social_media: { label: 'Social Media', color: '#8b5cf6' },
+  professional: { label: 'Professional', color: '#10b981' },
+  official_records: { label: 'Official Records', color: '#f59e0b' },
+  legal: { label: 'Legal/Court', color: '#ef4444' },
+  family: { label: 'Family/Genealogy', color: '#ec4899' },
+  property: { label: 'Property', color: '#14b8a6' },
+  business: { label: 'Business', color: '#6366f1' },
+  contact: { label: 'Contact Info', color: '#22c55e' },
+  identity: { label: 'Identity', color: '#f97316' },
+  news: { label: 'News/Media', color: '#06b6d4' },
+  people_finders: { label: 'People Finders', color: '#a855f7' },
+  custom_site: { label: 'Custom Sites', color: '#84cc16' },
+};
 
 interface GoogleSearchResultsProps {
   confirmedResults: WebResultItem[];
@@ -73,11 +93,32 @@ const GoogleSearchResults = ({
   const [filter, setFilter] = useState("");
   const [showPossible, setShowPossible] = useState(true);
   const [showQueries, setShowQueries] = useState(false);
+  const [showChart, setShowChart] = useState(true);
   const [verifiedLinks, setVerifiedLinks] = useState<Set<string>>(new Set());
   const [inaccurateLinks, setInaccurateLinks] = useState<Set<string>>(new Set());
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
   const containerRef = useRef<HTMLDivElement>(null);
   const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  // Calculate category stats for bar chart
+  const categoryStats = useMemo(() => {
+    const stats: Record<string, number> = {};
+    
+    queriesUsed.forEach(q => {
+      const category = q.category || 'other';
+      stats[category] = (stats[category] || 0) + (q.resultCount || 0);
+    });
+
+    return Object.entries(stats)
+      .map(([category, count]) => ({
+        category,
+        label: CATEGORY_CONFIG[category]?.label || category.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        count,
+        color: CATEGORY_CONFIG[category]?.color || '#6b7280'
+      }))
+      .filter(item => item.count > 0)
+      .sort((a, b) => b.count - a.count);
+  }, [queriesUsed]);
 
   const filterResults = (results: WebResultItem[]) => {
     if (!filter.trim()) return results;
@@ -481,6 +522,86 @@ const GoogleSearchResults = ({
         <p className="text-sm text-muted-foreground">
           Showing {filteredTotal} of {totalResults} results for "{filter}"
         </p>
+      )}
+
+      {/* Category Bar Chart */}
+      {categoryStats.length > 0 && (
+        <div className="border border-border rounded-lg overflow-hidden">
+          <button
+            onClick={() => setShowChart(!showChart)}
+            className="w-full flex items-center justify-between gap-2 p-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+          >
+            <div className="flex items-center gap-2">
+              <BarChart3 className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Results by Category</span>
+              <Badge variant="secondary" className="text-xs">
+                {categoryStats.length} categories
+              </Badge>
+            </div>
+            {showChart ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
+          </button>
+          
+          {showChart && (
+            <div className="p-4 bg-background/50">
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart 
+                    data={categoryStats} 
+                    layout="vertical" 
+                    margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                  >
+                    <XAxis type="number" allowDecimals={false} />
+                    <YAxis 
+                      type="category" 
+                      dataKey="label" 
+                      tick={{ fontSize: 12 }}
+                      width={90}
+                    />
+                    <RechartsTooltip 
+                      content={({ active, payload }) => {
+                        if (active && payload && payload.length) {
+                          const data = payload[0].payload;
+                          return (
+                            <div className="bg-popover border border-border rounded-lg p-3 shadow-lg">
+                              <p className="font-medium text-sm">{data.label}</p>
+                              <p className="text-muted-foreground text-xs mt-1">
+                                {data.count} results found
+                              </p>
+                            </div>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                    <Bar dataKey="count" radius={[0, 4, 4, 0]}>
+                      {categoryStats.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={entry.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+              
+              {/* Legend */}
+              <div className="flex flex-wrap gap-3 mt-4 pt-3 border-t border-border">
+                {categoryStats.map((cat) => (
+                  <div key={cat.category} className="flex items-center gap-1.5 text-xs">
+                    <div 
+                      className="w-3 h-3 rounded-sm" 
+                      style={{ backgroundColor: cat.color }}
+                    />
+                    <span className="text-muted-foreground">{cat.label}</span>
+                    <span className="font-medium">({cat.count})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
       )}
 
       {/* Queries Executed - Expandable */}
