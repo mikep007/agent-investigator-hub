@@ -825,7 +825,29 @@ Deno.serve(async (req) => {
     }
     console.log('All searches complete. Processing results...');
     
-    // Deduplicate results by URL
+    // Normalize URL for deduplication - remove trailing slashes, query params, fragments, and www prefix
+    const normalizeUrl = (url: string): string => {
+      try {
+        const parsed = new URL(url);
+        // Remove www prefix
+        let host = parsed.hostname.replace(/^www\./, '');
+        // Get pathname and remove trailing slash
+        let path = parsed.pathname.replace(/\/$/, '') || '/';
+        // Lowercase everything
+        return `${host}${path}`.toLowerCase();
+      } catch {
+        // If URL parsing fails, do basic normalization
+        return url
+          .toLowerCase()
+          .replace(/^https?:\/\//, '')
+          .replace(/^www\./, '')
+          .replace(/\/$/, '')
+          .split('?')[0]
+          .split('#')[0];
+      }
+    };
+    
+    // Deduplicate results by normalized URL
     const seenUrls = new Set<string>();
     const confirmedResults: any[] = [];
     const possibleResults: any[] = [];
@@ -851,8 +873,12 @@ Deno.serve(async (req) => {
       if (!result || !result.items) continue;
       
       for (const item of result.items) {
-        if (seenUrls.has(item.link)) continue;
-        seenUrls.add(item.link);
+        const normalizedUrl = normalizeUrl(item.link);
+        if (seenUrls.has(normalizedUrl)) {
+          console.log(`Skipping duplicate URL: ${item.link} (normalized: ${normalizedUrl})`);
+          continue;
+        }
+        seenUrls.add(normalizedUrl);
         
         const textToCheck = `${item.title} ${item.snippet}`;
         const nameMatch = checkNameMatch(textToCheck, searchName);
