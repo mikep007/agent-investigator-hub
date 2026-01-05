@@ -226,8 +226,8 @@ function buildDorkQueries(
   seedQuery?: string,
   username?: string,
   relatives?: string[],
-): { query: string; type: string; priority: number; description: string }[] {
-  const queries: { query: string; type: string; priority: number; description: string }[] = [];
+): { query: string; type: string; priority: number; description: string; category?: string }[] {
+  const queries: { query: string; type: string; priority: number; description: string; category?: string }[] = [];
 
   const stripOuterQuotes = (value: string) => value.replace(/^"+|"+$/g, '').trim();
 
@@ -310,71 +310,348 @@ function buildDorkQueries(
   // Clean username
   const cleanUsername = username ? stripOuterQuotes(username).replace(/^@/, '') : '';
 
-  // ========== PRIMARY SEARCHES (HIGHEST PRIORITY) ==========
+// ========== PRIMARY GOOGLE DORK SEARCHES (HIGHEST PRIORITY) ==========
+  // These follow the exact Google Dork patterns requested
 
-  // 1. Full name exact phrase - most important
-  queries.push({
-    query: quotedPrimary,
-    type: 'general_exact',
-    priority: 1,
-    description: 'General name search (exact phrase)',
-  });
-
-  // 2. Full name without quotes - catches partial/loose matches Google may rank differently
-  queries.push({
-    query: `${firstName} ${lastName}`,
-    type: 'general_loose',
-    priority: 1,
-    description: 'Name search (loose matching)',
-  });
-
-  // 3. Name + City - high relevance when location known
-  if (city) {
+  // 1. Core pattern: "FIRST LAST" "CITY" "STATE" - most important
+  if (city && state) {
     queries.push({
-      query: `${quotedPrimary} "${city}"`,
-      type: 'location_city',
+      query: `"${firstName} ${lastName}" "${city}" "${state}"`,
+      type: 'core_dork',
       priority: 1,
-      description: `Name + City: ${city}`,
+      category: 'core',
+      description: `Core Dork: Name + City + State`,
     });
-    
-    // Also without quotes for looser matching
+  } else if (city) {
     queries.push({
-      query: `${firstName} ${lastName} ${city}`,
-      type: 'location_city_loose',
+      query: `"${firstName} ${lastName}" "${city}"`,
+      type: 'core_dork_city',
       priority: 1,
-      description: `Name + City (loose): ${city}`,
+      category: 'core',
+      description: `Core Dork: Name + City`,
+    });
+  } else {
+    queries.push({
+      query: `"${firstName} ${lastName}"`,
+      type: 'core_dork_name',
+      priority: 1,
+      category: 'core',
+      description: `Core Dork: Name only`,
     });
   }
 
-  // 4. Broad gov/edu/org institutional search - catches public records
+  // 2. Name + Location excluding common aggregator sites (cleaner results)
+  if (city && state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${city}" "${state}" -whitepages -mylife -spokeo -beenverified -intelius -peoplefinder`,
+      type: 'core_dork_clean',
+      priority: 1,
+      category: 'core',
+      description: 'Core Dork: Clean (no aggregators)',
+    });
+  }
+
+  // 3. Name + Location + Phone keyword
+  if (city && state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${city}" "${state}" "phone"`,
+      type: 'dork_phone_keyword',
+      priority: 1,
+      category: 'contact',
+      description: 'Dork: Name + Location + Phone keyword',
+    });
+  }
+
+  // 4. Name + Location + Email keyword
+  if (city && state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${city}" "${state}" "email"`,
+      type: 'dork_email_keyword',
+      priority: 1,
+      category: 'contact',
+      description: 'Dork: Name + Location + Email keyword',
+    });
+  }
+
+  // 5. Name + Location + Profile/Resume/CV keywords
+  if (city && state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${city}" "${state}" "profile" | "resume" | "cv"`,
+      type: 'dork_profile_resume',
+      priority: 1,
+      category: 'professional',
+      description: 'Dork: Profile/Resume/CV',
+    });
+  } else {
+    queries.push({
+      query: `"${firstName} ${lastName}" "profile" | "resume" | "cv"`,
+      type: 'dork_profile_resume_nostate',
+      priority: 2,
+      category: 'professional',
+      description: 'Dork: Profile/Resume/CV (no location)',
+    });
+  }
+
+  // 6. Social media multi-site search
+  if (city && state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${city}" "${state}" site:facebook.com | site:linkedin.com | site:x.com | site:instagram.com`,
+      type: 'dork_social_all',
+      priority: 1,
+      category: 'social_media',
+      description: 'Dork: All Social Media',
+    });
+  } else {
+    queries.push({
+      query: `"${firstName} ${lastName}" site:facebook.com | site:linkedin.com | site:x.com | site:instagram.com`,
+      type: 'dork_social_all_nostate',
+      priority: 1,
+      category: 'social_media',
+      description: 'Dork: All Social Media (no location)',
+    });
+  }
+
+  // 7. Video platforms (YouTube, TikTok)
+  if (city && state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${city}" "${state}" site:youtube.com | site:tiktok.com`,
+      type: 'dork_video_platforms',
+      priority: 2,
+      category: 'social_media',
+      description: 'Dork: Video Platforms',
+    });
+  } else {
+    queries.push({
+      query: `"${firstName} ${lastName}" site:youtube.com | site:tiktok.com`,
+      type: 'dork_video_nostate',
+      priority: 2,
+      category: 'social_media',
+      description: 'Dork: Video Platforms (no location)',
+    });
+  }
+
+  // ========== ADDITIONAL USEFUL GOOGLE DORK QUERIES ==========
+
+  // 8. Name + Address keyword (for property associations)
+  if (city && state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${city}" "${state}" "address"`,
+      type: 'dork_address_keyword',
+      priority: 1,
+      category: 'contact',
+      description: 'Dork: Name + Address keyword',
+    });
+  }
+
+  // 9. Name + Age keyword (for identity confirmation)
+  if (city && state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${city}" "${state}" "age" | "born" | "DOB"`,
+      type: 'dork_age_keyword',
+      priority: 2,
+      category: 'identity',
+      description: 'Dork: Age/DOB identifiers',
+    });
+  }
+
+  // 10. Name + Employer/Work keywords
+  queries.push({
+    query: `"${firstName} ${lastName}" "works at" | "employed by" | "employee" | "staff"`,
+    type: 'dork_employer',
+    priority: 2,
+    category: 'professional',
+    description: 'Dork: Employer/Work history',
+  });
+
+  // 11. Name + Education keywords
+  queries.push({
+    query: `"${firstName} ${lastName}" "graduated" | "alumni" | "university" | "college" | "school"`,
+    type: 'dork_education',
+    priority: 2,
+    category: 'professional',
+    description: 'Dork: Education history',
+  });
+
+  // 12. Name + Marriage/Family keywords
+  queries.push({
+    query: `"${firstName} ${lastName}" "married" | "wife" | "husband" | "spouse" | "wedding"`,
+    type: 'dork_marriage',
+    priority: 2,
+    category: 'family',
+    description: 'Dork: Marriage/Family records',
+  });
+
+  // 13. Name + Arrest/Criminal keywords
+  if (city && state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${city}" "${state}" "arrest" | "charged" | "convicted" | "mugshot"`,
+      type: 'dork_criminal',
+      priority: 2,
+      category: 'legal',
+      description: 'Dork: Criminal/Arrest records',
+    });
+  }
+
+  // 14. Name + Real Estate/Property keywords
+  if (city && state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${city}" "${state}" "property" | "deed" | "mortgage" | "homeowner"`,
+      type: 'dork_property_keyword',
+      priority: 2,
+      category: 'property',
+      description: 'Dork: Property/Real Estate',
+    });
+  }
+
+  // 15. Name + Voting/Voter record
+  if (state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${state}" "voter" | "registered voter" | "voting record"`,
+      type: 'dork_voter',
+      priority: 2,
+      category: 'official_records',
+      description: 'Dork: Voter records',
+    });
+  }
+
+  // 16. Name + Donation/Political contribution
+  queries.push({
+    query: `"${firstName} ${lastName}" "donation" | "contributed" | "donor" site:fec.gov | site:opensecrets.org`,
+    type: 'dork_donations',
+    priority: 3,
+    category: 'official_records',
+    description: 'Dork: Political donations',
+  });
+
+  // 17. Name + License (various professional licenses)
+  if (state) {
+    queries.push({
+      query: `"${firstName} ${lastName}" "${state}" "license" | "licensed" | "certification"`,
+      type: 'dork_license',
+      priority: 2,
+      category: 'professional',
+      description: 'Dork: Professional licenses',
+    });
+  }
+
+  // 18. Inurl search for username-like patterns
+  if (firstName && lastName) {
+    queries.push({
+      query: `inurl:${firstName.toLowerCase()}${lastName.toLowerCase()} | inurl:${firstName.toLowerCase()}-${lastName.toLowerCase()} | inurl:${firstName.toLowerCase()}_${lastName.toLowerCase()}`,
+      type: 'dork_inurl_username',
+      priority: 2,
+      category: 'social_media',
+      description: 'Dork: URL username patterns',
+    });
+  }
+
+  // 19. Name + Forum/Community keywords
+  queries.push({
+    query: `"${firstName} ${lastName}" "forum" | "member" | "posted by" | "user profile"`,
+    type: 'dork_forums',
+    priority: 3,
+    category: 'social_media',
+    description: 'Dork: Forums/Community profiles',
+  });
+
+  // 20. Name + Business ownership keywords
+  queries.push({
+    query: `"${firstName} ${lastName}" "owner" | "CEO" | "founder" | "president" | "managing member"`,
+    type: 'dork_business_owner',
+    priority: 2,
+    category: 'business',
+    description: 'Dork: Business ownership',
+  });
+
+  // 21. Dating/Social apps
+  queries.push({
+    query: `"${firstName} ${lastName}" site:match.com | site:pof.com | site:okcupid.com | site:tinder.com`,
+    type: 'dork_dating',
+    priority: 4,
+    category: 'social_media',
+    description: 'Dork: Dating profiles',
+  });
+
+  // 22. Review sites (Yelp, Google Reviews)
+  queries.push({
+    query: `"${firstName} ${lastName}" site:yelp.com | site:tripadvisor.com | site:google.com/maps`,
+    type: 'dork_reviews',
+    priority: 3,
+    category: 'social_media',
+    description: 'Dork: Review site profiles',
+  });
+
+  // 23. Reddit/Community platforms
+  queries.push({
+    query: `"${firstName} ${lastName}" site:reddit.com | site:quora.com | site:medium.com`,
+    type: 'dork_reddit',
+    priority: 3,
+    category: 'social_media',
+    description: 'Dork: Reddit/Quora/Medium',
+  });
+
+  // 24. Name + Bankruptcy/Financial distress
+  queries.push({
+    query: `"${firstName} ${lastName}" "bankruptcy" | "foreclosure" | "lien" | "judgment"`,
+    type: 'dork_financial',
+    priority: 3,
+    category: 'legal',
+    description: 'Dork: Financial/Bankruptcy records',
+  });
+
+  // 25. Genealogy/Family tree sites
+  queries.push({
+    query: `"${firstName} ${lastName}" site:ancestry.com | site:familysearch.org | site:findagrave.com | site:myheritage.com`,
+    type: 'dork_genealogy',
+    priority: 3,
+    category: 'family',
+    description: 'Dork: Genealogy sites',
+  });
+
+  // ========== LEGACY QUERIES (kept for compatibility) ==========
+
+  // Full name exact phrase
+  queries.push({
+    query: quotedPrimary,
+    type: 'general_exact',
+    priority: 2,
+    category: 'core',
+    description: 'General name search (exact phrase)',
+  });
+
+  // Broad gov/edu/org institutional search
   queries.push({
     query: `${quotedPrimary} site:gov OR site:edu OR site:org`,
     type: 'institutional',
-    priority: 1,
+    priority: 2,
+    category: 'official_records',
     description: 'Government, Education & Org sites',
   });
 
-  // 5. News and media coverage
+  // News and media coverage
   queries.push({
     query: `${quotedPrimary} site:news.google.com OR site:reuters.com OR site:ap.org`,
     type: 'news_media',
-    priority: 2,
+    priority: 3,
+    category: 'news',
     description: 'News and media coverage',
   });
 
-  // 6. Court records and legal filings
+  // Court records and legal filings
   queries.push({
     query: `${quotedPrimary} "court" OR "case" OR "docket" OR "lawsuit" OR "plaintiff" OR "defendant"`,
     type: 'court_records',
     priority: 2,
+    category: 'legal',
     description: 'Court records and legal filings',
   });
 
-  // 7. Obituaries and family connections
+  // Obituaries and family connections
   queries.push({
     query: `${quotedPrimary} "obituary" OR "survived by" OR "legacy.com" OR "tribute"`,
     type: 'obituary_search',
     priority: 2,
+    category: 'family',
     description: 'Obituaries and family records',
   });
 
@@ -940,7 +1217,7 @@ Deno.serve(async (req) => {
     sortedQueries.forEach((q, i) => console.log(`  ${i+1}. [P${q.priority}][${q.type}] ${q.query.slice(0, 70)}...`));
     
     // Track results per query for debugging/display
-    const queryStats: { query: string; type: string; description: string; resultCount: number }[] = [];
+    const queryStats: { query: string; type: string; description: string; resultCount: number; category?: string }[] = [];
     
     const searchPromises = sortedQueries.map((q, index) => 
       executeSearch(q.query, GOOGLE_API_KEY!, GOOGLE_SEARCH_ENGINE_ID!)
@@ -950,13 +1227,15 @@ Deno.serve(async (req) => {
             query: q.query,
             type: q.type,
             description: q.description,
-            resultCount
+            resultCount,
+            category: q.category
           };
           return { 
             ...result, 
             queryType: q.type, 
             queryUsed: q.query,
-            queryDescription: q.description 
+            queryDescription: q.description,
+            queryCategory: q.category
           };
         })
     );
@@ -984,7 +1263,7 @@ Deno.serve(async (req) => {
         confirmedItems: [],
         possibleItems: [],
         items: [],
-        queriesUsed: sortedQueries.map(q => ({ type: q.type, query: q.query, description: q.description })),
+        queriesUsed: sortedQueries.map(q => ({ type: q.type, query: q.query, description: q.description, category: q.category })),
         searchContext: {
           fullName: searchName,
           hasAddress: !!location,
@@ -1223,7 +1502,8 @@ Deno.serve(async (req) => {
         type: stat.type, 
         query: stat.query,
         description: stat.description,
-        resultCount: stat.resultCount
+        resultCount: stat.resultCount,
+        category: stat.category
       }))
     };
     
