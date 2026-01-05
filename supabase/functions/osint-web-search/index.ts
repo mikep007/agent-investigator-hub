@@ -939,17 +939,35 @@ Deno.serve(async (req) => {
     console.log('Will execute', sortedQueries.length, 'priority queries out of', dorkQueries.length, 'total generated:');
     sortedQueries.forEach((q, i) => console.log(`  ${i+1}. [P${q.priority}][${q.type}] ${q.query.slice(0, 70)}...`));
     
-    const searchPromises = sortedQueries.map(q => 
+    // Track results per query for debugging/display
+    const queryStats: { query: string; type: string; description: string; resultCount: number }[] = [];
+    
+    const searchPromises = sortedQueries.map((q, index) => 
       executeSearch(q.query, GOOGLE_API_KEY!, GOOGLE_SEARCH_ENGINE_ID!)
-        .then(result => ({ 
-          ...result, 
-          queryType: q.type, 
-          queryUsed: q.query,
-          queryDescription: q.description 
-        }))
+        .then(result => {
+          const resultCount = result?.items?.length || 0;
+          queryStats[index] = {
+            query: q.query,
+            type: q.type,
+            description: q.description,
+            resultCount
+          };
+          return { 
+            ...result, 
+            queryType: q.type, 
+            queryUsed: q.query,
+            queryDescription: q.description 
+          };
+        })
     );
     
     const searchResults = await Promise.all(searchPromises);
+    
+    // Log query stats
+    console.log('Query execution stats:');
+    queryStats.forEach((stat, i) => {
+      console.log(`  ${i+1}. [${stat.type}] ${stat.resultCount} results - ${stat.query.slice(0, 60)}...`);
+    });
     
     // Check if ALL searches failed due to API being blocked
     const allFailed = searchResults.every(r => r === null);
@@ -1201,10 +1219,11 @@ Deno.serve(async (req) => {
       possibleItems: possibleResults,
       items: [...confirmedResults, ...possibleResults],
       discoveredRelatives: discoveredRelatives.length > 0 ? discoveredRelatives : undefined,
-      queriesUsed: sortedQueries.map(q => ({ 
-        type: q.type, 
-        query: q.query,
-        description: q.description 
+      queriesUsed: queryStats.map(stat => ({ 
+        type: stat.type, 
+        query: stat.query,
+        description: stat.description,
+        resultCount: stat.resultCount
       }))
     };
     

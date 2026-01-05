@@ -18,7 +18,9 @@ import {
   ChevronUp,
   Shield,
   AlertCircle,
-  Sparkles
+  Sparkles,
+  Code,
+  Hash
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "../ConfidenceScoreBadge";
@@ -41,10 +43,17 @@ interface WebResultItem {
   queryDescription?: string;
 }
 
+interface QueryInfo {
+  type: string;
+  query: string;
+  description: string;
+  resultCount?: number;
+}
+
 interface GoogleSearchResultsProps {
   confirmedResults: WebResultItem[];
   possibleResults: WebResultItem[];
-  queriesUsed?: { type: string; query: string; description: string }[];
+  queriesUsed?: QueryInfo[];
   keywordsSearched?: string[];
   targetName?: string;
   onVerify?: (link: string, status: 'verified' | 'inaccurate') => void;
@@ -63,6 +72,7 @@ const GoogleSearchResults = ({
   const { toast } = useToast();
   const [filter, setFilter] = useState("");
   const [showPossible, setShowPossible] = useState(true);
+  const [showQueries, setShowQueries] = useState(false);
   const [verifiedLinks, setVerifiedLinks] = useState<Set<string>>(new Set());
   const [inaccurateLinks, setInaccurateLinks] = useState<Set<string>>(new Set());
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
@@ -473,28 +483,82 @@ const GoogleSearchResults = ({
         </p>
       )}
 
-      {/* Queries used */}
+      {/* Queries Executed - Expandable */}
       {queriesUsed.length > 0 && (
-        <div className="bg-muted/30 rounded-lg p-3">
-          <div className="flex items-center gap-2 mb-2">
-            <Search className="h-4 w-4 text-primary" />
-            <span className="text-sm font-medium">Dork Queries Executed</span>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            {queriesUsed.map((q, i) => (
-              <Badge key={i} variant="outline" className="text-xs">
-                {q.description || q.type}
+        <div className="border border-border rounded-lg overflow-hidden">
+          <button
+            onClick={() => setShowQueries(!showQueries)}
+            className="w-full flex items-center justify-between gap-2 p-3 bg-muted/30 hover:bg-muted/50 transition-colors text-left"
+          >
+            <div className="flex items-center gap-2">
+              <Code className="h-4 w-4 text-primary" />
+              <span className="text-sm font-medium">Queries Executed</span>
+              <Badge variant="secondary" className="text-xs">
+                {queriesUsed.length} queries
               </Badge>
-            ))}
-          </div>
-          {keywordsSearched.length > 0 && (
-            <div className="mt-2 flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-muted-foreground">Keywords:</span>
-              {keywordsSearched.map((k, i) => (
-                <Badge key={i} variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs">
-                  {k}
-                </Badge>
-              ))}
+              <Badge variant="outline" className="text-xs text-muted-foreground">
+                {queriesUsed.reduce((sum, q) => sum + (q.resultCount || 0), 0)} raw results
+              </Badge>
+            </div>
+            {showQueries ? (
+              <ChevronUp className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 text-muted-foreground" />
+            )}
+          </button>
+          
+          {showQueries && (
+            <div className="p-3 space-y-3 bg-background/50">
+              {/* Keywords searched */}
+              {keywordsSearched.length > 0 && (
+                <div className="flex items-center gap-2 flex-wrap pb-3 border-b border-border">
+                  <span className="text-xs text-muted-foreground font-medium">Keywords:</span>
+                  {keywordsSearched.map((k, i) => (
+                    <Badge key={i} variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs">
+                      {k}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+              
+              {/* Query list with result counts */}
+              <div className="space-y-2 max-h-80 overflow-y-auto">
+                {queriesUsed.map((q, i) => (
+                  <div 
+                    key={i} 
+                    className={`flex items-start gap-3 p-2 rounded-md text-sm ${
+                      (q.resultCount || 0) > 0 
+                        ? 'bg-green-500/5 border border-green-500/20' 
+                        : 'bg-muted/30 border border-transparent'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2 flex-shrink-0 min-w-[100px]">
+                      <Hash className="h-3 w-3 text-muted-foreground" />
+                      <span className="text-xs text-muted-foreground font-mono">{i + 1}</span>
+                      <Badge 
+                        variant={q.resultCount && q.resultCount > 0 ? "default" : "secondary"}
+                        className={`text-xs ${
+                          q.resultCount && q.resultCount > 0 
+                            ? 'bg-green-600 hover:bg-green-700' 
+                            : ''
+                        }`}
+                      >
+                        {q.resultCount ?? 0} results
+                      </Badge>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2 mb-1">
+                        <Badge variant="outline" className="text-xs flex-shrink-0">
+                          {q.description || q.type}
+                        </Badge>
+                      </div>
+                      <code className="text-xs text-muted-foreground break-all font-mono leading-relaxed">
+                        {q.query}
+                      </code>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           )}
         </div>
