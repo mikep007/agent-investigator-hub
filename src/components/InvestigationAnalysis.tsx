@@ -3,12 +3,13 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Brain, AlertTriangle, Users, TrendingUp, Search, Loader2, Link as LinkIcon, RefreshCw } from "lucide-react";
+import { Brain, AlertTriangle, Users, TrendingUp, Search, Loader2, Link as LinkIcon, RefreshCw, FileDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-
+import { generateAnalysisPDF } from "@/utils/analysisExport";
 interface InvestigationAnalysisProps {
   investigationId: string | null;
   active: boolean;
+  target?: string;
 }
 
 interface AnalysisResult {
@@ -21,11 +22,20 @@ interface AnalysisResult {
   anomalies: string[];
 }
 
-const InvestigationAnalysis = ({ investigationId, active }: InvestigationAnalysisProps) => {
+const InvestigationAnalysis = ({ investigationId, active, target }: InvestigationAnalysisProps) => {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
+
+  const handleExportPDF = () => {
+    if (!analysis) return;
+    generateAnalysisPDF(analysis, target);
+    toast({
+      title: "PDF Exported",
+      description: "Analysis report has been downloaded",
+    });
+  };
 
   const analyzeInvestigation = async () => {
     if (!investigationId) {
@@ -109,23 +119,35 @@ const InvestigationAnalysis = ({ investigationId, active }: InvestigationAnalysi
           <Brain className="w-6 h-6 text-primary" />
           <h2 className="text-xl font-semibold">AI Investigation Analysis</h2>
         </div>
-        <Button
-          onClick={analyzeInvestigation}
-          disabled={loading || !investigationId}
-          size="sm"
-        >
-          {loading ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              Analyzing...
-            </>
-          ) : (
-            <>
-              <Search className="w-4 h-4 mr-2" />
-              Run Analysis
-            </>
+        <div className="flex items-center gap-2">
+          {analysis && (
+            <Button
+              onClick={handleExportPDF}
+              variant="outline"
+              size="sm"
+            >
+              <FileDown className="w-4 h-4 mr-2" />
+              Export PDF
+            </Button>
           )}
-        </Button>
+          <Button
+            onClick={analyzeInvestigation}
+            disabled={loading || !investigationId}
+            size="sm"
+          >
+            {loading ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Analyzing...
+              </>
+            ) : (
+              <>
+                <Search className="w-4 h-4 mr-2" />
+                Run Analysis
+              </>
+            )}
+          </Button>
+        </div>
       </div>
 
       {loading && !analysis && (
