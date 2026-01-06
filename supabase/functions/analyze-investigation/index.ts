@@ -153,93 +153,106 @@ serve(async (req) => {
       throw new Error('LOVABLE_API_KEY not configured');
     }
 
-    const systemPrompt = `You are an expert OSINT investigator analyzing digital footprint data for law enforcement, investigative journalists, and private investigators. Analyze the investigation findings and provide:
+    const systemPrompt = `You are an expert OSINT investigator analyzing digital footprint data. Analyze findings and provide:
 
-1. Risk assessment (low/medium/high/critical) with brief explanation
-2. 3-5 key findings that are most significant
-3. Patterns or connections between data points
-4. Related persons mentioned across findings
+1. Risk assessment (low/medium/high/critical)
+2. 3-5 key findings
+3. Patterns or connections
+4. Related persons
 5. Anomalies or red flags
-6. Actionable recommendations for next investigation steps
+6. Recommendations for next steps
 
-IMPORTANT: Do NOT recommend searching for data that was already provided as input (e.g., if email/phone/address was already searched, don't suggest searching for it again). Focus recommendations on new angles, related persons, or deeper investigation of discovered data.
+Do NOT recommend searching data already provided. Focus on new angles. Be concise.
 
-Be concise, professional, and focus on investigative value. Return a JSON object with this structure:
+Return JSON:
 {
   "riskLevel": "low|medium|high|critical",
-  "summary": "brief risk assessment explanation",
-  "keyFindings": ["finding1", "finding2", ...],
-  "patterns": ["pattern1", "pattern2", ...],
-  "relatedPersons": ["name1", "name2", ...],
-  "anomalies": ["anomaly1", "anomaly2", ...],
-  "recommendations": ["rec1", "rec2", ...]
+  "summary": "brief explanation",
+  "keyFindings": ["finding1", ...],
+  "patterns": ["pattern1", ...],
+  "relatedPersons": ["name1", ...],
+  "anomalies": ["anomaly1", ...],
+  "recommendations": ["rec1", ...]
 }`;
 
     const uniqueNames = [...new Set(dataSummary.allNames)];
 
     const userPrompt = `Target: ${dataSummary.target}
+Findings: ${dataSummary.totalFindings}
 
-Total findings: ${dataSummary.totalFindings}
+Already searched: ${Object.entries(searchedParams).filter(([_, val]) => val).map(([key]) => key).join(', ') || 'None'}
 
-ALREADY SEARCHED (do NOT recommend searching these again):
-${Object.entries(searchedParams).filter(([_, val]) => val).map(([key]) => `- ${key}`).join('\n') || '- None'}
+Names/keywords: ${uniqueNames.slice(0, 15).join(', ') || 'None'}
 
-Associated names / keywords from search and findings:
-${uniqueNames.slice(0, 20).join(', ') || '- None'}
+By type: ${Object.entries(dataSummary.findingsByType).map(([type, count]) => `${type}: ${count}`).join(', ')}
 
-Findings by type:
-${Object.entries(dataSummary.findingsByType).map(([type, count]) => `- ${type}: ${count}`).join('\n')}
+Platforms (${dataSummary.platforms.length}): ${dataSummary.platforms.slice(0, 15).join(', ')}
 
-Platforms found (${dataSummary.platforms.length}): ${dataSummary.platforms.slice(0, 20).join(', ')}${dataSummary.platforms.length > 20 ? '...' : ''}
+Breaches: ${dataSummary.breaches.slice(0, 5).join(', ') || 'None'}
 
-Breaches (${dataSummary.breaches.length}): ${dataSummary.breaches.slice(0, 10).join(', ')}${dataSummary.breaches.length > 10 ? '...' : ''}
+Locations: ${dataSummary.locations.join(', ') || 'None'}
 
-Locations: ${dataSummary.locations.join(', ')}
+Phones: ${dataSummary.phones.join(', ') || 'None'}
 
-Phone numbers: ${dataSummary.phones.join(', ')}
+Web mentions: ${dataSummary.webMentions.slice(0, 3).join('; ') || 'None'}
 
-Web mentions (sample): ${dataSummary.webMentions.slice(0, 5).join('; ')}
+Analyze and provide insights.`;
 
-Names found in data: ${uniqueNames.slice(0, 20).join(', ')}
+    // Use AbortController with timeout to prevent hanging requests
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 55000); // 55 second timeout
 
-Analyze this investigation and provide insights.`;
-
-    const aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        model: 'google/gemini-2.5-flash',
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt }
-        ],
-        tools: [{
-          type: "function",
-          function: {
-            name: "provide_analysis",
-            description: "Return structured investigation analysis",
-            parameters: {
-              type: "object",
-              properties: {
-                riskLevel: { type: "string", enum: ["low", "medium", "high", "critical"] },
-                summary: { type: "string" },
-                keyFindings: { type: "array", items: { type: "string" } },
-                patterns: { type: "array", items: { type: "string" } },
-                relatedPersons: { type: "array", items: { type: "string" } },
-                anomalies: { type: "array", items: { type: "string" } },
-                recommendations: { type: "array", items: { type: "string" } }
-              },
-              required: ["riskLevel", "summary", "keyFindings", "recommendations"],
-              additionalProperties: false
+    let aiResponse;
+    try {
+      aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          model: 'google/gemini-2.5-flash-lite',
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt }
+          ],
+          tools: [{
+            type: "function",
+            function: {
+              name: "provide_analysis",
+              description: "Return structured investigation analysis",
+              parameters: {
+                type: "object",
+                properties: {
+                  riskLevel: { type: "string", enum: ["low", "medium", "high", "critical"] },
+                  summary: { type: "string" },
+                  keyFindings: { type: "array", items: { type: "string" } },
+                  patterns: { type: "array", items: { type: "string" } },
+                  relatedPersons: { type: "array", items: { type: "string" } },
+                  anomalies: { type: "array", items: { type: "string" } },
+                  recommendations: { type: "array", items: { type: "string" } }
+                },
+                required: ["riskLevel", "summary", "keyFindings", "recommendations"],
+                additionalProperties: false
+              }
             }
-          }
-        }],
-        tool_choice: { type: "function", function: { name: "provide_analysis" } }
-      }),
-    });
+          }],
+          tool_choice: { type: "function", function: { name: "provide_analysis" } }
+        }),
+        signal: controller.signal
+      });
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      if (fetchError.name === 'AbortError') {
+        console.error('AI request timed out after 55 seconds');
+        return new Response(
+          JSON.stringify({ error: "Analysis timed out. Please try again." }),
+          { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      throw fetchError;
+    }
+    clearTimeout(timeoutId);
 
     if (!aiResponse.ok) {
       if (aiResponse.status === 429) {
