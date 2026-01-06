@@ -1395,13 +1395,22 @@ Deno.serve(async (req) => {
         }
         
         // Calculate confidence based on match quality and source type
-        let confidenceScore = 0.4;
+        // STRICT MATCHING: Only include results with exact name matches or very strong indicators
+        let confidenceScore = 0.2; // Base score is low - must earn confidence
         
-        // Boost for exact name match
+        // Name matching is the PRIMARY factor
         if (nameMatch.exact) {
-          confidenceScore = 0.65;
+          // Exact phrase match: "John Smith" found as exact phrase
+          confidenceScore = 0.70;
         } else if (nameMatch.partial) {
-          confidenceScore = 0.35;
+          // Both first and last name found but not as exact phrase
+          // This is less reliable - could be different people with same names
+          confidenceScore = 0.30;
+        } else {
+          // Neither exact nor partial match - skip this result entirely
+          // This prevents random unrelated results from appearing
+          console.log(`Skipping result with no name match: ${item.link}`);
+          continue;
         }
         
         // BIG BOOST for relative keyword match - if a keyword (like "Moira Petrie") appears
