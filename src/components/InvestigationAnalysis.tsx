@@ -3,29 +3,34 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Brain, AlertTriangle, Users, TrendingUp, Search, Loader2, Link as LinkIcon, RefreshCw, FileDown } from "lucide-react";
+import { Brain, AlertTriangle, Users, TrendingUp, Search, Loader2, Link as LinkIcon, RefreshCw, FileDown, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { generateAnalysisPDF } from "@/utils/analysisExport";
+import { generateAnalysisPDF, generateAnalysisPDFBlob, AnalysisResult } from "@/utils/analysisExport";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+
 interface InvestigationAnalysisProps {
   investigationId: string | null;
   active: boolean;
   target?: string;
 }
 
-interface AnalysisResult {
-  riskLevel: 'low' | 'medium' | 'high' | 'critical';
-  summary: string;
-  keyFindings: string[];
-  patterns: string[];
-  relatedPersons: string[];
-  recommendations: string[];
-  anomalies: string[];
-}
-
 const InvestigationAnalysis = ({ investigationId, active, target }: InvestigationAnalysisProps) => {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [emailDialogOpen, setEmailDialogOpen] = useState(false);
+  const [recipientEmail, setRecipientEmail] = useState("");
+  const [sendingEmail, setSendingEmail] = useState(false);
   const { toast } = useToast();
 
   const handleExportPDF = () => {
@@ -35,6 +40,42 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
       title: "PDF Exported",
       description: "Analysis report has been downloaded",
     });
+  };
+
+  const handleSendEmail = async () => {
+    if (!analysis || !recipientEmail) return;
+
+    setSendingEmail(true);
+    try {
+      const { base64 } = generateAnalysisPDFBlob(analysis, target);
+
+      const { data, error: fnError } = await supabase.functions.invoke('send-analysis-email', {
+        body: {
+          recipientEmail,
+          target: target || 'Unknown',
+          analysis,
+          pdfBase64: base64,
+        }
+      });
+
+      if (fnError) throw fnError;
+      if (data?.error) throw new Error(data.error);
+
+      toast({
+        title: "Email Sent",
+        description: `Analysis report sent to ${recipientEmail}`,
+      });
+      setEmailDialogOpen(false);
+      setRecipientEmail("");
+    } catch (err: any) {
+      toast({
+        title: "Failed to Send Email",
+        description: err.message || "Could not send the email",
+        variant: "destructive",
+      });
+    } finally {
+      setSendingEmail(false);
+    }
   };
 
   const analyzeInvestigation = async () => {
@@ -121,14 +162,65 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
         </div>
         <div className="flex items-center gap-2">
           {analysis && (
-            <Button
-              onClick={handleExportPDF}
-              variant="outline"
-              size="sm"
-            >
-              <FileDown className="w-4 h-4 mr-2" />
-              Export PDF
-            </Button>
+            <>
+              <Dialog open={emailDialogOpen} onOpenChange={setEmailDialogOpen}>
+                <DialogTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    <Mail className="w-4 h-4 mr-2" />
+                    Email Report
+                  </Button>
+                </DialogTrigger>
+                <DialogContent>
+                  <DialogHeader>
+                    <DialogTitle>Email Analysis Report</DialogTitle>
+                    <DialogDescription>
+                      Send the AI analysis report with PDF attachment to an email address.
+                    </DialogDescription>
+                  </DialogHeader>
+                  <div className="grid gap-4 py-4">
+                    <div className="grid gap-2">
+                      <Label htmlFor="email">Recipient Email</Label>
+                      <Input
+                        id="email"
+                        type="email"
+                        placeholder="recipient@example.com"
+                        value={recipientEmail}
+                        onChange={(e) => setRecipientEmail(e.target.value)}
+                      />
+                    </div>
+                  </div>
+                  <DialogFooter>
+                    <Button variant="outline" onClick={() => setEmailDialogOpen(false)}>
+                      Cancel
+                    </Button>
+                    <Button 
+                      onClick={handleSendEmail} 
+                      disabled={!recipientEmail || sendingEmail}
+                    >
+                      {sendingEmail ? (
+                        <>
+                          <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                          Sending...
+                        </>
+                      ) : (
+                        <>
+                          <Mail className="w-4 h-4 mr-2" />
+                          Send Email
+                        </>
+                      )}
+                    </Button>
+                  </DialogFooter>
+                </DialogContent>
+              </Dialog>
+              <Button
+                onClick={handleExportPDF}
+                variant="outline"
+                size="sm"
+              >
+                <FileDown className="w-4 h-4 mr-2" />
+                Export PDF
+              </Button>
+            </>
           )}
           <Button
             onClick={analyzeInvestigation}

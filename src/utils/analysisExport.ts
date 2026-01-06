@@ -1,6 +1,6 @@
 import jsPDF from "jspdf";
 
-interface AnalysisResult {
+export interface AnalysisResult {
   riskLevel: 'low' | 'medium' | 'high' | 'critical';
   summary: string;
   keyFindings: string[];
@@ -10,7 +10,14 @@ interface AnalysisResult {
   anomalies: string[];
 }
 
-export const generateAnalysisPDF = (analysis: AnalysisResult, target?: string) => {
+export const generateAnalysisPDFBlob = (analysis: AnalysisResult, target?: string): { blob: Blob; base64: string } => {
+  const doc = createAnalysisPDF(analysis, target);
+  const blob = doc.output('blob');
+  const base64 = doc.output('datauristring').split(',')[1];
+  return { blob, base64 };
+};
+
+const createAnalysisPDF = (analysis: AnalysisResult, target?: string): jsPDF => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 20;
@@ -206,7 +213,11 @@ export const generateAnalysisPDF = (analysis: AnalysisResult, target?: string) =
     );
   }
 
-  // Save
+  return doc;
+};
+
+export const generateAnalysisPDF = (analysis: AnalysisResult, target?: string) => {
+  const doc = createAnalysisPDF(analysis, target);
   const timestamp = new Date().toISOString().split('T')[0];
   const filename = target 
     ? `analysis-${target.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.pdf`
