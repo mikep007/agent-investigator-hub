@@ -10,19 +10,41 @@ export interface AnalysisResult {
   anomalies: string[];
 }
 
-export const generateAnalysisPDFBlob = (analysis: AnalysisResult, target?: string): { blob: Blob; base64: string } => {
-  const doc = createAnalysisPDF(analysis, target);
+export const generateAnalysisPDFBlob = async (analysis: AnalysisResult, target?: string): Promise<{ blob: Blob; base64: string }> => {
+  const doc = await createAnalysisPDF(analysis, target);
   const blob = doc.output('blob');
   const base64 = doc.output('datauristring').split(',')[1];
   return { blob, base64 };
 };
 
-const createAnalysisPDF = (analysis: AnalysisResult, target?: string): jsPDF => {
+const createAnalysisPDF = async (analysis: AnalysisResult, target?: string): Promise<jsPDF> => {
   const doc = new jsPDF();
   const pageWidth = doc.internal.pageSize.getWidth();
   const margin = 20;
   const contentWidth = pageWidth - margin * 2;
   let y = 20;
+
+  // Add logo at the top
+  try {
+    const logoUrl = '/images/webutation-logo-pdf.png';
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => {
+        const logoWidth = 50;
+        const logoHeight = (img.height / img.width) * logoWidth;
+        doc.addImage(img, 'PNG', margin, y, logoWidth, logoHeight);
+        y += logoHeight + 8;
+        resolve();
+      };
+      img.onerror = () => reject(new Error('Failed to load logo'));
+      img.src = logoUrl;
+    });
+  } catch (e) {
+    // Continue without logo if loading fails
+    console.warn('Could not load logo for PDF:', e);
+  }
 
   const checkAddPage = (requiredSpace: number) => {
     if (y + requiredSpace > doc.internal.pageSize.getHeight() - 30) {
@@ -216,8 +238,8 @@ const createAnalysisPDF = (analysis: AnalysisResult, target?: string): jsPDF => 
   return doc;
 };
 
-export const generateAnalysisPDF = (analysis: AnalysisResult, target?: string) => {
-  const doc = createAnalysisPDF(analysis, target);
+export const generateAnalysisPDF = async (analysis: AnalysisResult, target?: string) => {
+  const doc = await createAnalysisPDF(analysis, target);
   const timestamp = new Date().toISOString().split('T')[0];
   const filename = target 
     ? `analysis-${target.replace(/[^a-zA-Z0-9]/g, '_')}-${timestamp}.pdf`

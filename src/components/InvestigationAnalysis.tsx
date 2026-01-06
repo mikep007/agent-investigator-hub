@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Progress } from "@/components/ui/progress";
 import { Brain, AlertTriangle, Users, TrendingUp, Search, Loader2, Link as LinkIcon, RefreshCw, FileDown, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateAnalysisPDF, generateAnalysisPDFBlob, AnalysisResult } from "@/utils/analysisExport";
@@ -24,6 +25,8 @@ interface InvestigationAnalysisProps {
   target?: string;
 }
 
+const ESTIMATED_ANALYSIS_TIME = 55; // seconds
+
 const InvestigationAnalysis = ({ investigationId, active, target }: InvestigationAnalysisProps) => {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
@@ -31,11 +34,46 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
   const [emailDialogOpen, setEmailDialogOpen] = useState(false);
   const [recipientEmail, setRecipientEmail] = useState("");
   const [sendingEmail, setSendingEmail] = useState(false);
+  const [progress, setProgress] = useState(0);
+  const [elapsedTime, setElapsedTime] = useState(0);
+  const progressIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const { toast } = useToast();
 
-  const handleExportPDF = () => {
+  const startProgress = () => {
+    setProgress(0);
+    setElapsedTime(0);
+    progressIntervalRef.current = setInterval(() => {
+      setElapsedTime((prev) => {
+        const newElapsed = prev + 1;
+        // Asymptotic progress - never quite reaches 100% until complete
+        const newProgress = Math.min(95, (newElapsed / ESTIMATED_ANALYSIS_TIME) * 90);
+        setProgress(newProgress);
+        return newElapsed;
+      });
+    }, 1000);
+  };
+
+  const stopProgress = (completed: boolean) => {
+    if (progressIntervalRef.current) {
+      clearInterval(progressIntervalRef.current);
+      progressIntervalRef.current = null;
+    }
+    if (completed) {
+      setProgress(100);
+    }
+  };
+
+  useEffect(() => {
+    return () => {
+      if (progressIntervalRef.current) {
+        clearInterval(progressIntervalRef.current);
+      }
+    };
+  }, []);
+
+  const handleExportPDF = async () => {
     if (!analysis) return;
-    generateAnalysisPDF(analysis, target);
+    await generateAnalysisPDF(analysis, target);
     toast({
       title: "PDF Exported",
       description: "Analysis report has been downloaded",
@@ -47,7 +85,7 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
 
     setSendingEmail(true);
     try {
-      const { base64 } = generateAnalysisPDFBlob(analysis, target);
+      const { base64 } = await generateAnalysisPDFBlob(analysis, target);
 
       const { data, error: fnError } = await supabase.functions.invoke('send-analysis-email', {
         body: {
@@ -91,6 +129,7 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
     setLoading(true);
     setAnalysis(null);
     setError(null);
+    startProgress();
 
     try {
       const { data, error: fnError } = await supabase.functions.invoke('analyze-investigation', {
@@ -104,6 +143,7 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
       }
 
       setAnalysis(data.analysis);
+      stopProgress(true);
       toast({
         title: "Analysis Complete",
         description: "AI-powered investigation analysis is ready",
@@ -111,6 +151,7 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
     } catch (err: any) {
       const errorMessage = err.message || "Failed to analyze investigation";
       setError(errorMessage);
+      stopProgress(false);
       toast({
         title: "Analysis Failed",
         description: errorMessage,
@@ -243,11 +284,32 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
       </div>
 
       {loading && !analysis && (
-        <Card className="p-12 flex items-center justify-center">
-          <div className="text-center space-y-3">
-            <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
-            <p className="text-muted-foreground">Analyzing investigation data...</p>
-            <p className="text-sm text-muted-foreground">This may take a few moments</p>
+        <Card className="p-8">
+          <div className="space-y-6">
+            <div className="text-center space-y-3">
+              <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
+              <p className="text-muted-foreground font-medium">Analyzing investigation data...</p>
+            </div>
+            
+            <div className="space-y-3">
+              <div className="flex justify-between text-sm">
+                <span className="text-muted-foreground">Progress</span>
+                <span className="text-muted-foreground font-medium">{Math.round(progress)}%</span>
+              </div>
+              <Progress value={progress} className="h-2" />
+              <div className="flex justify-between text-xs text-muted-foreground">
+                <span>Elapsed: {elapsedTime}s</span>
+                <span>
+                  {elapsedTime < ESTIMATED_ANALYSIS_TIME 
+                    ? `Est. remaining: ~${Math.max(0, ESTIMATED_ANALYSIS_TIME - elapsedTime)}s`
+                    : 'Finishing up...'}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-xs text-center text-muted-foreground">
+              AI is synthesizing findings, detecting patterns, and generating recommendations
+            </p>
           </div>
         </Card>
       )}
