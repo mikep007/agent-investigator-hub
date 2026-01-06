@@ -3,7 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Brain, AlertTriangle, Users, TrendingUp, Search, Loader2, Link as LinkIcon } from "lucide-react";
+import { Brain, AlertTriangle, Users, TrendingUp, Search, Loader2, Link as LinkIcon, RefreshCw } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 
 interface InvestigationAnalysisProps {
@@ -24,6 +24,7 @@ interface AnalysisResult {
 const InvestigationAnalysis = ({ investigationId, active }: InvestigationAnalysisProps) => {
   const [analysis, setAnalysis] = useState<AnalysisResult | null>(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const analyzeInvestigation = async () => {
@@ -38,13 +39,14 @@ const InvestigationAnalysis = ({ investigationId, active }: InvestigationAnalysi
 
     setLoading(true);
     setAnalysis(null);
+    setError(null);
 
     try {
-      const { data, error } = await supabase.functions.invoke('analyze-investigation', {
+      const { data, error: fnError } = await supabase.functions.invoke('analyze-investigation', {
         body: { investigationId }
       });
 
-      if (error) throw error;
+      if (fnError) throw fnError;
 
       if (data.error) {
         throw new Error(data.error);
@@ -55,10 +57,12 @@ const InvestigationAnalysis = ({ investigationId, active }: InvestigationAnalysi
         title: "Analysis Complete",
         description: "AI-powered investigation analysis is ready",
       });
-    } catch (error: any) {
+    } catch (err: any) {
+      const errorMessage = err.message || "Failed to analyze investigation";
+      setError(errorMessage);
       toast({
         title: "Analysis Failed",
-        description: error.message || "Failed to analyze investigation",
+        description: errorMessage,
         variant: "destructive",
       });
     } finally {
@@ -130,6 +134,27 @@ const InvestigationAnalysis = ({ investigationId, active }: InvestigationAnalysi
             <Loader2 className="w-12 h-12 mx-auto animate-spin text-primary" />
             <p className="text-muted-foreground">Analyzing investigation data...</p>
             <p className="text-sm text-muted-foreground">This may take a few moments</p>
+          </div>
+        </Card>
+      )}
+
+      {/* Error State with Retry */}
+      {error && !loading && !analysis && (
+        <Card className="p-8 border-destructive/50 bg-destructive/5">
+          <div className="text-center space-y-4">
+            <AlertTriangle className="w-12 h-12 mx-auto text-destructive" />
+            <div>
+              <h3 className="text-lg font-semibold text-destructive">Analysis Failed</h3>
+              <p className="text-sm text-muted-foreground mt-1">{error}</p>
+            </div>
+            <Button
+              onClick={analyzeInvestigation}
+              variant="outline"
+              className="border-destructive/50 hover:bg-destructive/10"
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              Retry Analysis
+            </Button>
           </div>
         </Card>
       )}
