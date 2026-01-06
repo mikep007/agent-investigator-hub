@@ -51,22 +51,53 @@ interface PendingPivot {
   value: string;
 }
 
+const STORAGE_KEY = 'osint-investigation-state';
+
 const Index = () => {
-  const [activeInvestigation, setActiveInvestigation] = useState(false);
-  const [currentInvestigationId, setCurrentInvestigationId] = useState<string | null>(null);
+  // Load initial state from sessionStorage
+  const loadPersistedState = () => {
+    try {
+      const stored = sessionStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        return JSON.parse(stored);
+      }
+    } catch (e) {
+      console.error('Failed to load persisted state:', e);
+    }
+    return null;
+  };
+
+  const persistedState = loadPersistedState();
+
+  const [activeInvestigation, setActiveInvestigation] = useState(persistedState?.activeInvestigation ?? false);
+  const [currentInvestigationId, setCurrentInvestigationId] = useState<string | null>(persistedState?.currentInvestigationId ?? null);
   const [loading, setLoading] = useState(false);
   const [generatingReport, setGeneratingReport] = useState(false);
-  const [report, setReport] = useState<{ report: string; target: string; generatedAt: string; findingsCount: number } | null>(null);
-  const [targetName, setTargetName] = useState<string>("");
+  const [report, setReport] = useState<{ report: string; target: string; generatedAt: string; findingsCount: number } | null>(persistedState?.report ?? null);
+  const [targetName, setTargetName] = useState<string>(persistedState?.targetName ?? "");
   const [pivotSearchData, setPivotSearchData] = useState<Partial<SearchData> | null>(null);
   const [pivotConfirmDialog, setPivotConfirmDialog] = useState(false);
   const [pendingPivot, setPendingPivot] = useState<PendingPivot | null>(null);
   const [showSaveDialog, setShowSaveDialog] = useState(false);
-  const [investigationHistory, setInvestigationHistory] = useState<InvestigationHistoryItem[]>([]);
-  const [originalSearchData, setOriginalSearchData] = useState<SearchData | null>(null);
-  const [findings, setFindings] = useState<any[]>([]);
+  const [investigationHistory, setInvestigationHistory] = useState<InvestigationHistoryItem[]>(persistedState?.investigationHistory ?? []);
+  const [originalSearchData, setOriginalSearchData] = useState<SearchData | null>(persistedState?.originalSearchData ?? null);
+  const [findings, setFindings] = useState<any[]>(persistedState?.findings ?? []);
   const navigate = useNavigate();
   const { toast } = useToast();
+
+  // Persist state to sessionStorage whenever key values change
+  useEffect(() => {
+    const stateToStore = {
+      activeInvestigation,
+      currentInvestigationId,
+      report,
+      targetName,
+      investigationHistory,
+      originalSearchData,
+      findings,
+    };
+    sessionStorage.setItem(STORAGE_KEY, JSON.stringify(stateToStore));
+  }, [activeInvestigation, currentInvestigationId, report, targetName, investigationHistory, originalSearchData, findings]);
 
   useEffect(() => {
     const checkAuth = async () => {
