@@ -132,6 +132,31 @@ const GoogleSearchResults = ({
       .sort((a, b) => b.count - a.count);
   }, [queriesUsed]);
 
+  // Calculate corroboration stats for confirmed results
+  const corroborationStats = useMemo(() => {
+    const stats = {
+      phone: 0,
+      email: 0,
+      username: 0,
+      location: 0,
+      relative: 0,
+      keywords: 0,
+      nameMatch: 0,
+    };
+
+    confirmedResults.forEach(item => {
+      if (item.hasPhone) stats.phone++;
+      if (item.hasEmail) stats.email++;
+      if (item.hasUsername) stats.username++;
+      if (item.hasLocation) stats.location++;
+      if (item.hasKnownRelative || item.hasRelativeMatch) stats.relative++;
+      if (item.hasKeywords && item.keywordMatches?.length) stats.keywords++;
+      if (item.isExactMatch) stats.nameMatch++;
+    });
+
+    return stats;
+  }, [confirmedResults]);
+
   const filterResults = (results: WebResultItem[]) => {
     if (!filter.trim()) return results;
     const query = filter.toLowerCase();
@@ -768,6 +793,54 @@ const GoogleSearchResults = ({
               Confirmed Matches ({filteredConfirmed.length})
             </h4>
           </div>
+          
+          {/* Corroboration Summary Bar */}
+          <div className="flex items-center gap-3 flex-wrap p-3 bg-green-500/5 border border-green-500/20 rounded-lg">
+            <span className="text-xs font-medium text-green-600 dark:text-green-400">Corroborating Factors:</span>
+            {corroborationStats.nameMatch > 0 && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <Check className="h-3.5 w-3.5 text-blue-500" />
+                <span className="text-muted-foreground">{corroborationStats.nameMatch} with name</span>
+              </div>
+            )}
+            {corroborationStats.phone > 0 && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <Phone className="h-3.5 w-3.5 text-orange-500" />
+                <span className="text-muted-foreground">{corroborationStats.phone} with phone</span>
+              </div>
+            )}
+            {corroborationStats.email > 0 && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <Mail className="h-3.5 w-3.5 text-cyan-500" />
+                <span className="text-muted-foreground">{corroborationStats.email} with email</span>
+              </div>
+            )}
+            {corroborationStats.username > 0 && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <User className="h-3.5 w-3.5 text-indigo-500" />
+                <span className="text-muted-foreground">{corroborationStats.username} with username</span>
+              </div>
+            )}
+            {corroborationStats.location > 0 && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <MapPin className="h-3.5 w-3.5 text-green-500" />
+                <span className="text-muted-foreground">{corroborationStats.location} with location</span>
+              </div>
+            )}
+            {corroborationStats.relative > 0 && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <Users className="h-3.5 w-3.5 text-pink-500" />
+                <span className="text-muted-foreground">{corroborationStats.relative} with relative</span>
+              </div>
+            )}
+            {corroborationStats.keywords > 0 && (
+              <div className="flex items-center gap-1.5 text-xs">
+                <Search className="h-3.5 w-3.5 text-purple-500" />
+                <span className="text-muted-foreground">{corroborationStats.keywords} with keywords</span>
+              </div>
+            )}
+          </div>
+          
           <div className="space-y-3 pl-4">
             {filteredConfirmed.map((item, idx) => renderResultItem(item, idx, true, idx))}
           </div>
