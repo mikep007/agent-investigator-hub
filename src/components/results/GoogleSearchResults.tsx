@@ -109,6 +109,7 @@ const GoogleSearchResults = ({
   const [verifiedLinks, setVerifiedLinks] = useState<Set<string>>(new Set());
   const [inaccurateLinks, setInaccurateLinks] = useState<Set<string>>(new Set());
   const [focusedIndex, setFocusedIndex] = useState<number>(-1);
+  const [activeCorroborationFilter, setActiveCorroborationFilter] = useState<string | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const resultRefs = useRef<(HTMLDivElement | null)[]>([]);
 
@@ -168,7 +169,25 @@ const GoogleSearchResults = ({
     );
   };
 
-  const filteredConfirmed = filterResults(confirmedResults);
+  // Filter by corroboration type
+  const filterByCorroboration = (results: WebResultItem[]) => {
+    if (!activeCorroborationFilter) return results;
+    
+    return results.filter(item => {
+      switch (activeCorroborationFilter) {
+        case 'name': return item.isExactMatch;
+        case 'phone': return item.hasPhone;
+        case 'email': return item.hasEmail;
+        case 'username': return item.hasUsername;
+        case 'location': return item.hasLocation;
+        case 'relative': return item.hasKnownRelative || item.hasRelativeMatch;
+        case 'keywords': return item.hasKeywords && item.keywordMatches?.length;
+        default: return true;
+      }
+    });
+  };
+
+  const filteredConfirmed = filterByCorroboration(filterResults(confirmedResults));
   const filteredPossible = filterResults(possibleResults);
   const totalResults = confirmedResults.length + possibleResults.length;
   const filteredTotal = filteredConfirmed.length + filteredPossible.length;
@@ -792,6 +811,11 @@ const GoogleSearchResults = ({
             <h4 className="font-medium text-green-600 dark:text-green-400">
               Confirmed Matches ({filteredConfirmed.length})
             </h4>
+            {activeCorroborationFilter && (
+              <Badge variant="secondary" className="text-xs gap-1">
+                Filtered by: {activeCorroborationFilter}
+              </Badge>
+            )}
           </div>
           
           {/* Corroboration Summary with Pie Chart */}
@@ -859,55 +883,118 @@ const GoogleSearchResults = ({
                       </Badge>
                     </div>
                     
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-xs text-muted-foreground">Click to filter:</span>
+                      {activeCorroborationFilter && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="h-6 px-2 text-xs gap-1"
+                          onClick={() => setActiveCorroborationFilter(null)}
+                        >
+                          <X className="h-3 w-3" />
+                          Clear filter
+                        </Button>
+                      )}
+                    </div>
                     <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
                       {corroborationStats.nameMatch > 0 && (
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-blue-500/10">
+                        <button
+                          onClick={() => setActiveCorroborationFilter(activeCorroborationFilter === 'name' ? null : 'name')}
+                          className={`flex items-center gap-2 p-2 rounded-md transition-all cursor-pointer ${
+                            activeCorroborationFilter === 'name' 
+                              ? 'bg-blue-500/30 ring-2 ring-blue-500' 
+                              : 'bg-blue-500/10 hover:bg-blue-500/20'
+                          }`}
+                        >
                           <div className="w-3 h-3 rounded-full bg-blue-500" />
                           <Check className="h-3.5 w-3.5 text-blue-500" />
                           <span className="text-xs text-muted-foreground">{corroborationStats.nameMatch} name</span>
-                        </div>
+                        </button>
                       )}
                       {corroborationStats.phone > 0 && (
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-orange-500/10">
+                        <button
+                          onClick={() => setActiveCorroborationFilter(activeCorroborationFilter === 'phone' ? null : 'phone')}
+                          className={`flex items-center gap-2 p-2 rounded-md transition-all cursor-pointer ${
+                            activeCorroborationFilter === 'phone' 
+                              ? 'bg-orange-500/30 ring-2 ring-orange-500' 
+                              : 'bg-orange-500/10 hover:bg-orange-500/20'
+                          }`}
+                        >
                           <div className="w-3 h-3 rounded-full bg-orange-500" />
                           <Phone className="h-3.5 w-3.5 text-orange-500" />
                           <span className="text-xs text-muted-foreground">{corroborationStats.phone} phone</span>
-                        </div>
+                        </button>
                       )}
                       {corroborationStats.email > 0 && (
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-cyan-500/10">
+                        <button
+                          onClick={() => setActiveCorroborationFilter(activeCorroborationFilter === 'email' ? null : 'email')}
+                          className={`flex items-center gap-2 p-2 rounded-md transition-all cursor-pointer ${
+                            activeCorroborationFilter === 'email' 
+                              ? 'bg-cyan-500/30 ring-2 ring-cyan-500' 
+                              : 'bg-cyan-500/10 hover:bg-cyan-500/20'
+                          }`}
+                        >
                           <div className="w-3 h-3 rounded-full bg-cyan-500" />
                           <Mail className="h-3.5 w-3.5 text-cyan-500" />
                           <span className="text-xs text-muted-foreground">{corroborationStats.email} email</span>
-                        </div>
+                        </button>
                       )}
                       {corroborationStats.username > 0 && (
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-indigo-500/10">
+                        <button
+                          onClick={() => setActiveCorroborationFilter(activeCorroborationFilter === 'username' ? null : 'username')}
+                          className={`flex items-center gap-2 p-2 rounded-md transition-all cursor-pointer ${
+                            activeCorroborationFilter === 'username' 
+                              ? 'bg-indigo-500/30 ring-2 ring-indigo-500' 
+                              : 'bg-indigo-500/10 hover:bg-indigo-500/20'
+                          }`}
+                        >
                           <div className="w-3 h-3 rounded-full bg-indigo-500" />
                           <User className="h-3.5 w-3.5 text-indigo-500" />
                           <span className="text-xs text-muted-foreground">{corroborationStats.username} username</span>
-                        </div>
+                        </button>
                       )}
                       {corroborationStats.location > 0 && (
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-green-500/10">
+                        <button
+                          onClick={() => setActiveCorroborationFilter(activeCorroborationFilter === 'location' ? null : 'location')}
+                          className={`flex items-center gap-2 p-2 rounded-md transition-all cursor-pointer ${
+                            activeCorroborationFilter === 'location' 
+                              ? 'bg-green-500/30 ring-2 ring-green-500' 
+                              : 'bg-green-500/10 hover:bg-green-500/20'
+                          }`}
+                        >
                           <div className="w-3 h-3 rounded-full bg-green-500" />
                           <MapPin className="h-3.5 w-3.5 text-green-500" />
                           <span className="text-xs text-muted-foreground">{corroborationStats.location} location</span>
-                        </div>
+                        </button>
                       )}
                       {corroborationStats.relative > 0 && (
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-pink-500/10">
+                        <button
+                          onClick={() => setActiveCorroborationFilter(activeCorroborationFilter === 'relative' ? null : 'relative')}
+                          className={`flex items-center gap-2 p-2 rounded-md transition-all cursor-pointer ${
+                            activeCorroborationFilter === 'relative' 
+                              ? 'bg-pink-500/30 ring-2 ring-pink-500' 
+                              : 'bg-pink-500/10 hover:bg-pink-500/20'
+                          }`}
+                        >
                           <div className="w-3 h-3 rounded-full bg-pink-500" />
                           <Users className="h-3.5 w-3.5 text-pink-500" />
                           <span className="text-xs text-muted-foreground">{corroborationStats.relative} relative</span>
-                        </div>
+                        </button>
                       )}
                       {corroborationStats.keywords > 0 && (
-                        <div className="flex items-center gap-2 p-2 rounded-md bg-purple-500/10">
+                        <button
+                          onClick={() => setActiveCorroborationFilter(activeCorroborationFilter === 'keywords' ? null : 'keywords')}
+                          className={`flex items-center gap-2 p-2 rounded-md transition-all cursor-pointer ${
+                            activeCorroborationFilter === 'keywords' 
+                              ? 'bg-purple-500/30 ring-2 ring-purple-500' 
+                              : 'bg-purple-500/10 hover:bg-purple-500/20'
+                          }`}
+                        >
                           <div className="w-3 h-3 rounded-full bg-purple-500" />
                           <Search className="h-3.5 w-3.5 text-purple-500" />
                           <span className="text-xs text-muted-foreground">{corroborationStats.keywords} keywords</span>
-                        </div>
+                        </button>
                       )}
                     </div>
                   </div>
