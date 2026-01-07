@@ -103,10 +103,12 @@ function getStateRegistry(stateInput: string): { domain: string; name: string; s
 }
 
 // Check if full name appears as an exact phrase or adjacent words
+// STRICT: Both names must appear CLOSE together (within ~60 chars) to count as a match
 function checkNameMatch(text: string, fullName: string): { exact: boolean; partial: boolean } {
   const textLower = text.toLowerCase();
   const nameLower = fullName.toLowerCase().trim();
   
+  // Exact phrase match: "John Smith" as-is
   if (textLower.includes(nameLower)) {
     return { exact: true, partial: true };
   }
@@ -116,19 +118,55 @@ function checkNameMatch(text: string, fullName: string): { exact: boolean; parti
     const firstName = nameParts[0];
     const lastName = nameParts[nameParts.length - 1];
     
-    const forwardPattern = new RegExp(`\\b${firstName}\\b[^a-z]{0,10}\\b${lastName}\\b`, 'i');
-    const reversePattern = new RegExp(`\\b${lastName}\\b[,;]?\\s*\\b${firstName}\\b`, 'i');
+    // Escape special regex characters in names
+    const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const firstEsc = escapeRegex(firstName);
+    const lastEsc = escapeRegex(lastName);
+    
+    // Adjacent match: "John A. Smith" or "John Smith" (up to 15 chars between)
+    const forwardPattern = new RegExp(`\\b${firstEsc}\\b.{0,15}\\b${lastEsc}\\b`, 'i');
+    const reversePattern = new RegExp(`\\b${lastEsc}\\b[,;]?\\s{0,5}\\b${firstEsc}\\b`, 'i');
     
     if (forwardPattern.test(text) || reversePattern.test(text)) {
       return { exact: true, partial: true };
     }
     
-    const hasFirst = new RegExp(`\\b${firstName}\\b`, 'i').test(text);
-    const hasLast = new RegExp(`\\b${lastName}\\b`, 'i').test(text);
+    // Proximity check: both names appear, but must be within 60 characters of each other
+    // This prevents matching "Michael" on page 1 and "Petrie" on page 50 of a long document
+    const firstRegex = new RegExp(`\\b${firstEsc}\\b`, 'gi');
+    const lastRegex = new RegExp(`\\b${lastEsc}\\b`, 'gi');
     
-    if (hasFirst && hasLast) {
+    const firstMatches: number[] = [];
+    const lastMatches: number[] = [];
+    
+    let match;
+    while ((match = firstRegex.exec(textLower)) !== null) {
+      firstMatches.push(match.index);
+    }
+    while ((match = lastRegex.exec(textLower)) !== null) {
+      lastMatches.push(match.index);
+    }
+    
+    // Check if any first/last name occurrences are within 60 chars of each other
+    const PROXIMITY_THRESHOLD = 60;
+    let hasProximateMatch = false;
+    
+    for (const fPos of firstMatches) {
+      for (const lPos of lastMatches) {
+        if (Math.abs(fPos - lPos) <= PROXIMITY_THRESHOLD) {
+          hasProximateMatch = true;
+          break;
+        }
+      }
+      if (hasProximateMatch) break;
+    }
+    
+    if (hasProximateMatch) {
       return { exact: false, partial: true };
     }
+    
+    // Names appear in text but too far apart - NOT a valid match
+    // This prevents random documents mentioning common names from matching
   }
   
   return { exact: false, partial: false };
