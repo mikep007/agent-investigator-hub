@@ -125,10 +125,16 @@ const OSINTResultsGrid = ({
           });
       }
 
-      // Social search results
+      // Social search results - exclude "Potential Relative" web search noise
       if ((finding.agent_type === 'Social' || finding.agent_type === 'Social_name' || finding.agent_type === 'Idcrawl') && data.profiles) {
         data.profiles
-          .filter((p: any) => p.exists)
+          .filter((p: any) => {
+            // Must exist
+            if (!p.exists) return false;
+            // Exclude "Potential Relative" results - these are web search snippets, not actual profiles
+            if (p.platform?.includes('Potential Relative')) return false;
+            return true;
+          })
           .forEach((p: any) => {
             if (!seenUrls.has(p.url)) {
               seenUrls.add(p.url);
