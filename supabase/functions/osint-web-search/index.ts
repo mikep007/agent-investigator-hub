@@ -1358,14 +1358,31 @@ Deno.serve(async (req) => {
         }
         
         // Check location presence
+        // We treat location corroboration as: (city OR state) match.
+        // This aligns with the app rule: name + state OR name + city counts as corroboration.
         let locationPresent = false;
         if (location && location !== 'provided') {
-          const locationParts = location.toLowerCase().split(',').map((p: string) => p.trim());
-          locationPresent = locationParts.some((part: string) => 
-            part.length > 2 && textToCheck.toLowerCase().includes(part)
-          );
+          const locationParts = location
+            .split(',')
+            .map((p: string) => p.trim())
+            .filter((p: string) => p.length > 0);
+
+          const cityPart = locationParts[0]?.toLowerCase() || '';
+          const statePart = (locationParts[1] || '').trim();
+          const stateLower = statePart.toLowerCase();
+
+          const textLower = textToCheck.toLowerCase();
+
+          const cityMatch = cityPart.length >= 3 && textLower.includes(cityPart);
+
+          // Allow 2-letter US state codes (e.g., "PA") with word-boundary matching.
+          const stateMatch = /^[a-z]{2}$/.test(stateLower)
+            ? new RegExp(`\\b${stateLower}\\b`, 'i').test(textToCheck)
+            : (stateLower.length >= 3 && textLower.includes(stateLower));
+
+          locationPresent = cityMatch || stateMatch;
         }
-        
+
         // Check keyword matches
         const keywordMatches: string[] = [];
         let hasRelativeKeywordMatch = false;
@@ -1378,14 +1395,17 @@ Deno.serve(async (req) => {
             }
           }
         }
-        
+
         // Check phone presence
+        // IMPORTANT: Don't use partial (last-7) matching — it creates false positives.
         let phonePresent = false;
         if (phone) {
           const cleanPhone = phone.replace(/\D/g, '');
-          phonePresent = textToCheck.includes(cleanPhone) || 
-                         textToCheck.includes(phone) ||
-                         (cleanPhone.length >= 7 && textToCheck.includes(cleanPhone.slice(-7)));
+          const textDigits = textToCheck.replace(/\D/g, '');
+          // Require a full 10+ digit match in the digit-stripped text.
+          if (cleanPhone.length >= 10) {
+            phonePresent = textDigits.includes(cleanPhone);
+          }
         }
         
         // Check email presence
@@ -1494,10 +1514,11 @@ Deno.serve(async (req) => {
           confidenceScore += 0.02;
         }
         
-        // Boost for obituary/people search sources that found relatives
+        // NOTE: Finding *new* relatives mentioned on a page (e.g., obituaries) is useful for leads,
+        // but it is NOT corroboration of the target identity against the user's input.
+        // So: do not count extracted relatives as a corroborating factor for "Confirmed".
         if (isObituaryOrPeopleSearch && foundRelatives.length > 0) {
           confidenceScore += 0.05;
-          corroboratingFactors++;
         }
         
         // CRITICAL: If name-only (no corroborating factors), cap below confirmed threshold
