@@ -1395,17 +1395,22 @@ Deno.serve(async (req) => {
         }
         
         // Calculate confidence based on match quality and source type
-        // STRICT MATCHING: Only include results with exact name matches or very strong indicators
+        // STRICT MATCHING: Confirmed requires name + at least ONE corroborating data point
+        // Name-only matches (without phone, email, username, location, relative, or keyword) are POSSIBLE not CONFIRMED
         let confidenceScore = 0.2; // Base score is low - must earn confidence
         
-        // Name matching is the PRIMARY factor
+        // Count corroborating evidence beyond just the name
+        let corroboratingFactors = 0;
+        
+        // Name matching is required but NOT SUFFICIENT for confirmed status
         if (nameMatch.exact) {
           // Exact phrase match: "John Smith" found as exact phrase
-          confidenceScore = 0.70;
+          // Base score for exact name is 0.45 - below threshold, needs corroboration
+          confidenceScore = 0.45;
         } else if (nameMatch.partial) {
           // Both first and last name found but not as exact phrase
           // This is less reliable - could be different people with same names
-          confidenceScore = 0.30;
+          confidenceScore = 0.25;
         } else {
           // Neither exact nor partial match - skip this result entirely
           // This prevents random unrelated results from appearing
@@ -1413,52 +1418,99 @@ Deno.serve(async (req) => {
           continue;
         }
         
-        // BIG BOOST for relative keyword match - if a keyword (like "Moira Petrie") appears
-        // and shares the same surname as the target, this is very likely a relevant result
-        if (hasRelativeKeywordMatch) {
-          confidenceScore += 0.35; // Significant boost for relative connection
-          console.log(`Boosting confidence for "${item.link}" - matched relative keyword`);
+        // CORROBORATING FACTORS - each one adds to confidence and counts toward "confirmed" status
+        
+        // Phone match - STRONG corroboration (+20%)
+        if (phonePresent) {
+          confidenceScore += 0.20;
+          corroboratingFactors++;
+          console.log(`  [+] Phone match for ${item.link}`);
         }
         
-        // Boost for location co-occurrence (+15%)
+        // Email match - STRONG corroboration (+20%)
+        if (emailPresent) {
+          confidenceScore += 0.20;
+          corroboratingFactors++;
+          console.log(`  [+] Email match for ${item.link}`);
+        }
+        
+        // Location match - MODERATE corroboration (+15%)
         if (locationPresent) {
           confidenceScore += 0.15;
+          corroboratingFactors++;
+          console.log(`  [+] Location match for ${item.link}`);
         }
         
-        // Boost for keyword matches (+10% per keyword, max +20%)
+        // Relative keyword match - STRONG corroboration (+20%)
+        // If a keyword (like "Moira Petrie") appears and shares the same surname as the target
+        if (hasRelativeKeywordMatch) {
+          confidenceScore += 0.20;
+          corroboratingFactors++;
+          console.log(`  [+] Relative keyword match for ${item.link}`);
+        }
+        
+        // Other keyword matches - MODERATE corroboration (+15% for any keywords)
         if (keywordMatches.length > 0 && !hasRelativeKeywordMatch) {
-          // Only add standard keyword boost if we didn't already add relative boost
-          confidenceScore += Math.min(0.20, keywordMatches.length * 0.10);
-        }
-        
-        // Boost for phone match (+15%)
-        if (phonePresent) {
           confidenceScore += 0.15;
+          corroboratingFactors++;
+          console.log(`  [+] Keyword match for ${item.link}: ${keywordMatches.join(', ')}`);
         }
         
-        // Boost for email match (+15%)
-        if (emailPresent) {
-          confidenceScore += 0.15;
+        // Username match (check if result URL/text contains the username)
+        let usernamePresent = false;
+        const cleanUsername = (searchData?.username || '').replace(/^@/, '').toLowerCase().trim();
+        if (cleanUsername && cleanUsername.length >= 3) {
+          if (textToCheck.toLowerCase().includes(cleanUsername) || 
+              item.link.toLowerCase().includes(cleanUsername)) {
+            usernamePresent = true;
+            confidenceScore += 0.20;
+            corroboratingFactors++;
+            console.log(`  [+] Username match for ${item.link}`);
+          }
         }
         
-        // Boost for high-value source types
+        // Relatives from input match (check if any known relatives appear in the result)
+        let relativesPresent = false;
+        const inputRelatives = relatives || [];
+        for (const rel of inputRelatives) {
+          const relName = typeof rel === 'string' ? rel : rel.name;
+          if (relName && textToCheck.toLowerCase().includes(relName.toLowerCase())) {
+            relativesPresent = true;
+            confidenceScore += 0.20;
+            corroboratingFactors++;
+            console.log(`  [+] Known relative match for ${item.link}: ${relName}`);
+            break; // Only count once
+          }
+        }
+        
+        // Small boost for high-value source types (but not enough to confirm alone)
         if (result.queryType === 'keywords_combined') {
-          confidenceScore += 0.10;
-        } else if (result.queryType === 'social_media') {
-          confidenceScore += 0.08;
-        } else if (result.queryType === 'official_sources') {
-          confidenceScore += 0.08;
-        } else if (result.queryType === 'people_finders') {
           confidenceScore += 0.05;
+        } else if (result.queryType === 'social_media') {
+          confidenceScore += 0.03;
+        } else if (result.queryType === 'official_sources') {
+          confidenceScore += 0.03;
+        } else if (result.queryType === 'people_finders') {
+          confidenceScore += 0.02;
         }
         
         // Boost for obituary/people search sources that found relatives
         if (isObituaryOrPeopleSearch && foundRelatives.length > 0) {
-          confidenceScore += 0.10;
+          confidenceScore += 0.05;
+          corroboratingFactors++;
+        }
+        
+        // CRITICAL: If name-only (no corroborating factors), cap below confirmed threshold
+        // This ensures name-only matches NEVER appear in "Confirmed Matches"
+        if (corroboratingFactors === 0) {
+          confidenceScore = Math.min(confidenceScore, 0.55); // Below 0.6 threshold
+          console.log(`  [!] Name-only match, capping at possible: ${item.link}`);
         }
         
         // Cap at 0.98
         confidenceScore = Math.min(0.98, confidenceScore);
+        
+        console.log(`  Final score for ${item.link}: ${confidenceScore.toFixed(2)} (${corroboratingFactors} corroborating factors)`);
         
         const processedItem = {
           title: item.title || '',
@@ -1474,6 +1526,9 @@ Deno.serve(async (req) => {
           foundRelatives: foundRelatives.length > 0 ? foundRelatives : undefined,
           hasPhone: phonePresent,
           hasEmail: emailPresent,
+          hasUsername: usernamePresent,
+          hasKnownRelative: relativesPresent,
+          corroboratingFactors,
           sourceType: result.queryType,
           queryDescription: result.queryDescription
         };
