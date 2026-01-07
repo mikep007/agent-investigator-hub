@@ -30,22 +30,28 @@ const RelatedPersonsCard = ({
   onPivot
 }: RelatedPersonsCardProps) => {
   
-  // Extract confirmed relatives from people search findings
+  // Extract confirmed relatives ONLY from verified OSINT data sources
+  // NOT from web search results which may be unreliable
   const extractConfirmedRelatives = (): PersonCategory[] => {
     const confirmed: PersonCategory[] = [];
     
     findings.forEach(finding => {
+      // ONLY accept relatives from People_search findings (actual people databases)
+      // These come from sources like FamilyTreeNow, Whitepages, etc. that have structured data
       if (finding.agent_type === 'People_search' && finding.data?.results) {
         finding.data.results.forEach((result: any) => {
-          if (result.relatives) {
+          if (result.relatives && Array.isArray(result.relatives)) {
             result.relatives.forEach((rel: any) => {
               const name = typeof rel === 'string' ? rel : rel.name;
               const relationship = typeof rel === 'object' ? rel.relationship : undefined;
-              if (name && !confirmed.find(c => c.name.toLowerCase() === name.toLowerCase())) {
+              // Only add if we have a valid name and it's not already in the list
+              if (name && 
+                  name.trim().length > 2 && 
+                  !confirmed.find(c => c.name.toLowerCase() === name.toLowerCase())) {
                 confirmed.push({
-                  name,
+                  name: name.trim(),
                   source: 'confirmed',
-                  relationship,
+                  relationship: relationship || 'From people database',
                   confidence: finding.confidence_score || 0.7
                 });
               }
@@ -54,59 +60,32 @@ const RelatedPersonsCard = ({
         });
       }
 
-      // Also check for names appearing together in breach data
-      if (finding.agent_type === 'Breach' && finding.data?.sources) {
-        finding.data.sources.forEach((src: any) => {
-          if (src.first_name && src.last_name) {
-            const fullName = `${src.first_name} ${src.last_name}`;
-            if (!confirmed.find(c => c.name.toLowerCase() === fullName.toLowerCase())) {
-              confirmed.push({
-                name: fullName,
-                source: 'confirmed',
-                relationship: 'Co-occurs in breach data',
-                confidence: 0.5
-              });
-            }
-          }
-        });
-      }
-
-      // Extract relatives discovered from web search (obituaries, news articles, etc.)
-      if (finding.agent_type === 'Web' && finding.data?.discoveredRelatives) {
-        finding.data.discoveredRelatives.forEach((rel: any) => {
-          const name = typeof rel === 'string' ? rel : rel.name;
-          const relationship = typeof rel === 'object' ? rel.relationship : 'Web search discovery';
-          if (name && !confirmed.find(c => c.name.toLowerCase() === name.toLowerCase())) {
+      // Accept relatives from FamilyTreeNow enrichment (graph-person, enrich-familytreenow)
+      if (finding.agent_type === 'FamilyTreeNow' && finding.data?.relatives) {
+        finding.data.relatives.forEach((rel: any) => {
+          const name = rel.person?.name 
+            ? `${rel.person.name.first || ''} ${rel.person.name.last || ''}`.trim()
+            : (typeof rel === 'string' ? rel : rel.name);
+          const relationship = rel.link?.relationship_type || rel.relationship;
+          if (name && 
+              name.trim().length > 2 && 
+              !confirmed.find(c => c.name.toLowerCase() === name.toLowerCase())) {
             confirmed.push({
-              name,
+              name: name.trim(),
               source: 'confirmed',
-              relationship,
-              confidence: finding.confidence_score || 0.65
+              relationship: relationship || 'Family connection',
+              confidence: rel.link?.score?.relationship_confidence || finding.confidence_score || 0.8
             });
           }
         });
       }
 
-      // Also check web search results text for mentioned relatives
-      if (finding.agent_type === 'Web' && finding.data?.results) {
-        finding.data.results.forEach((result: any) => {
-          // Check if result has extracted relatives
-          if (result.relatives) {
-            result.relatives.forEach((rel: any) => {
-              const name = typeof rel === 'string' ? rel : rel.name;
-              const relationship = typeof rel === 'object' ? rel.relationship : 'Mentioned in web result';
-              if (name && !confirmed.find(c => c.name.toLowerCase() === name.toLowerCase())) {
-                confirmed.push({
-                  name,
-                  source: 'confirmed',
-                  relationship,
-                  confidence: result.confidence || 0.6
-                });
-              }
-            });
-          }
-        });
-      }
+      // DO NOT extract from web search results - these are unreliable
+      // Web search may find mentions of names but cannot confirm relationships
+      // Removed: finding.agent_type === 'Web' extraction
+      
+      // DO NOT extract from breach data - co-occurrence doesn't mean relationship
+      // Removed: finding.agent_type === 'Breach' extraction
     });
 
     return confirmed;
