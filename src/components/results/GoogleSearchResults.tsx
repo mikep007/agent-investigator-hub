@@ -29,7 +29,7 @@ import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "../ConfidenceScoreBadge";
 import { exportWebResultsToCSV } from "@/utils/csvExport";
 import LinkPreviewTooltip from "./LinkPreviewTooltip";
-import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from "recharts";
+import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell, PieChart, Pie } from "recharts";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface WebResultItem {
@@ -794,52 +794,127 @@ const GoogleSearchResults = ({
             </h4>
           </div>
           
-          {/* Corroboration Summary Bar */}
-          <div className="flex items-center gap-3 flex-wrap p-3 bg-green-500/5 border border-green-500/20 rounded-lg">
-            <span className="text-xs font-medium text-green-600 dark:text-green-400">Corroborating Factors:</span>
-            {corroborationStats.nameMatch > 0 && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <Check className="h-3.5 w-3.5 text-blue-500" />
-                <span className="text-muted-foreground">{corroborationStats.nameMatch} with name</span>
+          {/* Corroboration Summary with Pie Chart */}
+          {(() => {
+            const pieData = [
+              { name: 'Name', value: corroborationStats.nameMatch, color: '#3b82f6' },
+              { name: 'Phone', value: corroborationStats.phone, color: '#f97316' },
+              { name: 'Email', value: corroborationStats.email, color: '#06b6d4' },
+              { name: 'Username', value: corroborationStats.username, color: '#6366f1' },
+              { name: 'Location', value: corroborationStats.location, color: '#22c55e' },
+              { name: 'Relative', value: corroborationStats.relative, color: '#ec4899' },
+              { name: 'Keywords', value: corroborationStats.keywords, color: '#a855f7' },
+            ].filter(item => item.value > 0);
+            
+            const totalFactors = pieData.reduce((sum, item) => sum + item.value, 0);
+            
+            return totalFactors > 0 ? (
+              <div className="p-4 bg-green-500/5 border border-green-500/20 rounded-lg">
+                <div className="flex items-start gap-6">
+                  {/* Pie Chart */}
+                  <div className="flex-shrink-0 w-32 h-32">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={pieData}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={25}
+                          outerRadius={50}
+                          paddingAngle={2}
+                          dataKey="value"
+                        >
+                          {pieData.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color} />
+                          ))}
+                        </Pie>
+                        <RechartsTooltip
+                          content={({ active, payload }) => {
+                            if (active && payload && payload.length) {
+                              const data = payload[0].payload;
+                              return (
+                                <div className="bg-popover border border-border rounded-lg px-3 py-2 shadow-lg">
+                                  <p className="text-sm font-medium">{data.name}</p>
+                                  <p className="text-xs text-muted-foreground">
+                                    {data.value} results ({Math.round((data.value / totalFactors) * 100)}%)
+                                  </p>
+                                </div>
+                              );
+                            }
+                            return null;
+                          }}
+                        />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                  
+                  {/* Legend and Stats */}
+                  <div className="flex-1 space-y-3">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-medium text-green-600 dark:text-green-400">
+                        Corroborating Factors Distribution
+                      </span>
+                      <Badge variant="secondary" className="bg-green-500/10 text-green-600 text-xs">
+                        {totalFactors} total matches
+                      </Badge>
+                    </div>
+                    
+                    <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">
+                      {corroborationStats.nameMatch > 0 && (
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-blue-500/10">
+                          <div className="w-3 h-3 rounded-full bg-blue-500" />
+                          <Check className="h-3.5 w-3.5 text-blue-500" />
+                          <span className="text-xs text-muted-foreground">{corroborationStats.nameMatch} name</span>
+                        </div>
+                      )}
+                      {corroborationStats.phone > 0 && (
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-orange-500/10">
+                          <div className="w-3 h-3 rounded-full bg-orange-500" />
+                          <Phone className="h-3.5 w-3.5 text-orange-500" />
+                          <span className="text-xs text-muted-foreground">{corroborationStats.phone} phone</span>
+                        </div>
+                      )}
+                      {corroborationStats.email > 0 && (
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-cyan-500/10">
+                          <div className="w-3 h-3 rounded-full bg-cyan-500" />
+                          <Mail className="h-3.5 w-3.5 text-cyan-500" />
+                          <span className="text-xs text-muted-foreground">{corroborationStats.email} email</span>
+                        </div>
+                      )}
+                      {corroborationStats.username > 0 && (
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-indigo-500/10">
+                          <div className="w-3 h-3 rounded-full bg-indigo-500" />
+                          <User className="h-3.5 w-3.5 text-indigo-500" />
+                          <span className="text-xs text-muted-foreground">{corroborationStats.username} username</span>
+                        </div>
+                      )}
+                      {corroborationStats.location > 0 && (
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-green-500/10">
+                          <div className="w-3 h-3 rounded-full bg-green-500" />
+                          <MapPin className="h-3.5 w-3.5 text-green-500" />
+                          <span className="text-xs text-muted-foreground">{corroborationStats.location} location</span>
+                        </div>
+                      )}
+                      {corroborationStats.relative > 0 && (
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-pink-500/10">
+                          <div className="w-3 h-3 rounded-full bg-pink-500" />
+                          <Users className="h-3.5 w-3.5 text-pink-500" />
+                          <span className="text-xs text-muted-foreground">{corroborationStats.relative} relative</span>
+                        </div>
+                      )}
+                      {corroborationStats.keywords > 0 && (
+                        <div className="flex items-center gap-2 p-2 rounded-md bg-purple-500/10">
+                          <div className="w-3 h-3 rounded-full bg-purple-500" />
+                          <Search className="h-3.5 w-3.5 text-purple-500" />
+                          <span className="text-xs text-muted-foreground">{corroborationStats.keywords} keywords</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
-            )}
-            {corroborationStats.phone > 0 && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <Phone className="h-3.5 w-3.5 text-orange-500" />
-                <span className="text-muted-foreground">{corroborationStats.phone} with phone</span>
-              </div>
-            )}
-            {corroborationStats.email > 0 && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <Mail className="h-3.5 w-3.5 text-cyan-500" />
-                <span className="text-muted-foreground">{corroborationStats.email} with email</span>
-              </div>
-            )}
-            {corroborationStats.username > 0 && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <User className="h-3.5 w-3.5 text-indigo-500" />
-                <span className="text-muted-foreground">{corroborationStats.username} with username</span>
-              </div>
-            )}
-            {corroborationStats.location > 0 && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <MapPin className="h-3.5 w-3.5 text-green-500" />
-                <span className="text-muted-foreground">{corroborationStats.location} with location</span>
-              </div>
-            )}
-            {corroborationStats.relative > 0 && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <Users className="h-3.5 w-3.5 text-pink-500" />
-                <span className="text-muted-foreground">{corroborationStats.relative} with relative</span>
-              </div>
-            )}
-            {corroborationStats.keywords > 0 && (
-              <div className="flex items-center gap-1.5 text-xs">
-                <Search className="h-3.5 w-3.5 text-purple-500" />
-                <span className="text-muted-foreground">{corroborationStats.keywords} with keywords</span>
-              </div>
-            )}
-          </div>
+            ) : null;
+          })()}
           
           <div className="space-y-3 pl-4">
             {filteredConfirmed.map((item, idx) => renderResultItem(item, idx, true, idx))}
