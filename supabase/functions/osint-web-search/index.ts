@@ -103,8 +103,8 @@ function getStateRegistry(stateInput: string): { domain: string; name: string; s
 }
 
 // Check if full name appears as an exact phrase or adjacent words
-// STRICT: Both names must appear CLOSE together (within ~60 chars) to count as a match
-function checkNameMatch(text: string, fullName: string): { exact: boolean; partial: boolean } {
+// STRICT: Require close adjacency for names to prevent false positives in legal documents
+function checkNameMatch(text: string, fullName: string, sourceUrl?: string): { exact: boolean; partial: boolean } {
   const textLower = text.toLowerCase();
   const nameLower = fullName.toLowerCase().trim();
   
@@ -124,6 +124,7 @@ function checkNameMatch(text: string, fullName: string): { exact: boolean; parti
     const lastEsc = escapeRegex(lastName);
     
     // Adjacent match: "John A. Smith" or "John Smith" (up to 15 chars between)
+    // This is a STRONG match - exact name with middle initial etc.
     const forwardPattern = new RegExp(`\\b${firstEsc}\\b.{0,15}\\b${lastEsc}\\b`, 'i');
     const reversePattern = new RegExp(`\\b${lastEsc}\\b[,;]?\\s{0,5}\\b${firstEsc}\\b`, 'i');
     
@@ -131,8 +132,28 @@ function checkNameMatch(text: string, fullName: string): { exact: boolean; parti
       return { exact: true, partial: true };
     }
     
-    // Proximity check: both names appear, but must be within 60 characters of each other
-    // This prevents matching "Michael" on page 1 and "Petrie" on page 50 of a long document
+    // Check if this is a low-quality source that requires stricter matching
+    // Legal documents, court filings, and bankruptcy records often list many unrelated names
+    const isLegalOrCourtSource = sourceUrl && (
+      sourceUrl.includes('pacer') ||
+      sourceUrl.includes('court') ||
+      sourceUrl.includes('docket') ||
+      sourceUrl.includes('case') ||
+      sourceUrl.includes('filing') ||
+      sourceUrl.includes('/pdf') ||
+      sourceUrl.includes('.pdf') ||
+      sourceUrl.includes('bankruptcy') ||
+      sourceUrl.includes('judicial')
+    );
+    
+    // For legal documents, we ONLY accept adjacent matches (exact phrase or within 15 chars)
+    // This prevents matching different people who happen to be in the same legal document
+    if (isLegalOrCourtSource) {
+      console.log(`[STRICT] Legal/court source detected, requiring adjacent match only: ${sourceUrl}`);
+      return { exact: false, partial: false };
+    }
+    
+    // For regular sources, allow proximity matching but tighter (30 chars instead of 60)
     const firstRegex = new RegExp(`\\b${firstEsc}\\b`, 'gi');
     const lastRegex = new RegExp(`\\b${lastEsc}\\b`, 'gi');
     
@@ -147,8 +168,9 @@ function checkNameMatch(text: string, fullName: string): { exact: boolean; parti
       lastMatches.push(match.index);
     }
     
-    // Check if any first/last name occurrences are within 60 chars of each other
-    const PROXIMITY_THRESHOLD = 60;
+    // Check if any first/last name occurrences are within 30 chars of each other
+    // Reduced from 60 to minimize false positives
+    const PROXIMITY_THRESHOLD = 30;
     let hasProximateMatch = false;
     
     for (const fPos of firstMatches) {
@@ -166,7 +188,6 @@ function checkNameMatch(text: string, fullName: string): { exact: boolean; parti
     }
     
     // Names appear in text but too far apart - NOT a valid match
-    // This prevents random documents mentioning common names from matching
   }
   
   return { exact: false, partial: false };
@@ -1371,7 +1392,7 @@ Deno.serve(async (req) => {
         seenUrls.add(normalizedUrl);
         
         const textToCheck = `${item.title} ${item.snippet}`;
-        const nameMatch = checkNameMatch(textToCheck, searchName);
+        const nameMatch = checkNameMatch(textToCheck, searchName, item.link);
         
         // Extract potential relatives from this result (especially obituaries)
         const isObituaryOrPeopleSearch = 
