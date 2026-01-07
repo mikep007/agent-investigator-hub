@@ -30,6 +30,7 @@ import ConfidenceScoreBadge from "../ConfidenceScoreBadge";
 import { exportWebResultsToCSV } from "@/utils/csvExport";
 import LinkPreviewTooltip from "./LinkPreviewTooltip";
 import { BarChart, Bar, XAxis, YAxis, Tooltip as RechartsTooltip, ResponsiveContainer, Cell } from "recharts";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 
 interface WebResultItem {
   title: string;
@@ -39,13 +40,18 @@ interface WebResultItem {
   confidenceScore?: number;
   isExactMatch?: boolean;
   hasLocation?: boolean;
+  matchedLocation?: string;
   hasKeywords?: boolean;
   keywordMatches?: string[];
   hasPhone?: boolean;
+  matchedPhone?: string;
   hasEmail?: boolean;
+  matchedEmail?: string;
   hasUsername?: boolean;
+  matchedUsername?: string;
   hasKnownRelative?: boolean;
   hasRelativeMatch?: boolean;
+  matchedRelative?: string;
   corroboratingFactors?: number;
   sourceType?: string;
   queryDescription?: string;
@@ -305,52 +311,101 @@ const GoogleSearchResults = ({
             {item.snippet}
           </p>
 
-          {/* Match indicators - Corroborating factors shown as badges */}
+          {/* Match indicators - Corroborating factors shown as badges with tooltips */}
           <div className="flex items-center gap-2 flex-wrap mb-3">
             {item.confidenceScore !== undefined && (
               <ConfidenceScoreBadge score={item.confidenceScore <= 1 ? item.confidenceScore * 100 : item.confidenceScore} />
             )}
             {item.isExactMatch && (
-              <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs gap-1">
-                <Check className="h-3 w-3" />
-                Name Match
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs gap-1 cursor-help">
+                    <Check className="h-3 w-3" />
+                    Name Match
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Exact name match found in content</p>
+                </TooltipContent>
+              </Tooltip>
             )}
             {item.hasPhone && (
-              <Badge variant="secondary" className="bg-orange-500/10 text-orange-600 dark:text-orange-400 text-xs gap-1">
-                <Phone className="h-3 w-3" />
-                Phone
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-orange-500/10 text-orange-600 dark:text-orange-400 text-xs gap-1 cursor-help">
+                    <Phone className="h-3 w-3" />
+                    Phone
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{item.matchedPhone ? `Phone: ${item.matchedPhone}` : 'Phone number matched'}</p>
+                </TooltipContent>
+              </Tooltip>
             )}
             {item.hasEmail && (
-              <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-xs gap-1">
-                <Mail className="h-3 w-3" />
-                Email
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-xs gap-1 cursor-help">
+                    <Mail className="h-3 w-3" />
+                    Email
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{item.matchedEmail ? `Email: ${item.matchedEmail}` : 'Email matched'}</p>
+                </TooltipContent>
+              </Tooltip>
             )}
             {item.hasUsername && (
-              <Badge variant="secondary" className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs gap-1">
-                <User className="h-3 w-3" />
-                Username
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs gap-1 cursor-help">
+                    <User className="h-3 w-3" />
+                    Username
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{item.matchedUsername ? `Username: ${item.matchedUsername}` : 'Username matched'}</p>
+                </TooltipContent>
+              </Tooltip>
             )}
             {item.hasLocation && (
-              <Badge variant="secondary" className="bg-green-500/10 text-green-600 dark:text-green-400 text-xs gap-1">
-                <MapPin className="h-3 w-3" />
-                Location
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-green-500/10 text-green-600 dark:text-green-400 text-xs gap-1 cursor-help">
+                    <MapPin className="h-3 w-3" />
+                    Location
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{item.matchedLocation ? `Location: ${item.matchedLocation}` : 'Location matched'}</p>
+                </TooltipContent>
+              </Tooltip>
             )}
             {(item.hasKnownRelative || item.hasRelativeMatch) && (
-              <Badge variant="secondary" className="bg-pink-500/10 text-pink-600 dark:text-pink-400 text-xs gap-1">
-                <Users className="h-3 w-3" />
-                Relative
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-pink-500/10 text-pink-600 dark:text-pink-400 text-xs gap-1 cursor-help">
+                    <Users className="h-3 w-3" />
+                    Relative
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>{item.matchedRelative ? `Relative: ${item.matchedRelative}` : 'Known relative matched'}</p>
+                </TooltipContent>
+              </Tooltip>
             )}
             {item.hasKeywords && item.keywordMatches?.length > 0 && (
-              <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs gap-1">
-                <Search className="h-3 w-3" />
-                {item.keywordMatches.join(', ')}
-              </Badge>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs gap-1 cursor-help">
+                    <Search className="h-3 w-3" />
+                    {item.keywordMatches.join(', ')}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Keywords matched: {item.keywordMatches.join(', ')}</p>
+                </TooltipContent>
+              </Tooltip>
             )}
             {item.queryDescription && (
               <span className="text-xs text-muted-foreground/60 italic">
@@ -477,6 +532,7 @@ const GoogleSearchResults = ({
   }
 
   return (
+    <TooltipProvider>
     <div 
       ref={containerRef}
       className="space-y-4 outline-none"
@@ -745,6 +801,7 @@ const GoogleSearchResults = ({
         </div>
       )}
     </div>
+    </TooltipProvider>
   );
 };
 
