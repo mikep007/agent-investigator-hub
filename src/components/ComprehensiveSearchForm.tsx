@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle, Info, Building2, ClipboardPaste, X, Plus } from "lucide-react";
+import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle, Info, Building2, ClipboardPaste, X, Plus, Users } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { SearchHelpModal } from "./SearchHelpModal";
 import AddressAutocomplete from "./AddressAutocomplete";
@@ -50,6 +50,7 @@ interface SearchData {
   keywords?: string;
   city?: string;
   state?: string;
+  knownRelatives?: string;
 }
 
 // Parse bulk input (comma, newline, semicolon separated)
@@ -84,7 +85,11 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
     keywords: "",
     city: "",
     state: "",
+    knownRelatives: "",
   });
+
+  // Bulk entries for relatives
+  const [bulkRelatives, setBulkRelatives] = useState<string[]>([]);
   
   const [validation, setValidation] = useState<ValidationState>({
     email: 'empty',
@@ -207,6 +212,49 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
 
   const removeBulkUsername = (username: string) => {
     setBulkUsernames(prev => prev.filter(u => u !== username));
+  };
+
+  const removeBulkRelative = (name: string) => {
+    setBulkRelatives(prev => prev.filter(r => r !== name));
+  };
+
+  // Handle bulk paste for relatives
+  const handleRelativesPaste = (e: React.ClipboardEvent) => {
+    const pastedText = e.clipboardData.getData('text');
+    const values = parseBulkInput(pastedText);
+    
+    if (values.length > 1) {
+      e.preventDefault();
+      // Accept any non-empty name
+      const validNames = values.filter(v => v.length >= 2);
+      const uniqueNames = validNames.filter(
+        name => !bulkRelatives.some(r => r.toLowerCase() === name.toLowerCase())
+      );
+      
+      if (uniqueNames.length > 0) {
+        setBulkRelatives(prev => [...prev, ...uniqueNames]);
+        toast({
+          title: "Relatives Added",
+          description: `Added ${uniqueNames.length} relative${uniqueNames.length > 1 ? 's' : ''} to search`,
+        });
+      }
+    }
+  };
+
+  // Handle adding single relative from input
+  const addRelativeFromInput = () => {
+    const name = searchData.knownRelatives?.trim();
+    if (name && name.length >= 2 && !bulkRelatives.some(r => r.toLowerCase() === name.toLowerCase())) {
+      setBulkRelatives(prev => [...prev, name]);
+      setSearchData(prev => ({ ...prev, knownRelatives: '' }));
+    }
+  };
+
+  const handleRelativesKeyPress = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      addRelativeFromInput();
+    }
   };
 
   const validateAndSubmit = () => {
@@ -333,6 +381,7 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
     // Include bulk entries in the search data
     const allEmails = [searchData.email, ...bulkEmails].filter(Boolean).join(', ');
     const allUsernames = [searchData.username, ...bulkUsernames].filter(Boolean);
+    const allRelatives = [...bulkRelatives].filter(Boolean);
     
     const finalSearchData = {
       ...searchData,
@@ -343,6 +392,8 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
       keywords: allUsernames.length > 1 
         ? `${searchData.keywords || ''} ${allUsernames.slice(1).join(' ')}`.trim()
         : searchData.keywords,
+      // Pass known relatives for connection searches
+      knownRelatives: allRelatives.join(', '),
     };
 
     onStartInvestigation(finalSearchData);
@@ -692,6 +743,80 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
               maxLength={255}
               disabled={loading}
             />
+          </div>
+
+          {/* Known Relatives / Associates */}
+          <div className="space-y-2 md:col-span-2">
+            <Label htmlFor="knownRelatives" className="flex items-center gap-2">
+              <Users className="w-4 h-4 text-muted-foreground" />
+              Known Relatives / Associates
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="w-4 h-4 text-muted-foreground cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent className="max-w-xs bg-popover border border-border">
+                  <p className="text-sm">
+                    Enter names of known relatives or associates. The system will search for connections between these people and your primary target.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </Label>
+            <div className="flex gap-2">
+              <Input
+                id="knownRelatives"
+                placeholder="e.g., Heather Petrie-Tomes, David Petrie"
+                value={searchData.knownRelatives}
+                onChange={(e) => handleChange("knownRelatives", e.target.value)}
+                onKeyDown={handleRelativesKeyPress}
+                onPaste={handleRelativesPaste}
+                className="bg-background/50 flex-1"
+                maxLength={100}
+                disabled={loading}
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={addRelativeFromInput}
+                disabled={loading || !searchData.knownRelatives?.trim()}
+                className="shrink-0"
+              >
+                <Plus className="w-4 h-4" />
+              </Button>
+            </div>
+            {bulkRelatives.length > 0 && (
+              <div className="space-y-1.5 pt-1">
+                <div className="flex flex-wrap gap-1.5">
+                  {bulkRelatives.map((name, idx) => (
+                    <Badge 
+                      key={`${name}-${idx}`} 
+                      variant="secondary" 
+                      className="text-xs flex items-center gap-1 pr-1 bg-blue-500/20 text-blue-300 border-blue-500/30"
+                    >
+                      <Users className="w-3 h-3" />
+                      {name}
+                      <button
+                        onClick={() => removeBulkRelative(name)}
+                        className="ml-0.5 p-0.5 rounded-full hover:bg-destructive/20"
+                        disabled={loading}
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </Badge>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setBulkRelatives([])}
+                  className="text-xs text-muted-foreground hover:text-destructive transition-colors"
+                  disabled={loading}
+                >
+                  Clear all ({bulkRelatives.length})
+                </button>
+              </div>
+            )}
+            <p className="text-xs text-muted-foreground">
+              Press Enter or click + to add. Paste multiple names separated by commas or newlines.
+            </p>
           </div>
 
           {/* Keywords - Optional */}
