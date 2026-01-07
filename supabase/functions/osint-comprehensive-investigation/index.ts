@@ -13,6 +13,7 @@ interface SearchData {
   phone?: string;
   username?: string;
   keywords?: string;
+  knownRelatives?: string;
 }
 
 Deno.serve(async (req) => {
@@ -583,6 +584,76 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('court_records');
+    }
+
+    // Known Relatives / Associates - Search for connections
+    if (searchData.knownRelatives) {
+      const relatives = searchData.knownRelatives
+        .split(',')
+        .map(r => r.trim())
+        .filter(r => r.length >= 2);
+      
+      console.log(`Searching for ${relatives.length} known relatives/associates:`, relatives);
+      
+      for (const relativeName of relatives) {
+        // Web search for connections between target and relative
+        if (searchData.fullName) {
+          searchPromises.push(
+            supabaseClient.functions.invoke('osint-web-search', {
+              body: { 
+                target: `"${searchData.fullName}" "${relativeName}"`,
+                searchData: {
+                  ...searchData,
+                  keywords: `${searchData.keywords || ''} ${relativeName}`.trim()
+                }
+              }
+            })
+          );
+          searchTypes.push(`connection_${relativeName.replace(/\s+/g, '_').toLowerCase()}`);
+        }
+        
+        // People search for the relative (to find shared addresses, phones)
+        const nameParts = relativeName.trim().split(/\s+/);
+        const firstName = nameParts[0];
+        const lastName = nameParts.slice(1).join(' ') || nameParts[0];
+        
+        // Extract location context from target's address
+        let city, state;
+        if (searchData.address) {
+          const addressMatch = searchData.address.match(/,\s*([^,]+),\s*([A-Z]{2})/i);
+          if (addressMatch) {
+            city = addressMatch[1].trim();
+            state = addressMatch[2].trim().toUpperCase();
+          }
+        }
+        
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-people-search', {
+            body: { 
+              firstName,
+              lastName,
+              city,
+              state,
+              validateData: false, // Don't validate - just search
+              connectionSearch: true, // Flag this as a connection search
+              primaryTarget: searchData.fullName, // Pass primary target for correlation
+            }
+          })
+        );
+        searchTypes.push(`relative_search_${relativeName.replace(/\s+/g, '_').toLowerCase()}`);
+        
+        // IDCrawl search for each relative
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-idcrawl', {
+            body: { 
+              fullName: relativeName,
+              location: city && state ? `${city}, ${state}` : '',
+              keywords: searchData.fullName, // Use primary target name as keyword for correlation
+            }
+          })
+        );
+        searchTypes.push(`idcrawl_${relativeName.replace(/\s+/g, '_').toLowerCase()}`);
+      }
     }
 
     console.log(`Running ${searchPromises.length} OSINT searches...`);
