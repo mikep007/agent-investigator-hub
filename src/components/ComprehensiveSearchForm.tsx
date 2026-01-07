@@ -764,7 +764,7 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
             <div className="flex gap-2">
               <Input
                 id="knownRelatives"
-                placeholder="e.g., Heather Petrie-Tomes, David Petrie"
+                placeholder="Enter name and press Enter"
                 value={searchData.knownRelatives}
                 onChange={(e) => handleChange("knownRelatives", e.target.value)}
                 onKeyDown={handleRelativesKeyPress}
