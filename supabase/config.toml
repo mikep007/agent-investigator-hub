@@ -98,3 +98,18 @@ verify_jwt = true
 
 [functions.person-graph-graph]
 verify_jwt = true
+
+[functions.search-people]
+verify_jwt = true
+
+[functions.enrich-familytreenow]
+verify_jwt = true
+
+[functions.enrich-social]
+verify_jwt = true
+
+[functions.enrich-public-records]
+verify_jwt = true
+
+[functions.graph-person]
+verify_jwt = true
