@@ -89,3 +89,12 @@ verify_jwt = true
 
 [functions.osint-instagram-about]
 verify_jwt = true
+
+[functions.person-graph-search]
+verify_jwt = true
+
+[functions.person-graph-enrich]
+verify_jwt = true
+
+[functions.person-graph-graph]
+verify_jwt = true
