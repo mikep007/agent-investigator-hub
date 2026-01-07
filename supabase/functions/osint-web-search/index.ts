@@ -1420,6 +1420,7 @@ Deno.serve(async (req) => {
         // We treat location corroboration as: (city OR state) match.
         // This aligns with the app rule: name + state OR name + city counts as corroboration.
         let locationPresent = false;
+        let matchedLocation = '';
         if (location && location !== 'provided') {
           const locationParts = location
             .split(',')
@@ -1440,6 +1441,13 @@ Deno.serve(async (req) => {
             : (stateLower.length >= 3 && textLower.includes(stateLower));
 
           locationPresent = cityMatch || stateMatch;
+          if (locationPresent) {
+            // Build the matched location string
+            const matchedParts: string[] = [];
+            if (cityMatch && locationParts[0]) matchedParts.push(locationParts[0]);
+            if (stateMatch && statePart) matchedParts.push(statePart.toUpperCase());
+            matchedLocation = matchedParts.join(', ') || location;
+          }
         }
 
         // Check keyword matches
@@ -1458,19 +1466,28 @@ Deno.serve(async (req) => {
         // Check phone presence
         // IMPORTANT: Don't use partial (last-7) matching — it creates false positives.
         let phonePresent = false;
+        let matchedPhone = '';
         if (phone) {
           const cleanPhone = phone.replace(/\D/g, '');
           const textDigits = textToCheck.replace(/\D/g, '');
           // Require a full 10+ digit match in the digit-stripped text.
           if (cleanPhone.length >= 10) {
             phonePresent = textDigits.includes(cleanPhone);
+            if (phonePresent) {
+              // Format the phone number for display
+              matchedPhone = phone;
+            }
           }
         }
         
         // Check email presence
         let emailPresent = false;
+        let matchedEmail = '';
         if (email) {
           emailPresent = textToCheck.toLowerCase().includes(email.toLowerCase());
+          if (emailPresent) {
+            matchedEmail = email;
+          }
         }
         
         // Calculate confidence based on match quality and source type
@@ -1537,11 +1554,13 @@ Deno.serve(async (req) => {
         
         // Username match (check if result URL/text contains the username)
         let usernamePresent = false;
+        let matchedUsername = '';
         const cleanUsername = (searchData?.username || '').replace(/^@/, '').toLowerCase().trim();
         if (cleanUsername && cleanUsername.length >= 3) {
           if (textToCheck.toLowerCase().includes(cleanUsername) || 
               item.link.toLowerCase().includes(cleanUsername)) {
             usernamePresent = true;
+            matchedUsername = searchData?.username || cleanUsername;
             confidenceScore += 0.20;
             corroboratingFactors++;
             console.log(`  [+] Username match for ${item.link}`);
@@ -1550,11 +1569,13 @@ Deno.serve(async (req) => {
         
         // Relatives from input match (check if any known relatives appear in the result)
         let relativesPresent = false;
+        let matchedRelative = '';
         const inputRelatives = relatives || [];
         for (const rel of inputRelatives) {
           const relName = typeof rel === 'string' ? rel : rel.name;
           if (relName && textToCheck.toLowerCase().includes(relName.toLowerCase())) {
             relativesPresent = true;
+            matchedRelative = relName;
             confidenceScore += 0.20;
             corroboratingFactors++;
             console.log(`  [+] Known relative match for ${item.link}: ${relName}`);
@@ -1600,14 +1621,19 @@ Deno.serve(async (req) => {
           confidenceScore,
           isExactMatch: nameMatch.exact,
           hasLocation: locationPresent,
+          matchedLocation: matchedLocation || undefined,
           hasKeywords: keywordMatches.length > 0,
           keywordMatches,
           hasRelativeMatch: hasRelativeKeywordMatch,
           foundRelatives: foundRelatives.length > 0 ? foundRelatives : undefined,
           hasPhone: phonePresent,
+          matchedPhone: matchedPhone || undefined,
           hasEmail: emailPresent,
+          matchedEmail: matchedEmail || undefined,
           hasUsername: usernamePresent,
+          matchedUsername: matchedUsername || undefined,
           hasKnownRelative: relativesPresent,
+          matchedRelative: matchedRelative || undefined,
           corroboratingFactors,
           sourceType: result.queryType,
           queryDescription: result.queryDescription
