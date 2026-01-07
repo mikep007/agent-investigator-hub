@@ -21,7 +21,9 @@ import {
   Sparkles,
   Code,
   Hash,
-  BarChart3
+  BarChart3,
+  User,
+  Users
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "../ConfidenceScoreBadge";
@@ -41,6 +43,10 @@ interface WebResultItem {
   keywordMatches?: string[];
   hasPhone?: boolean;
   hasEmail?: boolean;
+  hasUsername?: boolean;
+  hasKnownRelative?: boolean;
+  hasRelativeMatch?: boolean;
+  corroboratingFactors?: number;
   sourceType?: string;
   queryDescription?: string;
 }
@@ -299,7 +305,7 @@ const GoogleSearchResults = ({
             {item.snippet}
           </p>
 
-          {/* Match indicators */}
+          {/* Match indicators - Corroborating factors shown as badges */}
           <div className="flex items-center gap-2 flex-wrap mb-3">
             {item.confidenceScore !== undefined && (
               <ConfidenceScoreBadge score={item.confidenceScore <= 1 ? item.confidenceScore * 100 : item.confidenceScore} />
@@ -308,18 +314,6 @@ const GoogleSearchResults = ({
               <Badge variant="secondary" className="bg-blue-500/10 text-blue-600 dark:text-blue-400 text-xs gap-1">
                 <Check className="h-3 w-3" />
                 Name Match
-              </Badge>
-            )}
-            {item.hasLocation && (
-              <Badge variant="secondary" className="bg-green-500/10 text-green-600 dark:text-green-400 text-xs gap-1">
-                <MapPin className="h-3 w-3" />
-                Location
-              </Badge>
-            )}
-            {item.hasKeywords && item.keywordMatches?.length > 0 && (
-              <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs gap-1">
-                <Search className="h-3 w-3" />
-                {item.keywordMatches.join(', ')}
               </Badge>
             )}
             {item.hasPhone && (
@@ -332,6 +326,30 @@ const GoogleSearchResults = ({
               <Badge variant="secondary" className="bg-cyan-500/10 text-cyan-600 dark:text-cyan-400 text-xs gap-1">
                 <Mail className="h-3 w-3" />
                 Email
+              </Badge>
+            )}
+            {item.hasUsername && (
+              <Badge variant="secondary" className="bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-xs gap-1">
+                <User className="h-3 w-3" />
+                Username
+              </Badge>
+            )}
+            {item.hasLocation && (
+              <Badge variant="secondary" className="bg-green-500/10 text-green-600 dark:text-green-400 text-xs gap-1">
+                <MapPin className="h-3 w-3" />
+                Location
+              </Badge>
+            )}
+            {(item.hasKnownRelative || item.hasRelativeMatch) && (
+              <Badge variant="secondary" className="bg-pink-500/10 text-pink-600 dark:text-pink-400 text-xs gap-1">
+                <Users className="h-3 w-3" />
+                Relative
+              </Badge>
+            )}
+            {item.hasKeywords && item.keywordMatches?.length > 0 && (
+              <Badge variant="secondary" className="bg-purple-500/10 text-purple-600 dark:text-purple-400 text-xs gap-1">
+                <Search className="h-3 w-3" />
+                {item.keywordMatches.join(', ')}
               </Badge>
             )}
             {item.queryDescription && (
