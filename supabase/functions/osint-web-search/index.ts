@@ -822,6 +822,54 @@ function buildDorkQueries(
       category: 'keywords',
       description: `Keywords OR Combined: ${keywordList.slice(0, 5).join(' | ')}`,
     });
+    
+    // ========== KEYWORD-ONLY SEARCHES (for company/organization mentions) ==========
+    // These catch results where the target's company/org is mentioned but their name
+    // might not appear in Google's snippet (e.g., pages about events they attended)
+    for (const keyword of keywordList.slice(0, 3)) {
+      // Keyword alone (company/organization search)
+      queries.push({
+        query: `"${keyword}"`,
+        type: 'keyword_only',
+        priority: 1,
+        category: 'keywords',
+        description: `Keyword-only: "${keyword}"`,
+      });
+      
+      // Keyword + first name (catches mentions where full name isn't indexed)
+      if (firstName) {
+        queries.push({
+          query: `"${keyword}" "${firstName}"`,
+          type: 'keyword_firstname_direct',
+          priority: 1,
+          category: 'keywords',
+          description: `Keyword "${keyword}" + First Name "${firstName}"`,
+        });
+      }
+      
+      // Keyword + last name
+      if (lastName) {
+        queries.push({
+          query: `"${keyword}" "${lastName}"`,
+          type: 'keyword_lastname_direct',
+          priority: 1,
+          category: 'keywords',
+          description: `Keyword "${keyword}" + Last Name "${lastName}"`,
+        });
+      }
+    }
+    
+    // Multi-word keyword exact phrase search (e.g., "Social Detection" as exact phrase)
+    const multiWordKeywords = keywordList.filter(k => k.includes(' '));
+    for (const multiWord of multiWordKeywords.slice(0, 3)) {
+      queries.push({
+        query: `"${multiWord}"`,
+        type: 'keyword_multiword_exact',
+        priority: 1,
+        category: 'keywords',
+        description: `Exact phrase: "${multiWord}"`,
+      });
+    }
   }
 
   // ========== KEYWORD + PHONE COMBINATIONS ==========
@@ -1537,6 +1585,12 @@ Deno.serve(async (req) => {
         let corroboratingFactors = 0;
         
         // Name matching is required but NOT SUFFICIENT for confirmed status
+        // Name matching determines base score
+        // IMPORTANT: Results with NO name match can still be included if ALL keywords match
+        // This catches company/organization pages where the person is mentioned in content
+        // but their name doesn't appear in Google's snippet
+        let isKeywordOnlyMatch = false;
+        
         if (nameMatch.exact) {
           // Exact phrase match: "John Smith" found as exact phrase
           // Base score for exact name is 0.45 - below threshold, needs corroboration
@@ -1546,10 +1600,33 @@ Deno.serve(async (req) => {
           // This is less reliable - could be different people with same names
           confidenceScore = 0.25;
         } else {
-          // Neither exact nor partial match - skip this result entirely
-          // This prevents random unrelated results from appearing
-          console.log(`Skipping result with no name match: ${item.link}`);
-          continue;
+          // No name match - but check if this is a keyword-only query result
+          // If ALL user-provided keywords appear in the result, it's potentially relevant
+          // (e.g., a page about their company/organization)
+          
+          // Check if ALL keywords match (for keyword-only relevance)
+          const allKeywordsMatch = keywordList.length > 0 && 
+            keywordList.every((kw: string) => textToCheck.toLowerCase().includes(kw.toLowerCase()));
+          
+          // Check if any multi-word keywords match exactly (e.g., "Social Detection")
+          const hasExactMultiWordMatch = keywordList.some((kw: string) => 
+            kw.includes(' ') && textToCheck.toLowerCase().includes(kw.toLowerCase())
+          );
+          
+          // Check if this result came from a keyword-only query type
+          const isFromKeywordQuery = result.queryType?.startsWith('keyword_') || 
+                                      result.queryType?.includes('keyword');
+          
+          if ((allKeywordsMatch || hasExactMultiWordMatch) && isFromKeywordQuery) {
+            // Keyword-only match - lower confidence but still include
+            isKeywordOnlyMatch = true;
+            confidenceScore = 0.35; // Below confirmed threshold, will be "Possible Match"
+            console.log(`  [KEYWORD-ONLY] Including result with keyword match but no name: ${item.link}`);
+          } else {
+            // Neither name nor sufficient keyword match - skip
+            console.log(`Skipping result with no name match: ${item.link}`);
+            continue;
+          }
         }
         
         // CORROBORATING FACTORS - each one adds to confidence and counts toward "confirmed" status
@@ -1661,6 +1738,7 @@ Deno.serve(async (req) => {
           displayLink: item.displayLink || '',
           confidenceScore,
           isExactMatch: nameMatch.exact,
+          isKeywordOnlyMatch: isKeywordOnlyMatch || false, // Flag for keyword-only matches (no name in snippet)
           hasLocation: locationPresent,
           matchedLocation: matchedLocation || undefined,
           hasKeywords: keywordMatches.length > 0,
