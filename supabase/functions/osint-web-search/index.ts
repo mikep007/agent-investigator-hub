@@ -756,22 +756,36 @@ function buildDorkQueries(
     }
   }
 
-  // ========== KEYWORD + NAME COMBINATIONS ==========
-  for (const keyword of keywordList.slice(0, 3)) {
-    // Keyword + full name
+  // ========== KEYWORD + NAME COMBINATIONS (HIGHEST PRIORITY) ==========
+  // Keywords are explicitly provided by the user - these MUST be searched with HIGH priority
+  for (const keyword of keywordList.slice(0, 5)) { // Increased from 3 to 5 keywords
+    // Keyword + full name - PRIORITY 1 (same as core dork queries)
     queries.push({
       query: `${quotedPrimary} "${keyword}"`,
       type: 'keyword_name',
-      priority: 2,
+      priority: 1, // Upgraded from 2 to 1 - user-specified keywords are critical
+      category: 'keywords',
       description: `Keyword "${keyword}" + Full Name`,
     });
+
+    // Keyword + full name + location (if available)
+    if (city && state) {
+      queries.push({
+        query: `${quotedPrimary} "${keyword}" "${city}" "${state}"`,
+        type: 'keyword_name_location',
+        priority: 1,
+        category: 'keywords',
+        description: `Keyword "${keyword}" + Full Name + Location`,
+      });
+    }
 
     // Keyword + first name only (catches partial matches)
     if (firstName) {
       queries.push({
         query: `"${firstName}" "${keyword}"`,
         type: 'keyword_firstname',
-        priority: 3,
+        priority: 2, // Lower priority but still high
+        category: 'keywords',
         description: `Keyword "${keyword}" + First Name`,
       });
     }
@@ -781,10 +795,33 @@ function buildDorkQueries(
       queries.push({
         query: `"${lastName}" "${keyword}"`,
         type: 'keyword_lastname',
-        priority: 3,
+        priority: 2,
+        category: 'keywords',
         description: `Keyword "${keyword}" + Last Name`,
       });
     }
+  }
+  
+  // COMBINED keyword search - search ALL keywords together with name (HIGHEST PRIORITY)
+  if (keywordList.length > 0) {
+    const allKeywordsQuoted = keywordList.slice(0, 5).map(k => `"${k}"`).join(' ');
+    queries.push({
+      query: `${quotedPrimary} ${allKeywordsQuoted}`,
+      type: 'keywords_combined_all',
+      priority: 1,
+      category: 'keywords',
+      description: `All Keywords Combined: ${keywordList.slice(0, 5).join(', ')}`,
+    });
+    
+    // Also try OR combinations for broader matching
+    const allKeywordsOr = keywordList.slice(0, 5).map(k => `"${k}"`).join(' OR ');
+    queries.push({
+      query: `${quotedPrimary} (${allKeywordsOr})`,
+      type: 'keywords_or_combined',
+      priority: 1,
+      category: 'keywords',
+      description: `Keywords OR Combined: ${keywordList.slice(0, 5).join(' | ')}`,
+    });
   }
 
   // ========== KEYWORD + PHONE COMBINATIONS ==========
@@ -1268,9 +1305,10 @@ Deno.serve(async (req) => {
     // Build targeted dork queries with keywords combined with all data points
     const dorkQueries = buildDorkQueries(searchName, location, email, phone, keywords, seedQuery, username, relatives);
 
-    // Execute MORE queries for comprehensive coverage - increased to 20 for better results
-    // Google CSE allows 100 queries/day free, then paid - 20 queries is a good balance
-    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 20);
+    // Execute MORE queries for comprehensive coverage - increased to 30 for better results
+    // Google CSE allows 100 queries/day free, then paid - 30 queries ensures keyword coverage
+    // CRITICAL: Keyword queries are now priority 1, so they will be executed first
+    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 30);
     
     console.log('Will execute', sortedQueries.length, 'priority queries out of', dorkQueries.length, 'total generated:');
     sortedQueries.forEach((q, i) => console.log(`  ${i+1}. [P${q.priority}][${q.type}] ${q.query.slice(0, 70)}...`));
@@ -1545,11 +1583,14 @@ Deno.serve(async (req) => {
           console.log(`  [+] Relative keyword match for ${item.link}`);
         }
         
-        // Other keyword matches - MODERATE corroboration (+15% for any keywords)
+        // Other keyword matches - STRONG corroboration (+20% for keywords, they're user-specified)
+        // Keywords are CRITICAL - user explicitly asked for these, so finding them is strong confirmation
         if (keywordMatches.length > 0 && !hasRelativeKeywordMatch) {
-          confidenceScore += 0.15;
+          // Give more weight for multiple keyword matches
+          const keywordBoost = Math.min(0.25, 0.15 + (keywordMatches.length - 1) * 0.05);
+          confidenceScore += keywordBoost;
           corroboratingFactors++;
-          console.log(`  [+] Keyword match for ${item.link}: ${keywordMatches.join(', ')}`);
+          console.log(`  [+] Keyword match for ${item.link}: ${keywordMatches.join(', ')} (+${(keywordBoost * 100).toFixed(0)}%)`);
         }
         
         // Username match (check if result URL/text contains the username)
