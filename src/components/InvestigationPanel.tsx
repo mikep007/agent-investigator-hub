@@ -4,7 +4,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Input } from "@/components/ui/input";
-import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw, Scale, LayoutDashboard, Camera, Link2, Eye, ExternalLink, Download, Video, FileDown, HelpCircle } from "lucide-react";
+import { CheckCircle2, Clock, AlertCircle, Shield, Instagram, Facebook, Twitter, Github, Linkedin, Check, X, Sparkles, Mail, User, Globe, MapPin, Phone, Search, Copy, Info, RefreshCw, Scale, LayoutDashboard, Camera, Link2, Eye, ExternalLink, Download, Video, FileDown, HelpCircle, Zap } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "./ConfidenceScoreBadge";
@@ -14,6 +14,7 @@ import AddressResults from "./AddressResults";
 import BreachResults from "./BreachResults";
 import { ResultsDisplay, FindingData, GoogleSearchResults } from "./results";
 import DeepDiveResultsCard from "./results/DeepDiveResultsCard";
+import SelectorEnrichmentResults from "./results/SelectorEnrichmentResults";
 import { exportWebResultsToCSV } from "@/utils/csvExport";
 import {
   Tooltip,
@@ -628,6 +629,49 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
     const results = log.data?.results || [];
     return results.some((r: any) => r.relatives && r.relatives.length > 0);
   });
+
+  // Selector Enrichment - 80+ platform real-time checks
+  const enrichmentLogs = filteredLogs.filter(log => 
+    log.agent_type === 'Selector_enrichment_email' || 
+    log.agent_type === 'Selector_enrichment_phone'
+  );
+
+  // Transform enrichment logs into the format expected by SelectorEnrichmentResults
+  const getEnrichmentData = () => {
+    if (enrichmentLogs.length === 0) return null;
+    
+    // Combine all enrichment results
+    const allResults: any[] = [];
+    let selector = '';
+    let selectorType: 'email' | 'phone' | 'unknown' = 'unknown';
+    let timestamp = '';
+    
+    enrichmentLogs.forEach(log => {
+      if (log.data?.results) {
+        allResults.push(...log.data.results);
+      }
+      if (log.data?.selector) selector = log.data.selector;
+      if (log.data?.selectorType) selectorType = log.data.selectorType;
+      if (log.data?.timestamp) timestamp = log.data.timestamp;
+    });
+    
+    if (allResults.length === 0) return null;
+    
+    const accountsFound = allResults.filter(r => r.exists).length;
+    const errors = allResults.filter(r => r.error !== null).length;
+    
+    return {
+      selector,
+      selectorType,
+      results: allResults,
+      summary: {
+        totalChecked: allResults.length,
+        accountsFound,
+        errors
+      },
+      timestamp: timestamp || new Date().toISOString()
+    };
+  };
 
   const renderWebResultItem = (item: any, log: LogEntry, idx: number | string) => (
     <div key={idx} className="group border-b border-border/50 pb-4 mb-4 last:border-0 last:pb-0 last:mb-0 hover:bg-muted/20 rounded-lg p-3 -mx-3 transition-colors">
@@ -2123,6 +2167,19 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                     }, 0)}
                   </Badge>
                 </TabsTrigger>
+                <TabsTrigger 
+                  value="enrichment" 
+                  className="data-[state=active]:bg-background data-[state=active]:shadow-sm rounded px-2.5 py-1.5 text-xs font-medium whitespace-nowrap"
+                >
+                  <Zap className="h-3.5 w-3.5 mr-1.5" />
+                  Enrichment
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">
+                    {enrichmentLogs.reduce((acc, log) => {
+                      const found = log.data?.summary?.accountsFound || 0;
+                      return acc + found;
+                    }, 0)}
+                  </Badge>
+                </TabsTrigger>
               </TabsList>
           </div>
 
@@ -2666,6 +2723,30 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                 ) : (
                   <div className="text-center text-muted-foreground py-8">
                     {searchQuery ? "No relatives match your search" : "No relatives or associates found. Include a name in your search to discover related persons."}
+                  </div>
+                )}
+              </div>
+            </ScrollArea>
+          </TabsContent>
+
+          {/* Enrichment Tab - 80+ Platform Checks */}
+          <TabsContent value="enrichment" className="flex-1 mt-0 px-6">
+            <ScrollArea className="h-[550px]">
+              <div className="space-y-6 pb-4 pr-4">
+                {enrichmentLogs.length > 0 ? (
+                  enrichmentLogs.map((log) => (
+                    <SelectorEnrichmentResults 
+                      key={log.id}
+                      data={log.data as any}
+                    />
+                  ))
+                ) : (
+                  <div className="text-center text-muted-foreground py-8">
+                    <Zap className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                    <p className="font-medium">No enrichment data available</p>
+                    <p className="text-sm mt-1">
+                      Include an email or phone number in your search to check 80+ platforms for registered accounts.
+                    </p>
                   </div>
                 )}
               </div>

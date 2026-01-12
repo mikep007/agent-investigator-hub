@@ -156,6 +156,14 @@ Deno.serve(async (req) => {
 
     // Email enumeration
     if (searchData.email) {
+      // Run Selector Enrichment - 80+ platform real-time account checks
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-selector-enrichment', {
+          body: { selector: searchData.email }
+        })
+      );
+      searchTypes.push('selector_enrichment_email');
+
       // Run Email Intelligence for associated emails (like OSINT Industries)
       searchPromises.push(
         supabaseClient.functions.invoke('osint-email-intelligence', {
@@ -284,6 +292,14 @@ Deno.serve(async (req) => {
 
     // Phone lookup
     if (searchData.phone) {
+      // Run Selector Enrichment for phone - 80+ platform real-time account checks (messaging apps)
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-selector-enrichment', {
+          body: { selector: searchData.phone }
+        })
+      );
+      searchTypes.push('selector_enrichment_phone');
+
       searchPromises.push(
         supabaseClient.functions.invoke('osint-phone-lookup', {
           body: { target: searchData.phone }
