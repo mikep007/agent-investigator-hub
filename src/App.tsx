@@ -10,6 +10,7 @@ import BreachMonitoring from "./pages/BreachMonitoring";
 import Comparison from "./pages/Comparison";
 import Cases from "./pages/Cases";
 import CaseDetail from "./pages/CaseDetail";
+import SelectorEnrichment from "./pages/SelectorEnrichment";
 
 const queryClient = new QueryClient();
 
@@ -26,6 +27,7 @@ const App = () => (
           <Route path="/comparison" element={<Comparison />} />
           <Route path="/cases" element={<Cases />} />
           <Route path="/cases/:id" element={<CaseDetail />} />
+          <Route path="/selector-enrichment" element={<SelectorEnrichment />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
