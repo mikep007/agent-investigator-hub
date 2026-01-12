@@ -1,0 +1,18 @@
+{
+  "name": "osint-browser-proxy",
+  "version": "1.0.0",
+  "description": "Local proxy server with Playwright browser automation for OSINT scraping",
+  "main": "browser-server.js",
+  "scripts": {
+    "start": "node browser-server.js",
+    "install-browsers": "npx playwright install chromium"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "express": "^4.18.2",
+    "playwright": "^1.40.0"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
