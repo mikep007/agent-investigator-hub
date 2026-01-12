@@ -5,12 +5,22 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Enhanced interface with profile data
 interface ModuleResult {
   exists: boolean;
   details: Record<string, any>;
   error: string | null;
   platform: string;
   responseTime: number;
+  // New enriched fields
+  username?: string | null;
+  profileUrl?: string | null;
+  avatarUrl?: string | null;
+  displayName?: string | null;
+  bio?: string | null;
+  joinDate?: string | null;
+  lastActive?: string | null;
+  location?: string | null;
 }
 
 interface EnrichmentResult {
@@ -25,7 +35,50 @@ interface EnrichmentResult {
   timestamp: string;
 }
 
-// Platform check modules - each returns existence info from public endpoints
+// Helper to extract avatar from profile page HTML
+async function enrichAvatarFromPage(profileUrl: string): Promise<string | null> {
+  if (!profileUrl) return null;
+  
+  try {
+    const response = await fetch(profileUrl, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+      }
+    });
+    
+    if (!response.ok) return null;
+    
+    const html = await response.text();
+    
+    // Common avatar patterns
+    const patterns = [
+      /(?:og:image|twitter:image)["']\s*content=["']([^"']+)/i,
+      /class=["'][^"']*(?:avatar|profile-pic|user-image|profile-image)[^"']*["'][^>]*src=["']([^"']+)/i,
+      /src=["']([^"']+)["'][^>]*class=["'][^"']*(?:avatar|profile-pic|user-image)[^"']*["']/i,
+      /<img[^>]*class=["'][^"']*(?:avatar|profile)[^"']*["'][^>]*src=["']([^"']+)/i,
+    ];
+    
+    for (const pattern of patterns) {
+      const match = html.match(pattern);
+      if (match && match[1]) {
+        // Ensure absolute URL
+        if (match[1].startsWith('//')) return 'https:' + match[1];
+        if (match[1].startsWith('/')) {
+          const url = new URL(profileUrl);
+          return `${url.origin}${match[1]}`;
+        }
+        return match[1];
+      }
+    }
+    
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Platform check modules with enriched data
 const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleResult, 'platform' | 'responseTime'>>> = {
   
   // Microsoft/Office365 - Check via signup availability API
@@ -54,11 +107,14 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       }
       
       const data = await response.json();
-      // IfExistsResult: 0 = exists, 1 = doesn't exist, 5 = exists (federated), 6 = exists (external)
       const exists = data.IfExistsResult === 0 || data.IfExistsResult === 5 || data.IfExistsResult === 6;
       
       return {
         exists,
+        username: email.split('@')[0],
+        displayName: data.Display || null,
+        profileUrl: exists ? `https://outlook.live.com/` : null,
+        avatarUrl: null,
         details: {
           federatedProvider: data.FederationGlobalVersion ? 'federated' : null,
           throttleStatus: data.ThrottleStatus,
@@ -71,24 +127,49 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // HubSpot - Check via login endpoint
-  hubspot: async (email: string) => {
+  // GitHub - Check via signup validation
+  github: async (email: string) => {
     try {
-      const response = await fetch('https://api.hubspot.com/login-api/v1/login/check-email', {
+      const response = await fetch('https://github.com/signup_check/email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json'
         },
-        body: JSON.stringify({ email })
+        body: JSON.stringify({ value: email })
       });
       
-      // 200 usually means account exists, 404 means no account
-      const exists = response.status === 200;
+      const data = await response.json();
+      const exists = data.type === 'fail' || data.message?.includes('taken');
+      
+      // Try to find profile via email API
+      let username = null;
+      let avatarUrl = null;
+      let profileUrl = null;
+      
+      if (exists) {
+        try {
+          const searchResp = await fetch(`https://api.github.com/search/users?q=${encodeURIComponent(email)}+in:email`, {
+            headers: { 'Accept': 'application/vnd.github.v3+json' }
+          });
+          if (searchResp.ok) {
+            const searchData = await searchResp.json();
+            if (searchData.items?.[0]) {
+              username = searchData.items[0].login;
+              avatarUrl = searchData.items[0].avatar_url;
+              profileUrl = searchData.items[0].html_url;
+            }
+          }
+        } catch {}
+      }
       
       return {
         exists,
-        details: { statusCode: response.status },
+        username,
+        avatarUrl,
+        profileUrl,
+        details: { message: data.message },
         error: null
       };
     } catch (e) {
@@ -96,28 +177,101 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Strava - Check email availability
-  strava: async (email: string) => {
+  // Gravatar - Check via hash lookup (always has avatar if exists)
+  gravatar: async (email: string) => {
     try {
-      const response = await fetch(`https://www.strava.com/athletes/email_unique?email=${encodeURIComponent(email)}`, {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json'
-        }
+      // Create MD5-like hash using Web Crypto
+      const encoder = new TextEncoder();
+      const data = encoder.encode(email.toLowerCase().trim());
+      
+      // Simple hash for Gravatar lookup
+      const simpleHash = email.toLowerCase().trim().split('').reduce((a, b) => {
+        a = ((a << 5) - a) + b.charCodeAt(0);
+        return a & a;
+      }, 0).toString(16).replace('-', '');
+      
+      const hash = simpleHash.padStart(32, '0');
+      
+      const response = await fetch(`https://www.gravatar.com/${hash}.json`, {
+        method: 'GET'
       });
       
-      if (!response.ok) {
-        return { exists: false, details: {}, error: `HTTP ${response.status}` };
-      }
+      const exists = response.status === 200;
+      let username = null;
+      let displayName = null;
+      let avatarUrl = null;
+      let profileUrl = null;
+      let bio = null;
+      let location = null;
       
-      const data = await response.json();
-      // If email is NOT unique, account exists
-      const exists = data.unique === false;
+      if (exists) {
+        avatarUrl = `https://www.gravatar.com/avatar/${hash}?s=200`;
+        profileUrl = `https://gravatar.com/${hash}`;
+        
+        try {
+          const profileData = await response.json();
+          if (profileData.entry?.[0]) {
+            const profile = profileData.entry[0];
+            username = profile.preferredUsername;
+            displayName = profile.displayName || profile.name?.formatted;
+            bio = profile.aboutMe;
+            location = profile.currentLocation;
+          }
+        } catch {}
+      }
       
       return {
         exists,
-        details: { unique: data.unique },
+        username,
+        displayName,
+        avatarUrl,
+        profileUrl,
+        bio,
+        location,
+        details: { hash },
+        error: null
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // Duolingo - Rich profile data
+  duolingo: async (email: string) => {
+    try {
+      const response = await fetch(`https://www.duolingo.com/2017-06-30/users?email=${encodeURIComponent(email)}`, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        }
+      });
+      
+      const data = await response.json();
+      const exists = data.users && data.users.length > 0;
+      
+      let username = null;
+      let displayName = null;
+      let avatarUrl = null;
+      let profileUrl = null;
+      let joinDate = null;
+      
+      if (exists && data.users[0]) {
+        const user = data.users[0];
+        username = user.username;
+        displayName = user.name || user.fullname;
+        avatarUrl = user.picture || `https://simg-ssl.duolingo.com/avatars/${user.id}/large`;
+        profileUrl = `https://www.duolingo.com/profile/${username}`;
+        joinDate = user.creationDate ? new Date(user.creationDate * 1000).toISOString() : null;
+      }
+      
+      return {
+        exists,
+        username,
+        displayName,
+        avatarUrl,
+        profileUrl,
+        joinDate,
+        details: exists ? { streak: data.users[0]?.streak, totalXp: data.users[0]?.totalXp } : {},
         error: null
       };
     } catch (e) {
@@ -140,6 +294,8 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       
       return {
         exists,
+        profileUrl: exists ? 'https://open.spotify.com/' : null,
+        avatarUrl: null, // Spotify requires auth for profile pics
         details: { status: data.status },
         error: null
       };
@@ -148,7 +304,62 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Adobe - Check via Behance/Adobe ID
+  // Strava - Check email availability with profile enrichment
+  strava: async (email: string) => {
+    try {
+      const response = await fetch(`https://www.strava.com/athletes/email_unique?email=${encodeURIComponent(email)}`, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'Accept': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        return { exists: false, details: {}, error: `HTTP ${response.status}` };
+      }
+      
+      const data = await response.json();
+      const exists = data.unique === false;
+      
+      return {
+        exists,
+        profileUrl: exists ? 'https://www.strava.com/' : null,
+        avatarUrl: null, // Would need athlete ID for avatar
+        details: { unique: data.unique },
+        error: null
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // HubSpot
+  hubspot: async (email: string) => {
+    try {
+      const response = await fetch('https://api.hubspot.com/login-api/v1/login/check-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ email })
+      });
+      
+      const exists = response.status === 200;
+      
+      return {
+        exists,
+        profileUrl: exists ? 'https://app.hubspot.com/' : null,
+        details: { statusCode: response.status },
+        error: null
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // Adobe
   adobe: async (email: string) => {
     try {
       const response = await fetch('https://auth.services.adobe.com/signin/v2/users/accounts', {
@@ -166,6 +377,9 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       
       return {
         exists,
+        displayName: data[0]?.displayName || null,
+        profileUrl: exists ? 'https://account.adobe.com/' : null,
+        avatarUrl: data[0]?.avatar?.url || null,
         details: { accountType: data[0]?.type },
         error: null
       };
@@ -174,50 +388,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Gravatar - Check via hash lookup
-  gravatar: async (email: string) => {
-    try {
-      // Create MD5 hash of email (Deno compatible)
-      const encoder = new TextEncoder();
-      const data = encoder.encode(email.toLowerCase().trim());
-      const hashBuffer = await crypto.subtle.digest('MD5', data).catch(() => null);
-      
-      if (!hashBuffer) {
-        // Fallback: simple hash approximation
-        const simpleHash = email.toLowerCase().trim().split('').reduce((a, b) => {
-          a = ((a << 5) - a) + b.charCodeAt(0);
-          return a & a;
-        }, 0).toString(16);
-        
-        const response = await fetch(`https://www.gravatar.com/avatar/${simpleHash}?d=404`, {
-          method: 'HEAD'
-        });
-        
-        return {
-          exists: response.status === 200,
-          details: {},
-          error: null
-        };
-      }
-      
-      const hashArray = Array.from(new Uint8Array(hashBuffer));
-      const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-      
-      const response = await fetch(`https://www.gravatar.com/avatar/${hash}?d=404`, {
-        method: 'HEAD'
-      });
-      
-      return {
-        exists: response.status === 200,
-        details: { hash },
-        error: null
-      };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // WordPress/Automattic - Check via login
+  // WordPress/Automattic
   wordpress: async (email: string) => {
     try {
       const response = await fetch('https://wordpress.com/wp-login.php?action=lostpassword', {
@@ -230,11 +401,11 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const text = await response.text();
-      // If no error about invalid user, account likely exists
       const exists = !text.includes('no account') && !text.includes('invalid');
       
       return {
         exists,
+        profileUrl: exists ? 'https://wordpress.com/' : null,
         details: {},
         error: null
       };
@@ -243,34 +414,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // GitHub - Check via signup validation
-  github: async (email: string) => {
-    try {
-      const response = await fetch('https://github.com/signup_check/email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Accept': 'application/json'
-        },
-        body: JSON.stringify({ value: email })
-      });
-      
-      const data = await response.json();
-      // If email is not available for signup, account exists
-      const exists = data.type === 'fail' || data.message?.includes('taken');
-      
-      return {
-        exists,
-        details: { message: data.message },
-        error: null
-      };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Atlassian (Jira/Confluence/Trello) - Check via account lookup
+  // Atlassian
   atlassian: async (email: string) => {
     try {
       const response = await fetch('https://id.atlassian.com/gateway/api/check-email', {
@@ -287,6 +431,9 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       
       return {
         exists,
+        profileUrl: exists ? 'https://id.atlassian.com/' : null,
+        displayName: data.name || null,
+        avatarUrl: data.avatarUrl || null,
         details: { accountType: data.accountType },
         error: null
       };
@@ -295,7 +442,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Dropbox - Check via login flow
+  // Dropbox
   dropbox: async (email: string) => {
     try {
       const response = await fetch('https://www.dropbox.com/login', {
@@ -308,11 +455,11 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const text = await response.text();
-      // If response mentions incorrect password (not invalid email), account exists
       const exists = text.includes('incorrect password') || text.includes('wrong password');
       
       return {
         exists,
+        profileUrl: exists ? 'https://www.dropbox.com/home' : null,
         details: {},
         error: null
       };
@@ -321,7 +468,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Zoom - Check via signup
+  // Zoom
   zoom: async (email: string) => {
     try {
       const response = await fetch('https://zoom.us/signup/email_check', {
@@ -334,10 +481,11 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.status === false; // false means email is taken
+      const exists = data.status === false;
       
       return {
         exists,
+        profileUrl: exists ? 'https://zoom.us/profile' : null,
         details: { ssoRequired: data.sso_required },
         error: null
       };
@@ -346,7 +494,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Slack - Check via workspace invite
+  // Slack
   slack: async (email: string) => {
     try {
       const response = await fetch('https://slack.com/api/users.admin.checkEmail', {
@@ -363,6 +511,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       
       return {
         exists,
+        profileUrl: exists ? 'https://slack.com/' : null,
         details: {},
         error: null
       };
@@ -371,7 +520,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Notion - Check via signup
+  // Notion
   notion: async (email: string) => {
     try {
       const response = await fetch('https://www.notion.so/api/v3/getEmailStatus', {
@@ -388,6 +537,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       
       return {
         exists,
+        profileUrl: exists ? 'https://www.notion.so/' : null,
         details: { workspaceCount: data.workspaceCount },
         error: null
       };
@@ -396,7 +546,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Canva - Check via signup flow
+  // Canva
   canva: async (email: string) => {
     try {
       const response = await fetch('https://www.canva.com/_ajax/email/check', {
@@ -413,6 +563,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       
       return {
         exists,
+        profileUrl: exists ? 'https://www.canva.com/' : null,
         details: {},
         error: null
       };
@@ -421,7 +572,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Figma - Check via signup
+  // Figma
   figma: async (email: string) => {
     try {
       const response = await fetch('https://www.figma.com/api/user/check_email', {
@@ -438,6 +589,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       
       return {
         exists,
+        profileUrl: exists ? 'https://www.figma.com/' : null,
         details: {},
         error: null
       };
@@ -446,7 +598,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Mailchimp - Check via signup
+  // Mailchimp
   mailchimp: async (email: string) => {
     try {
       const response = await fetch('https://login.mailchimp.com/signup/email-exists', {
@@ -463,6 +615,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       
       return {
         exists,
+        profileUrl: exists ? 'https://mailchimp.com/' : null,
         details: {},
         error: null
       };
@@ -471,7 +624,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Asana - Check via signup
+  // Asana
   asana: async (email: string) => {
     try {
       const response = await fetch('https://app.asana.com/-/check_email', {
@@ -488,6 +641,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       
       return {
         exists,
+        profileUrl: exists ? 'https://app.asana.com/' : null,
         details: { domain: data.domain },
         error: null
       };
@@ -496,7 +650,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Trello - Check via Atlassian
+  // Trello
   trello: async (email: string) => {
     try {
       const response = await fetch('https://trello.com/1/members?email=' + encodeURIComponent(email), {
@@ -507,18 +661,28 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const exists = response.status === 200;
-      let details = {};
+      let username = null;
+      let displayName = null;
+      let avatarUrl = null;
+      let profileUrl = null;
       
       if (exists) {
         try {
           const data = await response.json();
-          details = { username: data.username, fullName: data.fullName };
+          username = data.username;
+          displayName = data.fullName;
+          avatarUrl = data.avatarUrl ? `${data.avatarUrl}/170.png` : null;
+          profileUrl = `https://trello.com/${username}`;
         } catch {}
       }
       
       return {
         exists,
-        details,
+        username,
+        displayName,
+        avatarUrl,
+        profileUrl,
+        details: {},
         error: null
       };
     } catch (e) {
@@ -526,7 +690,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Evernote - Check via signup
+  // Evernote
   evernote: async (email: string) => {
     try {
       const response = await fetch('https://www.evernote.com/Registration.action', {
@@ -543,6 +707,7 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       
       return {
         exists,
+        profileUrl: exists ? 'https://www.evernote.com/' : null,
         details: {},
         error: null
       };
@@ -551,22 +716,25 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     }
   },
 
-  // Duolingo - Check via signup
-  duolingo: async (email: string) => {
+  // Shopify
+  shopify: async (email: string) => {
     try {
-      const response = await fetch(`https://www.duolingo.com/2017-06-30/users?email=${encodeURIComponent(email)}`, {
-        method: 'GET',
+      const response = await fetch('https://accounts.shopify.com/lookup', {
+        method: 'POST',
         headers: {
+          'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        }
+        },
+        body: JSON.stringify({ email })
       });
       
       const data = await response.json();
-      const exists = data.users && data.users.length > 0;
+      const exists = data.user_exists === true || data.found === true;
       
       return {
         exists,
-        details: exists ? { username: data.users[0].username } : {},
+        profileUrl: exists ? 'https://shopify.com/' : null,
+        details: {},
         error: null
       };
     } catch (e) {
@@ -575,10 +743,9 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
   },
 
   // =====================================================
-  // FITNESS APPS (10 modules)
+  // FITNESS APPS
   // =====================================================
 
-  // Peloton - Check via signup
   peloton: async (email: string) => {
     try {
       const response = await fetch('https://api.onepeloton.com/auth/check_email', {
@@ -593,13 +760,20 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const data = await response.json();
       const exists = data.email_exists === true || data.user_exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://members.onepeloton.com/' : null,
+        avatarUrl: data.user?.image_url || null,
+        username: data.user?.username || null,
+        displayName: data.user?.name || null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Fitbit - Check via Google signup (Fitbit uses Google accounts now)
   fitbit: async (email: string) => {
     try {
       const response = await fetch('https://accounts.fitbit.com/signup', {
@@ -614,13 +788,17 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const text = await response.text();
       const exists = text.includes('already') || text.includes('registered') || response.status === 409;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.fitbit.com/user/-/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // MyFitnessPal - Check via signup
   myfitnesspal: async (email: string) => {
     try {
       const response = await fetch('https://www.myfitnesspal.com/api/auth/check_email', {
@@ -635,13 +813,17 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const data = await response.json();
       const exists = data.exists === true || data.registered === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.myfitnesspal.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Nike/Nike Run Club - Check via signup
   nike: async (email: string) => {
     try {
       const response = await fetch('https://api.nike.com/user/checkEmail', {
@@ -656,13 +838,17 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const data = await response.json();
       const exists = data.available === false || data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.nike.com/member/profile' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Under Armour (MapMyRun/MapMyFitness) - Check via signup
   underarmour: async (email: string) => {
     try {
       const response = await fetch('https://www.mapmyfitness.com/api/0.1/user/email_check/', {
@@ -677,13 +863,17 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const data = await response.json();
       const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.mapmyfitness.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Garmin Connect - Check via signup
   garmin: async (email: string) => {
     try {
       const response = await fetch('https://connect.garmin.com/signup/existUser', {
@@ -698,16 +888,20 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const data = await response.json();
       const exists = data.existUser === true || data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://connect.garmin.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Zwift - Check via signup
   zwift: async (email: string) => {
     try {
-      const response = await fetch('https://zwift.com/api/users/check-email', {
+      const response = await fetch('https://www.zwift.com/api/auth/check-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -717,15 +911,19 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.registered === true;
+      const exists = data.exists === true || data.registered === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.zwift.com/feed' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // AllTrails - Check via signup
   alltrails: async (email: string) => {
     try {
       const response = await fetch('https://www.alltrails.com/api/alltrails/users/check_email', {
@@ -738,18 +936,22 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.exists === true;
+      const exists = data.exists === true || data.taken === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.alltrails.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Komoot - Check via signup
   komoot: async (email: string) => {
     try {
-      const response = await fetch('https://account.komoot.com/api/v1/check_email', {
+      const response = await fetch('https://www.komoot.com/api/v1/user/check-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -761,16 +963,20 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const data = await response.json();
       const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.komoot.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Runkeeper (ASICS) - Check via signup
   runkeeper: async (email: string) => {
     try {
-      const response = await fetch('https://runkeeper.com/user/checkEmail', {
+      const response = await fetch('https://runkeeper.com/signup/check_email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -780,42 +986,50 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.registered === true || data.exists === true;
+      const exists = data.exists === true || data.available === false;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://runkeeper.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
   // =====================================================
-  // DATING APPS (10 modules)
+  // DATING APPS
   // =====================================================
 
-  // Tinder - Check via Facebook/phone lookup (limited)
   tinder: async (email: string) => {
     try {
       const response = await fetch('https://api.gotinder.com/v2/auth/sms/validate', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'Tinder/12.0.0 (iPhone; iOS 15.0; Scale/3.00)'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
         body: JSON.stringify({ email })
       });
       
-      const exists = response.status === 200 || response.status === 400;
+      const exists = response.status === 200 || response.status === 401;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://tinder.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Bumble - Check via signup
   bumble: async (email: string) => {
     try {
-      const response = await fetch('https://eu1.bumble.com/mwebapi.phtml?SERVER_CHECK_EMAIL', {
+      const response = await fetch('https://bumble.com/api/registration/check-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -825,18 +1039,22 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.registered === true || data.exists === true;
+      const exists = data.exists === true || data.registered === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://bumble.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Hinge - Check via signup
   hinge: async (email: string) => {
     try {
-      const response = await fetch('https://api.hinge.co/v1/users/check_email', {
+      const response = await fetch('https://api.hinge.co/v3/auth/check-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -848,37 +1066,45 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const data = await response.json();
       const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://hinge.co/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // OkCupid - Check via login
   okcupid: async (email: string) => {
     try {
-      const response = await fetch('https://www.okcupid.com/login', {
+      const response = await fetch('https://www.okcupid.com/1/apitun/login/check-email', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        body: `email=${encodeURIComponent(email)}&password=test`
+        body: JSON.stringify({ email })
       });
       
-      const text = await response.text();
-      const exists = text.includes('incorrect password') || text.includes('wrong password');
+      const data = await response.json();
+      const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.okcupid.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Match.com - Check via signup
   match: async (email: string) => {
     try {
-      const response = await fetch('https://www.match.com/rest/registration/emailcheck', {
+      const response = await fetch('https://www.match.com/api/registration/check-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -890,125 +1116,149 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const data = await response.json();
       const exists = data.exists === true || data.registered === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.match.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // PlentyOfFish (POF) - Check via signup
   pof: async (email: string) => {
     try {
-      const response = await fetch('https://www.pof.com/register/ajaxemail.aspx', {
+      const response = await fetch('https://www.pof.com/api/registration/check-email', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        body: `email=${encodeURIComponent(email)}`
+        body: JSON.stringify({ email })
       });
       
-      const text = await response.text();
-      const exists = text.includes('taken') || text.includes('registered');
+      const data = await response.json();
+      const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.pof.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Grindr - Check via signup
   grindr: async (email: string) => {
     try {
-      const response = await fetch('https://grindr.mobi/v3/users/check', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'grindr3/7.0.0 (iPhone; iOS 15.0)'
-        },
-        body: JSON.stringify({ email })
-      });
-      
-      const data = await response.json();
-      const exists = data.exists === true;
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Badoo - Check via signup
-  badoo: async (email: string) => {
-    try {
-      const response = await fetch('https://eu1.badoo.com/webapi.phtml?SERVER_CHECK_USER_EXISTENCE', {
+      const response = await fetch('https://grindr.mobi/v4/accounts/email/check', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
         body: JSON.stringify({ email })
-      });
-      
-      const data = await response.json();
-      const exists = data.registered === true;
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Coffee Meets Bagel - Check via signup
-  coffeemeetsbagel: async (email: string) => {
-    try {
-      const response = await fetch('https://cmb.coffemeetsbagel.com/api/signup/check-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: JSON.stringify({ email })
-      });
-      
-      const data = await response.json();
-      const exists = data.exists === true;
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Zoosk - Check via signup
-  zoosk: async (email: string) => {
-    try {
-      const response = await fetch('https://www.zoosk.com/ajax/checkEmail.php', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: `email=${encodeURIComponent(email)}`
       });
       
       const data = await response.json();
       const exists = data.exists === true || data.registered === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://grindr.com/' : null,
+        details: {}, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  badoo: async (email: string) => {
+    try {
+      const response = await fetch('https://badoo.com/api/registration/check-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await response.json();
+      const exists = data.exists === true;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://badoo.com/' : null,
+        details: {}, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  coffeemeetsbagel: async (email: string) => {
+    try {
+      const response = await fetch('https://api.coffeemeetsbagel.com/v1/auth/check-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await response.json();
+      const exists = data.exists === true;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://coffeemeetsbagel.com/' : null,
+        details: {}, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  zoosk: async (email: string) => {
+    try {
+      const response = await fetch('https://www.zoosk.com/api/auth/check-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await response.json();
+      const exists = data.exists === true;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.zoosk.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
   // =====================================================
-  // GAMING PLATFORMS (15 modules)
+  // GAMING PLATFORMS
   // =====================================================
 
-  // Steam - Check via login
   steam: async (email: string) => {
     try {
-      const response = await fetch('https://store.steampowered.com/join/ajaxcheckemailverified', {
+      const response = await fetch('https://store.steampowered.com/join/checkavail/', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/x-www-form-urlencoded',
@@ -1018,15 +1268,19 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.success === false || data.valid === false;
+      const exists = data.bAvailable === false;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://steamcommunity.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Discord - Check via signup
   discord: async (email: string) => {
     try {
       const response = await fetch('https://discord.com/api/v9/auth/register', {
@@ -1035,24 +1289,25 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
           'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        body: JSON.stringify({ 
-          email, 
-          username: 'test_' + Math.random().toString(36).substring(7),
-          password: 'TestPass123!',
-          date_of_birth: '1990-01-01'
-        })
+        body: JSON.stringify({ email, username: 'test', password: 'Test1234!' })
       });
       
       const data = await response.json();
-      const exists = data.errors?.email?.['_errors']?.[0]?.code === 'EMAIL_ALREADY_REGISTERED';
+      const exists = data.errors?.email?._errors?.some((e: any) => 
+        e.message?.includes('already') || e.code === 'EMAIL_ALREADY_REGISTERED'
+      );
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://discord.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Epic Games - Check via signup
   epicgames: async (email: string) => {
     try {
       const response = await fetch('https://www.epicgames.com/id/api/account/email/check', {
@@ -1065,101 +1320,48 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.valid === false || data.exists === true;
+      const exists = data.exists === true || data.found === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.epicgames.com/account/personal' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Xbox/Microsoft Gaming - Check via signup
   xbox: async (email: string) => {
     try {
-      const response = await fetch('https://signup.live.com/API/CheckAvailableSigninNames', {
+      // Xbox uses Microsoft accounts
+      const response = await fetch('https://login.microsoftonline.com/common/GetCredentialType', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        body: JSON.stringify({ signInName: email, includeSuggestions: false })
+        body: JSON.stringify({ username: email })
       });
       
       const data = await response.json();
-      const exists = data.isAvailable === false;
+      const exists = data.IfExistsResult === 0 || data.IfExistsResult === 5;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://account.xbox.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // PlayStation Network - Check via signup
   playstation: async (email: string) => {
     try {
-      const response = await fetch('https://auth.api.sonyentertainmentnetwork.com/2.0/ssocookie', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: JSON.stringify({ email, password: 'test' })
-      });
-      
-      const exists = response.status === 400 || response.status === 401;
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Nintendo - Check via signup
-  nintendo: async (email: string) => {
-    try {
-      const response = await fetch('https://accounts.nintendo.com/api/email_check', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: JSON.stringify({ email })
-      });
-      
-      const data = await response.json();
-      const exists = data.valid === false || data.exists === true;
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Twitch - Check via signup
-  twitch: async (email: string) => {
-    try {
-      const response = await fetch('https://passport.twitch.tv/usernames/availability', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: JSON.stringify({ email })
-      });
-      
-      const data = await response.json();
-      const exists = data.exists === true || data.available === false;
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Riot Games (League of Legends, Valorant) - Check via signup
-  riotgames: async (email: string) => {
-    try {
-      const response = await fetch('https://auth.riotgames.com/api/v1/account/check', {
+      const response = await fetch('https://auth.api.sonyentertainmentnetwork.com/2.0/oauth/check-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1171,59 +1373,20 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const data = await response.json();
       const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.playstation.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // EA/Origin - Check via signup
-  ea: async (email: string) => {
+  nintendo: async (email: string) => {
     try {
-      const response = await fetch('https://signin.ea.com/p/ajax/user/checkEmail', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: `email=${encodeURIComponent(email)}`
-      });
-      
-      const data = await response.json();
-      const exists = data.exists === true || data.available === false;
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Ubisoft - Check via signup
-  ubisoft: async (email: string) => {
-    try {
-      const response = await fetch('https://public-ubiservices.ubi.com/v3/users/validateField', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
-          'Ubi-AppId': 'e3d5ea9e-50bd-43b7-88bf-39794f4e3d40'
-        },
-        body: JSON.stringify({ email })
-      });
-      
-      const data = await response.json();
-      const exists = data.valid === false;
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Blizzard/Battle.net - Check via signup
-  blizzard: async (email: string) => {
-    try {
-      const response = await fetch('https://us.battle.net/account/creation/email-check', {
+      const response = await fetch('https://accounts.nintendo.com/api/users/check-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1233,57 +1396,68 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.valid === false || data.emailAlreadyInUse === true;
+      const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://accounts.nintendo.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Roblox - Check via signup
-  roblox: async (email: string) => {
+  twitch: async (email: string) => {
     try {
-      const response = await fetch('https://auth.roblox.com/v1/usernames/validate', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: JSON.stringify({ email })
-      });
-      
-      const data = await response.json();
-      const exists = data.code === 1 || data.message?.includes('taken');
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Minecraft/Mojang - Check via signup
-  minecraft: async (email: string) => {
-    try {
-      const response = await fetch('https://api.mojang.com/users/profiles/minecraft/' + encodeURIComponent(email), {
+      const response = await fetch('https://passport.twitch.tv/usernames?users_or_emails=' + encodeURIComponent(email), {
         method: 'GET',
         headers: {
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         }
       });
       
-      const exists = response.status === 200;
+      const data = await response.json();
+      const exists = data.usernames && data.usernames.length > 0;
       
-      return { exists, details: {}, error: null };
+      let username = null;
+      let avatarUrl = null;
+      let profileUrl = null;
+      
+      if (exists && data.usernames[0]) {
+        username = data.usernames[0];
+        profileUrl = `https://www.twitch.tv/${username}`;
+        // Try to get avatar
+        try {
+          const userResp = await fetch(`https://api.twitch.tv/helix/users?login=${username}`, {
+            headers: {
+              'Client-ID': 'kimne78kx3ncx6brgo4mv6wki5h1ko', // Public client ID
+            }
+          });
+          if (userResp.ok) {
+            const userData = await userResp.json();
+            avatarUrl = userData.data?.[0]?.profile_image_url;
+          }
+        } catch {}
+      }
+      
+      return { 
+        exists, 
+        username,
+        avatarUrl,
+        profileUrl,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // GOG.com - Check via signup
-  gog: async (email: string) => {
+  riotgames: async (email: string) => {
     try {
-      const response = await fetch('https://auth.gog.com/users/check', {
+      const response = await fetch('https://auth.riotgames.com/api/v1/validate-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1293,18 +1467,22 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.available === false;
+      const exists = data.exists === true || data.valid === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://account.riotgames.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Humble Bundle - Check via signup
-  humblebundle: async (email: string) => {
+  ea: async (email: string) => {
     try {
-      const response = await fetch('https://www.humblebundle.com/emailcheck', {
+      const response = await fetch('https://accounts.ea.com/connect/check-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1316,20 +1494,20 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const data = await response.json();
       const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://myaccount.ea.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // =====================================================
-  // E-COMMERCE PLATFORMS (15 modules)
-  // =====================================================
-
-  // eBay - Check via signup
-  ebay: async (email: string) => {
+  ubisoft: async (email: string) => {
     try {
-      const response = await fetch('https://reg.ebay.com/reg/EmailValidate', {
+      const response = await fetch('https://connect.ubisoft.com/v2/profiles/email-check', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1339,15 +1517,174 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.valid === false || data.exists === true;
+      const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://account.ubisoft.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Etsy - Check via signup
+  blizzard: async (email: string) => {
+    try {
+      const response = await fetch('https://eu.battle.net/oauth/check/email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await response.json();
+      const exists = data.exists === true;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://account.blizzard.com/' : null,
+        details: {}, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  roblox: async (email: string) => {
+    try {
+      const response = await fetch('https://auth.roblox.com/v2/signup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ email, username: 'test', password: 'Test1234!' })
+      });
+      
+      const data = await response.json();
+      const exists = data.errors?.some((e: any) => e.field === 'email');
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.roblox.com/' : null,
+        details: {}, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  minecraft: async (email: string) => {
+    try {
+      // Minecraft uses Microsoft accounts now
+      const response = await fetch('https://login.microsoftonline.com/common/GetCredentialType', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ username: email })
+      });
+      
+      const data = await response.json();
+      const exists = data.IfExistsResult === 0 || data.IfExistsResult === 5;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.minecraft.net/profile' : null,
+        details: {}, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  gog: async (email: string) => {
+    try {
+      const response = await fetch('https://login.gog.com/check-email', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await response.json();
+      const exists = data.exists === true;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.gog.com/' : null,
+        details: {}, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  humblebundle: async (email: string) => {
+    try {
+      const response = await fetch('https://www.humblebundle.com/emailexists', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ email })
+      });
+      
+      const data = await response.json();
+      const exists = data.exists === true;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.humblebundle.com/home' : null,
+        details: {}, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // =====================================================
+  // E-COMMERCE PLATFORMS
+  // =====================================================
+
+  ebay: async (email: string) => {
+    try {
+      const response = await fetch('https://signin.ebay.com/signin/s', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: `userid=${encodeURIComponent(email)}&pass=test`
+      });
+      
+      const text = await response.text();
+      const exists = text.includes('invalid password') || text.includes('wrong password');
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.ebay.com/usr/' : null,
+        details: {}, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
   etsy: async (email: string) => {
     try {
       const response = await fetch('https://www.etsy.com/api/v3/ajax/member/email-check', {
@@ -1360,15 +1697,19 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.exists === true || data.available === false;
+      const exists = data.exists === true || data.taken === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.etsy.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Amazon - Check via signup (limited)
   amazon: async (email: string) => {
     try {
       const response = await fetch('https://www.amazon.com/ap/signin', {
@@ -1377,43 +1718,26 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
           'Content-Type': 'application/x-www-form-urlencoded',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        body: `email=${encodeURIComponent(email)}&password=test&create=0`
+        body: `email=${encodeURIComponent(email)}&create=0`
       });
       
       const text = await response.text();
-      const exists = text.includes('incorrect password') || text.includes('wrong password');
+      const exists = !text.includes('cannot find') && !text.includes('no account');
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.amazon.com/gp/css/homepage.html' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Shopify - Check via signup (for shop owners)
-  shopify: async (email: string) => {
-    try {
-      const response = await fetch('https://accounts.shopify.com/api/check-email', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: JSON.stringify({ email })
-      });
-      
-      const data = await response.json();
-      const exists = data.exists === true;
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // PayPal - Check via signup
   paypal: async (email: string) => {
     try {
-      const response = await fetch('https://www.paypal.com/signin/client/v2/email-check', {
+      const response = await fetch('https://www.paypal.com/signin/client/v2', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1423,81 +1747,100 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.exists === true;
+      const exists = data.identified === true || data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.paypal.com/myaccount' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Venmo - Check via signup
   venmo: async (email: string) => {
     try {
-      const response = await fetch('https://api.venmo.com/v1/account/create', {
+      const response = await fetch('https://venmo.com/api/v5/users/email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        body: JSON.stringify({ email, phone: '', password: 'test' })
+        body: JSON.stringify({ email })
       });
       
-      const text = await response.text();
-      const exists = text.includes('already registered') || text.includes('email taken');
+      const data = await response.json();
+      const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        username: data.username || null,
+        displayName: data.displayName || null,
+        avatarUrl: data.profilePictureUrl || null,
+        profileUrl: data.username ? `https://venmo.com/${data.username}` : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Alibaba/AliExpress - Check via signup
   alibaba: async (email: string) => {
     try {
-      const response = await fetch('https://passport.aliexpress.com/newlogin/check.do', {
+      const response = await fetch('https://passport.aliexpress.com/newlogin/email/check', {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
+          'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        body: `loginId=${encodeURIComponent(email)}`
+        body: JSON.stringify({ email })
       });
       
       const data = await response.json();
-      const exists = data.content?.data?.status === 1;
+      const exists = data.needCode === true || data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.aliexpress.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Walmart - Check via signup
   walmart: async (email: string) => {
     try {
-      const response = await fetch('https://www.walmart.com/account/api/signin', {
+      const response = await fetch('https://www.walmart.com/account/electrode/api/identity/check-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        body: JSON.stringify({ email, password: 'test' })
+        body: JSON.stringify({ email })
       });
       
-      const text = await response.text();
-      const exists = text.includes('incorrect password') || response.status === 401;
+      const data = await response.json();
+      const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.walmart.com/account' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Target - Check via signup
   target: async (email: string) => {
     try {
-      const response = await fetch('https://gsp.target.com/gsp/registry/v1/check_email', {
+      const response = await fetch('https://gsp.target.com/gsp/authentications/v1/login_check', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1507,39 +1850,47 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.exists === true;
+      const exists = data.identified === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.target.com/account' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Wish - Check via signup
   wish: async (email: string) => {
     try {
-      const response = await fetch('https://www.wish.com/api/email-login', {
+      const response = await fetch('https://www.wish.com/api/email-login/check', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        body: JSON.stringify({ email, password: 'test' })
+        body: JSON.stringify({ email })
       });
       
       const data = await response.json();
-      const exists = data.code === 3; // Invalid password means account exists
+      const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.wish.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Poshmark - Check via signup
   poshmark: async (email: string) => {
     try {
-      const response = await fetch('https://poshmark.com/api/v1/users/email/check', {
+      const response = await fetch('https://poshmark.com/api/login/check_email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1549,18 +1900,22 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.exists === true;
+      const exists = data.exists === true || data.registered === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://poshmark.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Mercari - Check via signup
   mercari: async (email: string) => {
     try {
-      const response = await fetch('https://www.mercari.com/v1/api/users/check_email', {
+      const response = await fetch('https://www.mercari.com/jp/auth/check-email', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -1572,13 +1927,17 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       const data = await response.json();
       const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.mercari.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Depop - Check via signup
   depop: async (email: string) => {
     try {
       const response = await fetch('https://webapi.depop.com/api/v1/auth/check-email', {
@@ -1591,324 +1950,294 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
       });
       
       const data = await response.json();
-      const exists = data.exists === true || data.registered === true;
+      const exists = data.exists === true;
       
-      return { exists, details: {}, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.depop.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // StockX - Check via signup
   stockx: async (email: string) => {
     try {
-      const response = await fetch('https://stockx.com/api/register/check-email', {
+      const response = await fetch('https://stockx.com/api/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        body: JSON.stringify({ email })
-      });
-      
-      const data = await response.json();
-      const exists = data.exists === true;
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // GOAT - Check via signup
-  goat: async (email: string) => {
-    try {
-      const response = await fetch('https://www.goat.com/api/v1/users/email_check', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: JSON.stringify({ email })
-      });
-      
-      const data = await response.json();
-      const exists = data.exists === true;
-      
-      return { exists, details: {}, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // =====================================================
-  // PHONE-SPECIFIC MESSAGING PLATFORMS (10 modules)
-  // =====================================================
-
-  // WhatsApp - Check via web.whatsapp.com contact sync simulation
-  whatsapp: async (phone: string) => {
-    try {
-      // Normalize phone number - remove all non-digits except leading +
-      const normalizedPhone = phone.replace(/[^\d+]/g, '').replace(/^\+/, '');
-      
-      // WhatsApp uses wa.me links - we can check if a profile exists
-      const response = await fetch(`https://wa.me/${normalizedPhone}`, {
-        method: 'HEAD',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        redirect: 'manual'
-      });
-      
-      // WhatsApp redirects valid numbers, 404 for invalid
-      const exists = response.status === 302 || response.status === 301 || response.status === 200;
-      
-      return { 
-        exists, 
-        details: { 
-          normalizedPhone,
-          waLink: `https://wa.me/${normalizedPhone}`
-        }, 
-        error: null 
-      };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Telegram - Check via t.me phone lookup or API
-  telegram: async (phone: string) => {
-    try {
-      const normalizedPhone = phone.replace(/[^\d+]/g, '');
-      
-      // Telegram's public resolve endpoint
-      const response = await fetch(`https://t.me/+${normalizedPhone.replace(/^\+/, '')}`, {
-        method: 'HEAD',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        redirect: 'manual'
-      });
-      
-      // Check if the phone resolves to a valid profile
-      const exists = response.status === 200 || response.status === 302;
-      
-      return { 
-        exists, 
-        details: { normalizedPhone }, 
-        error: null 
-      };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Viber - Check via Viber public directory
-  viber: async (phone: string) => {
-    try {
-      const normalizedPhone = phone.replace(/[^\d]/g, '');
-      
-      // Viber uses their chatapi for lookups
-      const response = await fetch('https://www.viber.com/api/search', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Viber/15.0.0 (Android 11)'
-        },
-        body: JSON.stringify({ phone: normalizedPhone })
-      });
-      
-      if (!response.ok) {
-        // Try alternative endpoint
-        const altResponse = await fetch(`https://chatapi.viber.com/pa/get_user_details`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-          },
-          body: JSON.stringify({ phone: normalizedPhone })
-        });
-        
-        const exists = altResponse.status === 200;
-        return { exists, details: { normalizedPhone }, error: null };
-      }
-      
-      const data = await response.json();
-      const exists = data.found === true || data.user !== null;
-      
-      return { exists, details: { normalizedPhone }, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Signal - Check via Signal's directory service (limited without auth)
-  signal: async (phone: string) => {
-    try {
-      const normalizedPhone = phone.replace(/[^\d+]/g, '');
-      
-      // Signal uses sealed sender, limited public lookup
-      // We check via their registration endpoint behavior
-      const response = await fetch('https://textsecure-service.whispersystems.org/v1/accounts/sms/code/' + encodeURIComponent(normalizedPhone), {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Signal-Android/5.0.0',
-          'Accept': 'application/json'
-        }
-      });
-      
-      // 409 = already registered, 200 = can register (not registered)
-      const exists = response.status === 409 || response.status === 403;
-      
-      return { 
-        exists, 
-        details: { 
-          normalizedPhone,
-          status: response.status === 409 ? 'registered' : 'unknown'
-        }, 
-        error: null 
-      };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // TextNow - Check via signup
-  textnow: async (phone: string) => {
-    try {
-      const normalizedPhone = phone.replace(/[^\d]/g, '');
-      
-      const response = await fetch('https://www.textnow.com/api/v3/users/check_phone', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: JSON.stringify({ phone: normalizedPhone })
-      });
-      
-      const data = await response.json();
-      const exists = data.exists === true || data.registered === true;
-      
-      return { exists, details: { normalizedPhone }, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Google Voice - Check via signup flow
-  googlevoice: async (phone: string) => {
-    try {
-      const normalizedPhone = phone.replace(/[^\d]/g, '');
-      
-      const response = await fetch('https://voice.google.com/api/phone/check', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: JSON.stringify({ phone: normalizedPhone })
-      });
-      
-      const exists = response.status === 200 || response.status === 409;
-      
-      return { exists, details: { normalizedPhone }, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // Line - Check via Line lookup
-  line: async (phone: string) => {
-    try {
-      const normalizedPhone = phone.replace(/[^\d]/g, '');
-      
-      const response = await fetch('https://access.line.me/dialog/friend/add/phone', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: `phone=${encodeURIComponent(normalizedPhone)}`
-      });
-      
-      const exists = response.status === 200 || response.status === 302;
-      
-      return { exists, details: { normalizedPhone }, error: null };
-    } catch (e) {
-      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
-    }
-  },
-
-  // WeChat - Check via registration
-  wechat: async (phone: string) => {
-    try {
-      const normalizedPhone = phone.replace(/[^\d]/g, '');
-      
-      const response = await fetch('https://login.weixin.qq.com/cgi-bin/mmwebwx-bin/login', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
-        body: `phone=${encodeURIComponent(normalizedPhone)}`
+        body: JSON.stringify({ email, password: 'test' })
       });
       
       const text = await response.text();
-      const exists = text.includes('window.code=200') || response.status === 200;
+      const exists = text.includes('Invalid password') || text.includes('incorrect password');
       
-      return { exists, details: { normalizedPhone }, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://stockx.com/portfolio' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Snapchat - Check via phone lookup
-  snapchat: async (phone: string) => {
+  goat: async (email: string) => {
     try {
-      const normalizedPhone = phone.replace(/[^\d]/g, '');
-      
-      const response = await fetch('https://accounts.snapchat.com/accounts/merlin/check_phone', {
+      const response = await fetch('https://www.goat.com/api/login/check', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'Snapchat/11.0 (iPhone; iOS 15.0)'
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
         },
-        body: JSON.stringify({ phone_number: normalizedPhone, country_code: 'US' })
+        body: JSON.stringify({ email })
       });
       
       const data = await response.json();
-      const exists = data.phone_number_taken === true || data.exists === true;
+      const exists = data.exists === true;
       
-      return { exists, details: { normalizedPhone }, error: null };
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.goat.com/' : null,
+        details: {}, 
+        error: null 
+      };
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
   },
 
-  // Truecaller - Phone lookup service
-  truecaller: async (phone: string) => {
+  // =====================================================
+  // MESSAGING PLATFORMS (Phone-specific)
+  // =====================================================
+
+  whatsapp: async (phone: string) => {
     try {
-      const normalizedPhone = phone.replace(/[^\d]/g, '');
+      const cleanPhone = phone.replace(/\D/g, '');
       
-      // Truecaller's web interface lookup
-      const response = await fetch(`https://www.truecaller.com/search/${normalizedPhone}`, {
-        method: 'GET',
-        headers: {
-          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-        },
+      // WhatsApp doesn't have a public existence check
+      // We can check via contact API or wa.me link response
+      const response = await fetch(`https://wa.me/${cleanPhone}`, {
+        method: 'HEAD',
         redirect: 'manual'
       });
       
-      // Truecaller redirects to profile page if found
+      // wa.me redirects if valid number
+      const exists = response.status === 302 || response.status === 301;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? `https://wa.me/${cleanPhone}` : null,
+        details: { normalizedPhone: cleanPhone }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  telegram: async (phone: string) => {
+    try {
+      const cleanPhone = phone.replace(/\D/g, '');
+      
+      // Telegram requires auth for phone lookup, so we check via t.me pattern
+      const response = await fetch(`https://t.me/+${cleanPhone}`, {
+        method: 'HEAD',
+        redirect: 'manual'
+      });
+      
+      const exists = response.status === 200;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? `https://t.me/+${cleanPhone}` : null,
+        details: { normalizedPhone: cleanPhone }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  viber: async (phone: string) => {
+    try {
+      const cleanPhone = phone.replace(/\D/g, '');
+      
+      const response = await fetch(`https://viber.me/${cleanPhone}`, {
+        method: 'HEAD',
+        redirect: 'manual'
+      });
+      
       const exists = response.status === 200 || response.status === 302;
       
       return { 
         exists, 
+        profileUrl: exists ? `viber://chat?number=${cleanPhone}` : null,
+        details: { normalizedPhone: cleanPhone }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  signal: async (phone: string) => {
+    try {
+      const cleanPhone = phone.replace(/\D/g, '');
+      
+      // Signal doesn't have public API for phone check
+      // Return unknown - would need Signal protocol access
+      return { 
+        exists: false, 
         details: { 
-          normalizedPhone,
-          lookupUrl: `https://www.truecaller.com/search/${normalizedPhone}`
+          normalizedPhone: cleanPhone,
+          note: 'Signal does not expose public phone lookup'
         }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  textnow: async (phone: string) => {
+    try {
+      const cleanPhone = phone.replace(/\D/g, '');
+      
+      const response = await fetch('https://www.textnow.com/api/users/check_phone', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ phone: cleanPhone })
+      });
+      
+      const data = await response.json();
+      const exists = data.exists === true;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.textnow.com/' : null,
+        details: { normalizedPhone: cleanPhone }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  googlevoice: async (phone: string) => {
+    try {
+      const cleanPhone = phone.replace(/\D/g, '');
+      
+      // Google Voice uses Google account, hard to check publicly
+      return { 
+        exists: false, 
+        details: { 
+          normalizedPhone: cleanPhone,
+          note: 'Google Voice requires Google account access'
+        }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  line: async (phone: string) => {
+    try {
+      const cleanPhone = phone.replace(/\D/g, '');
+      
+      const response = await fetch('https://access.line.me/dialog/oauth/weblogin', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ phone: cleanPhone })
+      });
+      
+      const exists = response.status === 200;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://line.me/' : null,
+        details: { normalizedPhone: cleanPhone }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  wechat: async (phone: string) => {
+    try {
+      const cleanPhone = phone.replace(/\D/g, '');
+      
+      // WeChat doesn't expose public phone lookup
+      return { 
+        exists: false, 
+        details: { 
+          normalizedPhone: cleanPhone,
+          note: 'WeChat does not expose public phone lookup'
+        }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  snapchat: async (phone: string) => {
+    try {
+      const cleanPhone = phone.replace(/\D/g, '');
+      
+      const response = await fetch('https://accounts.snapchat.com/accounts/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ phone: cleanPhone, password: 'test' })
+      });
+      
+      const text = await response.text();
+      const exists = text.includes('incorrect password') || text.includes('wrong password');
+      
+      return { 
+        exists, 
+        profileUrl: exists ? 'https://www.snapchat.com/' : null,
+        details: { normalizedPhone: cleanPhone }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  truecaller: async (phone: string) => {
+    try {
+      const normalizedPhone = phone.replace(/\D/g, '');
+      
+      // Truecaller has a web lookup
+      const response = await fetch(`https://www.truecaller.com/search/in/${normalizedPhone}`, {
+        method: 'HEAD',
+        redirect: 'manual'
+      });
+      
+      const exists = response.status === 200 || response.status === 302;
+      
+      return { 
+        exists, 
+        profileUrl: exists ? `https://www.truecaller.com/search/${normalizedPhone}` : null,
+        details: { normalizedPhone }, 
         error: null 
       };
     } catch (e) {
@@ -1937,17 +2266,12 @@ async function runModuleWithTimeout(
   const startTime = Date.now();
   
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), timeoutMs);
-    
     const result = await Promise.race([
       checkFn(selector),
       new Promise<never>((_, reject) => 
         setTimeout(() => reject(new Error('Timeout')), timeoutMs)
       )
     ]);
-    
-    clearTimeout(timeout);
     
     return {
       ...result,
@@ -1985,7 +2309,7 @@ Deno.serve(async (req) => {
     const selectorType = detectSelectorType(selector);
     console.log('Detected selector type:', selectorType);
     
-    // Filter modules based on selector type (all current modules are email-focused)
+    // Filter modules based on selector type
     const modulesToRun = platforms 
       ? Object.entries(platformModules).filter(([name]) => platforms.includes(name))
       : Object.entries(platformModules);
