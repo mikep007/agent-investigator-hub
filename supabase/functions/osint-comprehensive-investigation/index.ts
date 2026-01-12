@@ -126,6 +126,39 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('people_search');
+      
+      // Browser scraper for person searches on protected sites
+      const formattedFirstName = firstName.toLowerCase();
+      const formattedLastName = lastName.toLowerCase().replace(/\s+/g, '-');
+      const locationSuffix = city && state ? `/${city.toLowerCase().replace(/\s+/g, '-')}-${state.toLowerCase()}` : '';
+      
+      // Whitepages person search
+      const whitepagesPersonUrl = `https://www.whitepages.com/name/${formattedFirstName}-${formattedLastName}${locationSuffix}`;
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-browser-scraper', {
+          body: { 
+            url: whitepagesPersonUrl,
+            searchType: 'person',
+          }
+        })
+      );
+      searchTypes.push('browser_whitepages_person');
+      
+      // Spokeo person search (if name has location context)
+      if (city && state) {
+        const spokeoUrl = `https://www.spokeo.com/${formattedFirstName}-${formattedLastName}/${state.toLowerCase()}/${city.toLowerCase().replace(/\s+/g, '-')}`;
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-browser-scraper', {
+            body: { 
+              url: spokeoUrl,
+              searchType: 'person',
+            }
+          })
+        );
+        searchTypes.push('browser_spokeo_person');
+      }
+      
+      console.log(`Browser scraper queued for person: ${searchData.fullName}`);
 
       // Social search for Facebook profiles using Google (searches by name)
       const locationForSocial = city && state ? `${city}, ${state}` : (searchData.address || '');
@@ -365,6 +398,57 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('property_records');
+
+      // Browser scraper for protected sites (Whitepages, TruePeopleSearch, FastPeopleSearch, Spokeo)
+      // Extract address components for URL building
+      const addressParts = searchData.address.match(/^(.+?),\s*([^,]+),\s*([A-Z]{2})/i);
+      if (addressParts) {
+        const streetAddress = addressParts[1].trim();
+        const city = addressParts[2].trim();
+        const state = addressParts[3].trim().toUpperCase();
+        
+        // Format for URLs
+        const formattedStreet = streetAddress.replace(/\s+/g, '-');
+        const formattedCity = city.replace(/\s+/g, '-');
+        
+        // Whitepages address scrape
+        const whitepagesUrl = `https://www.whitepages.com/address/${formattedStreet}/${formattedCity}-${state}`;
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-browser-scraper', {
+            body: { 
+              url: whitepagesUrl,
+              searchType: 'address',
+            }
+          })
+        );
+        searchTypes.push('browser_whitepages_address');
+        
+        // TruePeopleSearch address scrape
+        const truePeopleUrl = `https://www.truepeoplesearch.com/results?streetaddress=${encodeURIComponent(streetAddress)}&citystatezip=${encodeURIComponent(city)}%20${state}`;
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-browser-scraper', {
+            body: { 
+              url: truePeopleUrl,
+              searchType: 'address',
+            }
+          })
+        );
+        searchTypes.push('browser_truepeoplesearch_address');
+        
+        // FastPeopleSearch address scrape
+        const fastPeopleUrl = `https://www.fastpeoplesearch.com/address/${formattedStreet}_${formattedCity}-${state}`;
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-browser-scraper', {
+            body: { 
+              url: fastPeopleUrl,
+              searchType: 'address',
+            }
+          })
+        );
+        searchTypes.push('browser_fastpeoplesearch_address');
+        
+        console.log(`Browser scraper queued for: Whitepages, TruePeopleSearch, FastPeopleSearch`);
+      }
 
       // Web search for owner/property information with name+address context
       searchPromises.push(
