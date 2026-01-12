@@ -3,13 +3,12 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Progress } from '@/components/ui/progress';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
 import { 
   Check, 
   X, 
   Clock, 
   AlertCircle, 
-  ChevronDown,
+  ExternalLink,
   Dumbbell,
   Heart,
   Gamepad2,
@@ -19,7 +18,10 @@ import {
   Mail,
   Phone,
   Zap,
-  Filter
+  Filter,
+  User,
+  MapPin,
+  Calendar
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -29,6 +31,13 @@ interface ModuleResult {
   error: string | null;
   platform: string;
   responseTime: number;
+  username?: string | null;
+  profileUrl?: string | null;
+  avatarUrl?: string | null;
+  displayName?: string | null;
+  bio?: string | null;
+  joinDate?: string | null;
+  location?: string | null;
 }
 
 interface EnrichmentResult {
@@ -48,9 +57,7 @@ interface SelectorEnrichmentResultsProps {
   isLoading?: boolean;
 }
 
-// Platform metadata with logos and categories
-const platformMeta: Record<string, { category: string; displayName: string; icon?: string; color: string }> = {
-  // Productivity & Business
+const platformMeta: Record<string, { category: string; displayName: string; color: string }> = {
   microsoft: { category: 'business', displayName: 'Microsoft', color: '#00a4ef' },
   hubspot: { category: 'business', displayName: 'HubSpot', color: '#ff7a59' },
   slack: { category: 'business', displayName: 'Slack', color: '#4a154b' },
@@ -62,25 +69,15 @@ const platformMeta: Record<string, { category: string; displayName: string; icon
   dropbox: { category: 'business', displayName: 'Dropbox', color: '#0061ff' },
   mailchimp: { category: 'business', displayName: 'Mailchimp', color: '#ffe01b' },
   shopify: { category: 'business', displayName: 'Shopify', color: '#96bf48' },
-  
-  // Creative & Design
   adobe: { category: 'creative', displayName: 'Adobe', color: '#ff0000' },
   canva: { category: 'creative', displayName: 'Canva', color: '#00c4cc' },
   figma: { category: 'creative', displayName: 'Figma', color: '#f24e1e' },
-  
-  // Developer & Tech
   github: { category: 'tech', displayName: 'GitHub', color: '#333333' },
   gravatar: { category: 'tech', displayName: 'Gravatar', color: '#1e8cbe' },
   wordpress: { category: 'tech', displayName: 'WordPress', color: '#21759b' },
-  
-  // Education & Learning
   duolingo: { category: 'education', displayName: 'Duolingo', color: '#58cc02' },
   evernote: { category: 'education', displayName: 'Evernote', color: '#00a82d' },
-  
-  // Music & Entertainment
   spotify: { category: 'entertainment', displayName: 'Spotify', color: '#1db954' },
-  
-  // Fitness Apps
   peloton: { category: 'fitness', displayName: 'Peloton', color: '#c91c1c' },
   fitbit: { category: 'fitness', displayName: 'Fitbit', color: '#00b0b9' },
   strava: { category: 'fitness', displayName: 'Strava', color: '#fc4c02' },
@@ -92,8 +89,6 @@ const platformMeta: Record<string, { category: string; displayName: string; icon
   alltrails: { category: 'fitness', displayName: 'AllTrails', color: '#428a13' },
   komoot: { category: 'fitness', displayName: 'Komoot', color: '#6aa127' },
   runkeeper: { category: 'fitness', displayName: 'Runkeeper', color: '#2dc7d8' },
-  
-  // Dating Apps
   tinder: { category: 'dating', displayName: 'Tinder', color: '#fe3c72' },
   bumble: { category: 'dating', displayName: 'Bumble', color: '#ffc629' },
   hinge: { category: 'dating', displayName: 'Hinge', color: '#5c5c5c' },
@@ -104,8 +99,6 @@ const platformMeta: Record<string, { category: string; displayName: string; icon
   badoo: { category: 'dating', displayName: 'Badoo', color: '#783bf9' },
   coffeemeetsbagel: { category: 'dating', displayName: 'Coffee Meets Bagel', color: '#6b4226' },
   zoosk: { category: 'dating', displayName: 'Zoosk', color: '#ff6600' },
-  
-  // Gaming Platforms
   steam: { category: 'gaming', displayName: 'Steam', color: '#1b2838' },
   discord: { category: 'gaming', displayName: 'Discord', color: '#5865f2' },
   epicgames: { category: 'gaming', displayName: 'Epic Games', color: '#2f2d2e' },
@@ -121,8 +114,6 @@ const platformMeta: Record<string, { category: string; displayName: string; icon
   minecraft: { category: 'gaming', displayName: 'Minecraft', color: '#62b47a' },
   gog: { category: 'gaming', displayName: 'GOG', color: '#86328a' },
   humblebundle: { category: 'gaming', displayName: 'Humble Bundle', color: '#cc2929' },
-  
-  // E-Commerce
   ebay: { category: 'ecommerce', displayName: 'eBay', color: '#e53238' },
   etsy: { category: 'ecommerce', displayName: 'Etsy', color: '#f56400' },
   amazon: { category: 'ecommerce', displayName: 'Amazon', color: '#ff9900' },
@@ -137,8 +128,6 @@ const platformMeta: Record<string, { category: string; displayName: string; icon
   depop: { category: 'ecommerce', displayName: 'Depop', color: '#ff2300' },
   stockx: { category: 'ecommerce', displayName: 'StockX', color: '#006340' },
   goat: { category: 'ecommerce', displayName: 'GOAT', color: '#000000' },
-  
-  // Messaging Platforms (Phone-specific)
   whatsapp: { category: 'messaging', displayName: 'WhatsApp', color: '#25d366' },
   telegram: { category: 'messaging', displayName: 'Telegram', color: '#0088cc' },
   viber: { category: 'messaging', displayName: 'Viber', color: '#7360f2' },
@@ -165,162 +154,108 @@ const categoryConfig: Record<string, { label: string; icon: React.ReactNode; col
   other: { label: 'Other', icon: <Globe className="h-4 w-4" />, color: 'text-muted-foreground' },
 };
 
-const PlatformLogo: React.FC<{ platform: string; size?: number }> = ({ platform, size = 24 }) => {
-  const meta = platformMeta[platform];
-  const displayName = meta?.displayName || platform;
+// OSINT Industries-style Profile Card
+const ProfileCard: React.FC<{ result: ModuleResult }> = ({ result }) => {
+  const meta = platformMeta[result.platform];
+  const displayName = meta?.displayName || result.platform;
   const color = meta?.color || '#666666';
-  
-  // Generate initials for the logo
   const initials = displayName.split(' ').map(w => w[0]).join('').toUpperCase().slice(0, 2);
   
-  return (
-    <div 
-      className="rounded-lg flex items-center justify-center font-bold text-white shadow-sm"
-      style={{ 
-        backgroundColor: color, 
-        width: size, 
-        height: size,
-        fontSize: size * 0.4
-      }}
-    >
-      {initials}
-    </div>
-  );
-};
-
-const ResultBadge: React.FC<{ result: ModuleResult }> = ({ result }) => {
-  if (result.error) {
-    return (
-      <Badge variant="outline" className="bg-yellow-500/10 text-yellow-600 border-yellow-500/30">
-        <AlertCircle className="h-3 w-3 mr-1" />
-        Error
-      </Badge>
-    );
-  }
-  
-  if (result.exists) {
-    return (
-      <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30" variant="outline">
-        <Check className="h-3 w-3 mr-1" />
-        Found
-      </Badge>
-    );
-  }
+  const [imgError, setImgError] = useState(false);
   
   return (
-    <Badge variant="outline" className="bg-muted text-muted-foreground">
-      <X className="h-3 w-3 mr-1" />
-      Not Found
-    </Badge>
-  );
-};
-
-const ResponseTimeIndicator: React.FC<{ ms: number }> = ({ ms }) => {
-  const getColor = () => {
-    if (ms < 500) return 'text-emerald-500';
-    if (ms < 1500) return 'text-yellow-500';
-    return 'text-red-500';
-  };
-  
-  return (
-    <span className={cn("text-xs flex items-center gap-1", getColor())}>
-      <Clock className="h-3 w-3" />
-      {ms}ms
-    </span>
-  );
-};
-
-const PlatformResultRow: React.FC<{ result: ModuleResult }> = ({ result }) => {
-  const meta = platformMeta[result.platform];
-  const [isOpen, setIsOpen] = useState(false);
-  const hasDetails = Object.keys(result.details).length > 0;
-  
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <div className={cn(
-        "flex items-center justify-between p-3 rounded-lg border transition-colors",
-        result.exists ? "bg-emerald-500/5 border-emerald-500/20" : "bg-muted/30 border-border/50",
-        result.error && "bg-yellow-500/5 border-yellow-500/20"
-      )}>
-        <div className="flex items-center gap-3">
-          <PlatformLogo platform={result.platform} />
-          <div>
-            <p className="font-medium text-sm">
-              {meta?.displayName || result.platform}
-            </p>
-            <p className="text-xs text-muted-foreground capitalize">
-              {meta?.category || 'Other'}
-            </p>
+    <Card className={cn(
+      "overflow-hidden transition-all hover:shadow-lg hover:scale-[1.02]",
+      result.exists ? "border-emerald-500/30 bg-gradient-to-b from-emerald-500/5 to-transparent" : "opacity-60"
+    )}>
+      <CardContent className="p-4 flex flex-col items-center text-center">
+        {/* Avatar */}
+        <div className="relative mb-3">
+          {result.avatarUrl && !imgError ? (
+            <img
+              src={result.avatarUrl}
+              alt={`${displayName} profile`}
+              className="w-20 h-20 rounded-full object-cover border-3 shadow-lg"
+              style={{ borderColor: color }}
+              onError={() => setImgError(true)}
+              loading="lazy"
+            />
+          ) : (
+            <div 
+              className="w-20 h-20 rounded-full flex items-center justify-center text-white font-bold text-xl shadow-lg"
+              style={{ backgroundColor: color }}
+            >
+              {initials}
+            </div>
+          )}
+          
+          {/* Status indicator */}
+          <div className={cn(
+            "absolute -bottom-1 -right-1 w-6 h-6 rounded-full flex items-center justify-center border-2 border-background",
+            result.exists ? "bg-emerald-500" : "bg-muted"
+          )}>
+            {result.exists ? (
+              <Check className="h-3 w-3 text-white" />
+            ) : (
+              <X className="h-3 w-3 text-muted-foreground" />
+            )}
           </div>
         </div>
         
-        <div className="flex items-center gap-3">
-          <ResponseTimeIndicator ms={result.responseTime} />
-          <ResultBadge result={result} />
-          {hasDetails && (
-            <CollapsibleTrigger asChild>
-              <button className="p-1 hover:bg-muted rounded">
-                <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
-              </button>
-            </CollapsibleTrigger>
-          )}
+        {/* Platform name */}
+        <h3 className="font-semibold text-sm">{displayName}</h3>
+        
+        {/* Username/Display name */}
+        {(result.username || result.displayName) && (
+          <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
+            <User className="h-3 w-3" />
+            {result.displayName || `@${result.username}`}
+          </p>
+        )}
+        
+        {/* Location */}
+        {result.location && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <MapPin className="h-3 w-3" />
+            {result.location}
+          </p>
+        )}
+        
+        {/* Join date */}
+        {result.joinDate && (
+          <p className="text-xs text-muted-foreground flex items-center gap-1">
+            <Calendar className="h-3 w-3" />
+            {new Date(result.joinDate).toLocaleDateString()}
+          </p>
+        )}
+        
+        {/* Response time */}
+        <div className="flex items-center gap-1 mt-2 text-xs text-muted-foreground">
+          <Clock className="h-3 w-3" />
+          {result.responseTime}ms
         </div>
-      </div>
-      
-      {hasDetails && (
-        <CollapsibleContent>
-          <div className="mt-2 ml-10 p-3 bg-muted/30 rounded-lg text-xs">
-            <p className="font-medium mb-2">Additional Details:</p>
-            <pre className="text-muted-foreground overflow-x-auto">
-              {JSON.stringify(result.details, null, 2)}
-            </pre>
-          </div>
-        </CollapsibleContent>
-      )}
-    </Collapsible>
-  );
-};
-
-const CategorySection: React.FC<{ 
-  category: string; 
-  results: ModuleResult[];
-  defaultOpen?: boolean;
-}> = ({ category, results, defaultOpen = false }) => {
-  const [isOpen, setIsOpen] = useState(defaultOpen);
-  const config = categoryConfig[category] || categoryConfig.other;
-  const foundCount = results.filter(r => r.exists).length;
-  
-  return (
-    <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-      <CollapsibleTrigger asChild>
-        <button className="w-full flex items-center justify-between p-4 bg-muted/30 rounded-lg hover:bg-muted/50 transition-colors">
-          <div className="flex items-center gap-3">
-            <span className={config.color}>{config.icon}</span>
-            <span className="font-medium">{config.label}</span>
-            <Badge variant="outline" className="text-xs">
-              {results.length} platforms
-            </Badge>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {foundCount > 0 && (
-              <Badge className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30" variant="outline">
-                {foundCount} found
-              </Badge>
-            )}
-            <ChevronDown className={cn("h-4 w-4 transition-transform", isOpen && "rotate-180")} />
-          </div>
-        </button>
-      </CollapsibleTrigger>
-      
-      <CollapsibleContent>
-        <div className="space-y-2 mt-3 pl-2">
-          {results.map((result) => (
-            <PlatformResultRow key={result.platform} result={result} />
-          ))}
-        </div>
-      </CollapsibleContent>
-    </Collapsible>
+        
+        {/* View profile button */}
+        {result.exists && result.profileUrl && (
+          <a
+            href={result.profileUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="mt-3 inline-flex items-center gap-1 px-3 py-1.5 text-xs font-medium rounded-full bg-primary/10 text-primary hover:bg-primary/20 transition-colors"
+          >
+            View Profile
+            <ExternalLink className="h-3 w-3" />
+          </a>
+        )}
+        
+        {result.error && (
+          <Badge variant="outline" className="mt-2 bg-yellow-500/10 text-yellow-600 text-xs">
+            <AlertCircle className="h-3 w-3 mr-1" />
+            Error
+          </Badge>
+        )}
+      </CardContent>
+    </Card>
   );
 };
 
@@ -357,7 +292,7 @@ export const SelectorEnrichmentResults: React.FC<SelectorEnrichmentResultsProps>
   data, 
   isLoading = false 
 }) => {
-  const [showOnlyFound, setShowOnlyFound] = useState(false);
+  const [showOnlyFound, setShowOnlyFound] = useState(true);
   
   if (isLoading) {
     return (
@@ -386,8 +321,11 @@ export const SelectorEnrichmentResults: React.FC<SelectorEnrichmentResultsProps>
     );
   }
   
-  // Group results by category
-  const groupedResults = data.results.reduce((acc, result) => {
+  const foundResults = data.results.filter(r => r.exists);
+  const displayResults = showOnlyFound ? foundResults : data.results;
+  
+  // Group by category
+  const groupedResults = displayResults.reduce((acc, result) => {
     const meta = platformMeta[result.platform];
     const category = meta?.category || 'other';
     if (!acc[category]) acc[category] = [];
@@ -395,24 +333,12 @@ export const SelectorEnrichmentResults: React.FC<SelectorEnrichmentResultsProps>
     return acc;
   }, {} as Record<string, ModuleResult[]>);
   
-  // Filter if needed
-  const filteredGroups = showOnlyFound
-    ? Object.entries(groupedResults).reduce((acc, [cat, results]) => {
-        const found = results.filter(r => r.exists);
-        if (found.length > 0) acc[cat] = found;
-        return acc;
-      }, {} as Record<string, ModuleResult[]>)
-    : groupedResults;
-  
-  // Sort categories by number of found accounts
-  const sortedCategories = Object.entries(filteredGroups)
+  const sortedCategories = Object.entries(groupedResults)
     .sort((a, b) => {
       const aFound = a[1].filter(r => r.exists).length;
       const bFound = b[1].filter(r => r.exists).length;
       return bFound - aFound;
     });
-  
-  const foundResults = data.results.filter(r => r.exists);
   
   return (
     <Card>
@@ -444,7 +370,7 @@ export const SelectorEnrichmentResults: React.FC<SelectorEnrichmentResultsProps>
             )}
           >
             <Filter className="h-4 w-4" />
-            {showOnlyFound ? 'Showing Found' : 'Show All'}
+            {showOnlyFound ? 'Found Only' : 'Show All'}
           </button>
         </div>
       </CardHeader>
@@ -452,42 +378,48 @@ export const SelectorEnrichmentResults: React.FC<SelectorEnrichmentResultsProps>
       <CardContent>
         <SummaryStats summary={data.summary} />
         
-        <Tabs defaultValue="categories" className="w-full">
+        <Tabs defaultValue="grid" className="w-full">
           <TabsList className="w-full mb-4">
-            <TabsTrigger value="categories" className="flex-1">By Category</TabsTrigger>
-            <TabsTrigger value="found" className="flex-1">
-              Found Only ({foundResults.length})
-            </TabsTrigger>
-            <TabsTrigger value="all" className="flex-1">All Results</TabsTrigger>
+            <TabsTrigger value="grid" className="flex-1">Card Grid</TabsTrigger>
+            <TabsTrigger value="category" className="flex-1">By Category</TabsTrigger>
           </TabsList>
           
-          <TabsContent value="categories" className="space-y-3">
-            {sortedCategories.map(([category, results]) => (
-              <CategorySection 
-                key={category} 
-                category={category} 
-                results={results}
-                defaultOpen={results.some(r => r.exists)}
-              />
-            ))}
-          </TabsContent>
-          
-          <TabsContent value="found" className="space-y-2">
-            {foundResults.length === 0 ? (
+          <TabsContent value="grid">
+            {displayResults.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
                 No accounts found for this selector
               </div>
             ) : (
-              foundResults.map((result) => (
-                <PlatformResultRow key={result.platform} result={result} />
-              ))
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                {displayResults.map((result) => (
+                  <ProfileCard key={result.platform} result={result} />
+                ))}
+              </div>
             )}
           </TabsContent>
           
-          <TabsContent value="all" className="space-y-2 max-h-[600px] overflow-y-auto">
-            {data.results.map((result) => (
-              <PlatformResultRow key={result.platform} result={result} />
-            ))}
+          <TabsContent value="category" className="space-y-6">
+            {sortedCategories.map(([category, results]) => {
+              const config = categoryConfig[category] || categoryConfig.other;
+              const foundCount = results.filter(r => r.exists).length;
+              
+              return (
+                <div key={category}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className={config.color}>{config.icon}</span>
+                    <h3 className="font-medium">{config.label}</h3>
+                    <Badge variant="outline" className="text-xs">
+                      {foundCount} found
+                    </Badge>
+                  </div>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-4">
+                    {results.map((result) => (
+                      <ProfileCard key={result.platform} result={result} />
+                    ))}
+                  </div>
+                </div>
+              );
+            })}
           </TabsContent>
         </Tabs>
         
