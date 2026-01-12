@@ -684,6 +684,22 @@ Deno.serve(async (req) => {
         })
       );
       searchTypes.push('court_records');
+      
+      // Pennsylvania Voter Registration Lookup
+      // Run for PA addresses or as a general check for PA residents
+      if (state === 'PA') {
+        console.log('Pennsylvania address detected - running PA voter lookup');
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-pa-voter-lookup', {
+            body: { 
+              firstName,
+              lastName,
+              county,
+            }
+          })
+        );
+        searchTypes.push('pa_voter_lookup');
+      }
     }
 
     // Known Relatives / Associates - Search for connections

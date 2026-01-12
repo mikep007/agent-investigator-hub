@@ -7,6 +7,7 @@ import VisualTimeline from "./VisualTimeline";
 import RelatedPersonsCard from "./RelatedPersonsCard";
 import BusinessRegistryCard from "./BusinessRegistryCard";
 import PropertyRecordsCard from "./PropertyRecordsCard";
+import VoterRegistrationCard from "./VoterRegistrationCard";
 import { useMemo } from "react";
 
 interface OSINTResultsGridProps {
@@ -215,6 +216,12 @@ const OSINTResultsGrid = ({
             />
           ))
         }
+
+        {/* Voter Registration */}
+        <VoterRegistrationCard 
+          findings={findings}
+          targetName={targetName}
+        />
 
         {/* Visual Timeline */}
         <VisualTimeline findings={findings} />
