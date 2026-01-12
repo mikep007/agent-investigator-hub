@@ -137,10 +137,23 @@ const platformMeta: Record<string, { category: string; displayName: string; icon
   depop: { category: 'ecommerce', displayName: 'Depop', color: '#ff2300' },
   stockx: { category: 'ecommerce', displayName: 'StockX', color: '#006340' },
   goat: { category: 'ecommerce', displayName: 'GOAT', color: '#000000' },
+  
+  // Messaging Platforms (Phone-specific)
+  whatsapp: { category: 'messaging', displayName: 'WhatsApp', color: '#25d366' },
+  telegram: { category: 'messaging', displayName: 'Telegram', color: '#0088cc' },
+  viber: { category: 'messaging', displayName: 'Viber', color: '#7360f2' },
+  signal: { category: 'messaging', displayName: 'Signal', color: '#3a76f0' },
+  textnow: { category: 'messaging', displayName: 'TextNow', color: '#00d084' },
+  googlevoice: { category: 'messaging', displayName: 'Google Voice', color: '#4285f4' },
+  line: { category: 'messaging', displayName: 'Line', color: '#00c300' },
+  wechat: { category: 'messaging', displayName: 'WeChat', color: '#7bb32e' },
+  snapchat: { category: 'messaging', displayName: 'Snapchat', color: '#fffc00' },
+  truecaller: { category: 'messaging', displayName: 'Truecaller', color: '#0099ff' },
 };
 
 const categoryConfig: Record<string, { label: string; icon: React.ReactNode; color: string }> = {
-  fitness: { label: 'Fitness', icon: <Dumbbell className="h-4 w-4" />, color: 'text-green-500' },
+  messaging: { label: 'Messaging', icon: <Phone className="h-4 w-4" />, color: 'text-green-500' },
+  fitness: { label: 'Fitness', icon: <Dumbbell className="h-4 w-4" />, color: 'text-emerald-500' },
   dating: { label: 'Dating', icon: <Heart className="h-4 w-4" />, color: 'text-pink-500' },
   gaming: { label: 'Gaming', icon: <Gamepad2 className="h-4 w-4" />, color: 'text-purple-500' },
   ecommerce: { label: 'E-Commerce', icon: <ShoppingCart className="h-4 w-4" />, color: 'text-orange-500' },
@@ -148,7 +161,7 @@ const categoryConfig: Record<string, { label: string; icon: React.ReactNode; col
   creative: { label: 'Creative', icon: <Globe className="h-4 w-4" />, color: 'text-red-500' },
   tech: { label: 'Tech', icon: <Globe className="h-4 w-4" />, color: 'text-gray-500' },
   education: { label: 'Education', icon: <Globe className="h-4 w-4" />, color: 'text-yellow-500' },
-  entertainment: { label: 'Entertainment', icon: <Globe className="h-4 w-4" />, color: 'text-emerald-500' },
+  entertainment: { label: 'Entertainment', icon: <Globe className="h-4 w-4" />, color: 'text-teal-500' },
   other: { label: 'Other', icon: <Globe className="h-4 w-4" />, color: 'text-muted-foreground' },
 };
 
