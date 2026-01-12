@@ -1639,6 +1639,281 @@ const platformModules: Record<string, (selector: string) => Promise<Omit<ModuleR
     } catch (e) {
       return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
     }
+  },
+
+  // =====================================================
+  // PHONE-SPECIFIC MESSAGING PLATFORMS (10 modules)
+  // =====================================================
+
+  // WhatsApp - Check via web.whatsapp.com contact sync simulation
+  whatsapp: async (phone: string) => {
+    try {
+      // Normalize phone number - remove all non-digits except leading +
+      const normalizedPhone = phone.replace(/[^\d+]/g, '').replace(/^\+/, '');
+      
+      // WhatsApp uses wa.me links - we can check if a profile exists
+      const response = await fetch(`https://wa.me/${normalizedPhone}`, {
+        method: 'HEAD',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        redirect: 'manual'
+      });
+      
+      // WhatsApp redirects valid numbers, 404 for invalid
+      const exists = response.status === 302 || response.status === 301 || response.status === 200;
+      
+      return { 
+        exists, 
+        details: { 
+          normalizedPhone,
+          waLink: `https://wa.me/${normalizedPhone}`
+        }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // Telegram - Check via t.me phone lookup or API
+  telegram: async (phone: string) => {
+    try {
+      const normalizedPhone = phone.replace(/[^\d+]/g, '');
+      
+      // Telegram's public resolve endpoint
+      const response = await fetch(`https://t.me/+${normalizedPhone.replace(/^\+/, '')}`, {
+        method: 'HEAD',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        redirect: 'manual'
+      });
+      
+      // Check if the phone resolves to a valid profile
+      const exists = response.status === 200 || response.status === 302;
+      
+      return { 
+        exists, 
+        details: { normalizedPhone }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // Viber - Check via Viber public directory
+  viber: async (phone: string) => {
+    try {
+      const normalizedPhone = phone.replace(/[^\d]/g, '');
+      
+      // Viber uses their chatapi for lookups
+      const response = await fetch('https://www.viber.com/api/search', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Viber/15.0.0 (Android 11)'
+        },
+        body: JSON.stringify({ phone: normalizedPhone })
+      });
+      
+      if (!response.ok) {
+        // Try alternative endpoint
+        const altResponse = await fetch(`https://chatapi.viber.com/pa/get_user_details`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+          },
+          body: JSON.stringify({ phone: normalizedPhone })
+        });
+        
+        const exists = altResponse.status === 200;
+        return { exists, details: { normalizedPhone }, error: null };
+      }
+      
+      const data = await response.json();
+      const exists = data.found === true || data.user !== null;
+      
+      return { exists, details: { normalizedPhone }, error: null };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // Signal - Check via Signal's directory service (limited without auth)
+  signal: async (phone: string) => {
+    try {
+      const normalizedPhone = phone.replace(/[^\d+]/g, '');
+      
+      // Signal uses sealed sender, limited public lookup
+      // We check via their registration endpoint behavior
+      const response = await fetch('https://textsecure-service.whispersystems.org/v1/accounts/sms/code/' + encodeURIComponent(normalizedPhone), {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Signal-Android/5.0.0',
+          'Accept': 'application/json'
+        }
+      });
+      
+      // 409 = already registered, 200 = can register (not registered)
+      const exists = response.status === 409 || response.status === 403;
+      
+      return { 
+        exists, 
+        details: { 
+          normalizedPhone,
+          status: response.status === 409 ? 'registered' : 'unknown'
+        }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // TextNow - Check via signup
+  textnow: async (phone: string) => {
+    try {
+      const normalizedPhone = phone.replace(/[^\d]/g, '');
+      
+      const response = await fetch('https://www.textnow.com/api/v3/users/check_phone', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ phone: normalizedPhone })
+      });
+      
+      const data = await response.json();
+      const exists = data.exists === true || data.registered === true;
+      
+      return { exists, details: { normalizedPhone }, error: null };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // Google Voice - Check via signup flow
+  googlevoice: async (phone: string) => {
+    try {
+      const normalizedPhone = phone.replace(/[^\d]/g, '');
+      
+      const response = await fetch('https://voice.google.com/api/phone/check', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: JSON.stringify({ phone: normalizedPhone })
+      });
+      
+      const exists = response.status === 200 || response.status === 409;
+      
+      return { exists, details: { normalizedPhone }, error: null };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // Line - Check via Line lookup
+  line: async (phone: string) => {
+    try {
+      const normalizedPhone = phone.replace(/[^\d]/g, '');
+      
+      const response = await fetch('https://access.line.me/dialog/friend/add/phone', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: `phone=${encodeURIComponent(normalizedPhone)}`
+      });
+      
+      const exists = response.status === 200 || response.status === 302;
+      
+      return { exists, details: { normalizedPhone }, error: null };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // WeChat - Check via registration
+  wechat: async (phone: string) => {
+    try {
+      const normalizedPhone = phone.replace(/[^\d]/g, '');
+      
+      const response = await fetch('https://login.weixin.qq.com/cgi-bin/mmwebwx-bin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        body: `phone=${encodeURIComponent(normalizedPhone)}`
+      });
+      
+      const text = await response.text();
+      const exists = text.includes('window.code=200') || response.status === 200;
+      
+      return { exists, details: { normalizedPhone }, error: null };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // Snapchat - Check via phone lookup
+  snapchat: async (phone: string) => {
+    try {
+      const normalizedPhone = phone.replace(/[^\d]/g, '');
+      
+      const response = await fetch('https://accounts.snapchat.com/accounts/merlin/check_phone', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'User-Agent': 'Snapchat/11.0 (iPhone; iOS 15.0)'
+        },
+        body: JSON.stringify({ phone_number: normalizedPhone, country_code: 'US' })
+      });
+      
+      const data = await response.json();
+      const exists = data.phone_number_taken === true || data.exists === true;
+      
+      return { exists, details: { normalizedPhone }, error: null };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
+  },
+
+  // Truecaller - Phone lookup service
+  truecaller: async (phone: string) => {
+    try {
+      const normalizedPhone = phone.replace(/[^\d]/g, '');
+      
+      // Truecaller's web interface lookup
+      const response = await fetch(`https://www.truecaller.com/search/${normalizedPhone}`, {
+        method: 'GET',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        },
+        redirect: 'manual'
+      });
+      
+      // Truecaller redirects to profile page if found
+      const exists = response.status === 200 || response.status === 302;
+      
+      return { 
+        exists, 
+        details: { 
+          normalizedPhone,
+          lookupUrl: `https://www.truecaller.com/search/${normalizedPhone}`
+        }, 
+        error: null 
+      };
+    } catch (e) {
+      return { exists: false, details: {}, error: e instanceof Error ? e.message : 'Unknown error' };
+    }
   }
 };
 
