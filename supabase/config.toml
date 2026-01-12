@@ -113,3 +113,6 @@ verify_jwt = true
 
 [functions.graph-person]
 verify_jwt = true
+
+[functions.osint-pa-voter-lookup]
+verify_jwt = true

@@ -7,6 +7,7 @@ export { default as TimelineView } from './TimelineView';
 export { default as IntelligenceDossier } from './IntelligenceDossier';
 export { default as OSINTResultsGrid } from './OSINTResultsGrid';
 export { default as OSINTPlatformCard } from './OSINTPlatformCard';
+export { default as VoterRegistrationCard } from './VoterRegistrationCard';
 export { default as ResultsSummaryBar } from './ResultsSummaryBar';
 export { default as VisualTimeline } from './VisualTimeline';
 export { default as SaveToCaseButton } from './SaveToCaseButton';
