@@ -692,6 +692,10 @@ Deno.serve(async (req) => {
         { state: 'NY', functionName: 'osint-ny-voter-lookup' },
         { state: 'FL', functionName: 'osint-fl-voter-lookup' },
         { state: 'OH', functionName: 'osint-oh-voter-lookup' },
+        { state: 'TX', functionName: 'osint-tx-voter-lookup' },
+        { state: 'CA', functionName: 'osint-ca-voter-lookup' },
+        { state: 'GA', functionName: 'osint-ga-voter-lookup' },
+        { state: 'NC', functionName: 'osint-nc-voter-lookup' },
       ];
       
       const detectedState = voterLookupStates.find(v => v.state === state);
@@ -725,6 +729,10 @@ Deno.serve(async (req) => {
         { state: 'NY', functionName: 'osint-ny-voter-lookup' },
         { state: 'FL', functionName: 'osint-fl-voter-lookup' },
         { state: 'OH', functionName: 'osint-oh-voter-lookup' },
+        { state: 'TX', functionName: 'osint-tx-voter-lookup' },
+        { state: 'CA', functionName: 'osint-ca-voter-lookup' },
+        { state: 'GA', functionName: 'osint-ga-voter-lookup' },
+        { state: 'NC', functionName: 'osint-nc-voter-lookup' },
       ];
       
       for (const { state, functionName } of voterLookupStates) {
