@@ -193,10 +193,54 @@ function checkNameMatch(text: string, fullName: string, sourceUrl?: string): { e
   return { exact: false, partial: false };
 }
 
+// Common non-name words to filter out from relative extraction
+const NON_NAME_WORDS = new Set([
+  'one', 'two', 'three', 'four', 'five', 'his', 'her', 'their', 'the', 'and', 'or', 'by',
+  'with', 'of', 'in', 'at', 'to', 'from', 'for', 'on', 'as', 'was', 'were', 'is', 'are',
+  'beloved', 'loving', 'dear', 'late', 'brother', 'sister', 'father', 'mother', 'wife',
+  'husband', 'son', 'daughter', 'grandfather', 'grandmother', 'uncle', 'aunt', 'nephew',
+  'niece', 'cousin', 'friend', 'side', 'alongside', 'survived', 'preceded', 'death',
+  'memorial', 'service', 'funeral', 'obituary', 'years', 'age', 'born', 'died', 'passed',
+  'peacefully', 'suddenly', 'unexpectedly', 'after', 'before', 'during', 'view', 'vista'
+]);
+
+// Common first names for validation (top ~200)
+const COMMON_FIRST_NAMES = new Set([
+  'james', 'john', 'robert', 'michael', 'william', 'david', 'richard', 'joseph', 'thomas', 'charles',
+  'christopher', 'daniel', 'matthew', 'anthony', 'mark', 'donald', 'steven', 'paul', 'andrew', 'joshua',
+  'kenneth', 'kevin', 'brian', 'george', 'timothy', 'ronald', 'edward', 'jason', 'jeffrey', 'ryan',
+  'jacob', 'gary', 'nicholas', 'eric', 'jonathan', 'stephen', 'larry', 'justin', 'scott', 'brandon',
+  'benjamin', 'samuel', 'raymond', 'gregory', 'frank', 'alexander', 'patrick', 'jack', 'dennis', 'jerry',
+  'tyler', 'aaron', 'jose', 'adam', 'nathan', 'henry', 'douglas', 'zachary', 'peter', 'kyle',
+  'mary', 'patricia', 'jennifer', 'linda', 'elizabeth', 'barbara', 'susan', 'jessica', 'sarah', 'karen',
+  'lisa', 'nancy', 'betty', 'margaret', 'sandra', 'ashley', 'kimberly', 'emily', 'donna', 'michelle',
+  'dorothy', 'carol', 'amanda', 'melissa', 'deborah', 'stephanie', 'rebecca', 'sharon', 'laura', 'cynthia',
+  'kathleen', 'amy', 'angela', 'shirley', 'anna', 'brenda', 'pamela', 'emma', 'nicole', 'helen',
+  'samantha', 'katherine', 'christine', 'debra', 'rachel', 'carolyn', 'janet', 'catherine', 'maria', 'heather',
+  'diane', 'ruth', 'julie', 'olivia', 'joyce', 'virginia', 'victoria', 'kelly', 'lauren', 'christina',
+  'joan', 'evelyn', 'judith', 'megan', 'andrea', 'cheryl', 'hannah', 'jacqueline', 'martha', 'gloria',
+  'teresa', 'ann', 'sara', 'madison', 'frances', 'kathryn', 'janice', 'jean', 'abigail', 'alice',
+  'judy', 'sophia', 'grace', 'denise', 'amber', 'doris', 'marilyn', 'danielle', 'beverly', 'isabella',
+  'theresa', 'diana', 'natalie', 'brittany', 'charlotte', 'marie', 'kayla', 'alexis', 'lori', 'chad',
+  'moira', 'kate', 'caroline', 'brigida', 'triplett', 'dee', 'sarah', 'debra', 'robert', 'daniel'
+]);
+
+// Check if a word looks like a valid first name
+function isValidFirstName(word: string): boolean {
+  const lower = word.toLowerCase();
+  // Must be 2+ chars, start with capital, and either be a known name or follow name patterns
+  if (word.length < 2 || !/^[A-Z]/.test(word)) return false;
+  if (NON_NAME_WORDS.has(lower)) return false;
+  // If it's a known first name, accept it
+  if (COMMON_FIRST_NAMES.has(lower)) return true;
+  // Otherwise, must be 3+ chars, all letters, and start with capital
+  return word.length >= 3 && /^[A-Z][a-z]+$/.test(word);
+}
+
 // Extract potential relative names from text (especially obituaries)
+// STRICT VERSION: Only extracts clean "FirstName LastName" patterns with validation
 function extractPotentialRelatives(text: string, primaryName: string): string[] {
   const relatives: string[] = [];
-  const textLower = text.toLowerCase();
   const primaryNameLower = primaryName.toLowerCase();
   
   // Get last name from primary name for surname matching
@@ -204,47 +248,34 @@ function extractPotentialRelatives(text: string, primaryName: string): string[] 
   const primaryLastName = primaryParts.length > 1 ? primaryParts[primaryParts.length - 1].toLowerCase() : '';
   const primaryFirstName = primaryParts[0]?.toLowerCase() || '';
   
-  // Common relative indicators in obituaries
-  const relativePatterns = [
-    /(?:wife|husband|spouse|partner)[\s,]+(?:of\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
-    /(?:son|daughter|child)(?:\s+of)?[\s,]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
-    /(?:father|mother|parent)[\s,]+(?:of\s+)?([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
-    /(?:brother|sister|sibling)[\s,]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
-    /(?:survived by|preceded in death by|leaves behind)[\s:,]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
-    /(?:married to|wed to)[\s,]+([A-Z][a-z]+(?:\s+[A-Z][a-z]+)+)/gi,
-  ];
-  
-  for (const pattern of relativePatterns) {
-    let match;
-    while ((match = pattern.exec(text)) !== null) {
-      const name = match[1]?.trim();
-      if (name && name.length > 3 && name.toLowerCase() !== primaryNameLower) {
-        // Validate it looks like a name (2+ words, not too long)
-        const words = name.split(/\s+/);
-        if (words.length >= 2 && words.length <= 4 && name.length < 40) {
-          relatives.push(name);
-        }
-      }
-    }
-  }
-  
-  // Also look for other people with same last name mentioned
+  // ONLY look for people with the same last name as the target
+  // This is the most reliable way to find actual relatives in obituaries
   if (primaryLastName && primaryLastName.length > 2) {
+    // Escape special regex characters in last name
+    const escapedLastName = primaryLastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
     // Pattern: First name + Same Last Name (e.g., "Moira Petrie" when searching "Michael Petrie")
-    const sameSurnamePattern = new RegExp(`\\b([A-Z][a-z]+)\\s+${primaryLastName}\\b`, 'gi');
+    // More strict: require the first name to be 3+ characters and start with capital
+    const sameSurnamePattern = new RegExp(`\\b([A-Z][a-z]{2,15})\\s+${escapedLastName}\\b`, 'gi');
     let match;
     while ((match = sameSurnamePattern.exec(text)) !== null) {
       const firstName = match[1];
-      if (firstName && firstName.toLowerCase() !== primaryFirstName && firstName.length > 2) {
-        const fullName = `${firstName} ${primaryParts[primaryParts.length - 1]}`;
-        if (!relatives.includes(fullName) && fullName.toLowerCase() !== primaryNameLower) {
+      // Validate this looks like a real first name
+      if (firstName && isValidFirstName(firstName) && firstName.toLowerCase() !== primaryFirstName) {
+        // Reconstruct with proper case
+        const fullName = `${firstName.charAt(0).toUpperCase()}${firstName.slice(1).toLowerCase()} ${primaryParts[primaryParts.length - 1]}`;
+        if (!relatives.some(r => r.toLowerCase() === fullName.toLowerCase()) && 
+            fullName.toLowerCase() !== primaryNameLower) {
           relatives.push(fullName);
         }
       }
     }
   }
   
-  // Dedupe and return
+  // DON'T extract from generic patterns like "survived by" - these produce too much garbage
+  // The same-surname approach is much more reliable for actual family connections
+  
+  // Dedupe and return (limit to 10)
   return [...new Set(relatives)].slice(0, 10);
 }
 
