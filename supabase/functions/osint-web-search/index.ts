@@ -1804,6 +1804,12 @@ Deno.serve(async (req) => {
         
         console.log(`  Final score for ${item.link}: ${confidenceScore.toFixed(2)} (${corroboratingFactors} corroborating factors)`);
         
+        // Detect if this result came from a family/relative-focused query
+        const familyQueryTypes = ['relative_name', 'relative_obituary', 'relative_funeral', 'relative_lastname_obituary', 'keyword_relative'];
+        const isFromFamilyQuery = familyQueryTypes.includes(result.queryType) || 
+                                   result.queryCategory === 'family' ||
+                                   (result.queryDescription?.toLowerCase().includes('relative') ?? false);
+        
         const processedItem = {
           title: item.title || '',
           link: item.link || '',
@@ -1828,7 +1834,9 @@ Deno.serve(async (req) => {
           matchedRelative: matchedRelative || undefined,
           corroboratingFactors,
           sourceType: result.queryType,
-          queryDescription: result.queryDescription
+          queryDescription: result.queryDescription,
+          isFromFamilyQuery, // Flag for results discovered via family/relative queries
+          queryCategory: result.queryCategory
         };
         
         if (confidenceScore >= 0.6) {
