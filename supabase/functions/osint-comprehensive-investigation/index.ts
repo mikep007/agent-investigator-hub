@@ -685,12 +685,20 @@ Deno.serve(async (req) => {
       );
       searchTypes.push('court_records');
       
-      // Pennsylvania Voter Registration Lookup
-      // Run for PA addresses or as a general check for PA residents
-      if (state === 'PA') {
-        console.log('Pennsylvania address detected - running PA voter lookup');
+      // Multi-State Voter Registration Lookups
+      // Run for detected state addresses or as general checks
+      const voterLookupStates: { state: string; functionName: string }[] = [
+        { state: 'PA', functionName: 'osint-pa-voter-lookup' },
+        { state: 'NY', functionName: 'osint-ny-voter-lookup' },
+        { state: 'FL', functionName: 'osint-fl-voter-lookup' },
+        { state: 'OH', functionName: 'osint-oh-voter-lookup' },
+      ];
+      
+      const detectedState = voterLookupStates.find(v => v.state === state);
+      if (detectedState) {
+        console.log(`${detectedState.state} address detected - running voter lookup`);
         searchPromises.push(
-          supabaseClient.functions.invoke('osint-pa-voter-lookup', {
+          supabaseClient.functions.invoke(detectedState.functionName, {
             body: { 
               firstName,
               lastName,
@@ -698,27 +706,38 @@ Deno.serve(async (req) => {
             }
           })
         );
-        searchTypes.push('PA_voter');
+        searchTypes.push(`${detectedState.state}_voter`);
       }
     }
     
-    // Also trigger PA voter lookup if we have a name but no address (manual check option)
-    // This ensures the card always appears for name searches
+    // Also trigger voter lookups for all supported states if we have a name but no address
+    // This ensures the voter cards always appear for name searches with manual verification options
     if (searchData.fullName && !searchData.address) {
       const nameParts = searchData.fullName.trim().split(/\s+/);
       const firstName = nameParts[0];
       const lastName = nameParts.slice(1).join(' ') || nameParts[0];
       
-      console.log('Running PA voter lookup for name search (no address provided)');
-      searchPromises.push(
-        supabaseClient.functions.invoke('osint-pa-voter-lookup', {
-          body: { 
-            firstName,
-            lastName,
-          }
-        })
-      );
-      searchTypes.push('PA_voter');
+      console.log('Running multi-state voter lookups for name search (no address provided)');
+      
+      // Run lookups for all supported states
+      const voterLookupStates = [
+        { state: 'PA', functionName: 'osint-pa-voter-lookup' },
+        { state: 'NY', functionName: 'osint-ny-voter-lookup' },
+        { state: 'FL', functionName: 'osint-fl-voter-lookup' },
+        { state: 'OH', functionName: 'osint-oh-voter-lookup' },
+      ];
+      
+      for (const { state, functionName } of voterLookupStates) {
+        searchPromises.push(
+          supabaseClient.functions.invoke(functionName, {
+            body: { 
+              firstName,
+              lastName,
+            }
+          })
+        );
+        searchTypes.push(`${state}_voter`);
+      }
     }
 
     // Known Relatives / Associates - Search for connections
