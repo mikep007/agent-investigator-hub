@@ -71,6 +71,34 @@ const STATE_CONFIGS: Record<string, StateConfig> = {
     source: 'OH Secretary of State',
     color: 'bg-red-500/10 text-red-600',
   },
+  TX: {
+    name: 'Texas',
+    abbrev: 'TX',
+    url: 'https://teamrv-mvp.sos.texas.gov/MVP/mvp.do',
+    source: 'TX Secretary of State',
+    color: 'bg-amber-500/10 text-amber-600',
+  },
+  CA: {
+    name: 'California',
+    abbrev: 'CA',
+    url: 'https://voterstatus.sos.ca.gov/',
+    source: 'CA Secretary of State',
+    color: 'bg-yellow-500/10 text-yellow-600',
+  },
+  GA: {
+    name: 'Georgia',
+    abbrev: 'GA',
+    url: 'https://mvp.sos.ga.gov/s/',
+    source: 'GA Secretary of State',
+    color: 'bg-rose-500/10 text-rose-600',
+  },
+  NC: {
+    name: 'North Carolina',
+    abbrev: 'NC',
+    url: 'https://vt.ncsbe.gov/RegLkup/',
+    source: 'NC State Board of Elections',
+    color: 'bg-cyan-500/10 text-cyan-600',
+  },
 };
 
 const VoterRegistrationCard = ({ findings, targetName }: VoterRegistrationCardProps) => {
@@ -85,10 +113,18 @@ const VoterRegistrationCard = ({ findings, targetName }: VoterRegistrationCardPr
       agentType === 'ny_voter' ||
       agentType === 'fl_voter' ||
       agentType === 'oh_voter' ||
+      agentType === 'tx_voter' ||
+      agentType === 'ca_voter' ||
+      agentType === 'ga_voter' ||
+      agentType === 'nc_voter' ||
       source.includes('pavoterservices') ||
       source.includes('voterlookup.elections.ny') ||
       source.includes('elections.myflorida') ||
-      source.includes('voterlookup.ohiosos')
+      source.includes('voterlookup.ohiosos') ||
+      source.includes('sos.texas.gov') ||
+      source.includes('voterstatus.sos.ca.gov') ||
+      source.includes('mvp.sos.ga.gov') ||
+      source.includes('vt.ncsbe.gov')
     );
   });
 
@@ -106,6 +142,10 @@ const VoterRegistrationCard = ({ findings, targetName }: VoterRegistrationCardPr
     if (agentType.includes('ny') || source.includes('ny')) state = 'NY';
     else if (agentType.includes('fl') || source.includes('florida') || source.includes('myflorida')) state = 'FL';
     else if (agentType.includes('oh') || source.includes('ohio')) state = 'OH';
+    else if (agentType.includes('tx') || source.includes('texas')) state = 'TX';
+    else if (agentType.includes('ca') || source.includes('voterstatus.sos.ca')) state = 'CA';
+    else if (agentType.includes('ga') || source.includes('mvp.sos.ga')) state = 'GA';
+    else if (agentType.includes('nc') || source.includes('ncsbe')) state = 'NC';
     else if (f.data?.state) state = f.data.state;
     
     return {
@@ -145,7 +185,7 @@ const VoterRegistrationCard = ({ findings, targetName }: VoterRegistrationCardPr
             </div>
             <Badge variant="outline" className="gap-1">
               <Globe className="h-3 w-3" />
-              4 States
+              8 States
             </Badge>
           </div>
         </CardHeader>
