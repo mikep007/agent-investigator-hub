@@ -12,6 +12,14 @@ interface OHVoterLookupRequest {
   county?: string;
 }
 
+interface VotingHistoryEntry {
+  electionDate: string;
+  electionType: string;
+  voted: boolean;
+  voteMethod?: string;
+  partyVoted?: string;
+}
+
 interface VoterResult {
   success: boolean;
   source: string;
@@ -30,6 +38,7 @@ interface VoterResult {
     stateHouseDistrict?: string;
     stateSenateDistrict?: string;
     schoolDistrict?: string;
+    votingHistory?: VotingHistoryEntry[];
   };
   error?: string;
   method: string;
@@ -99,6 +108,7 @@ async function lookupWithBrowserless(request: OHVoterLookupRequest): Promise<Vot
             stateHouseDistrict: null,
             stateSenateDistrict: null,
             schoolDistrict: null,
+            votingHistory: [],
           };
           
           const bodyText = document.body.textContent.toLowerCase();
@@ -149,6 +159,29 @@ async function lookupWithBrowserless(request: OHVoterLookupRequest): Promise<Vot
             if (status) data.registrationStatus = status.textContent.trim();
           }
           
+          // Ohio provides voting history - look for history section
+          const historyTable = document.querySelector('#votingHistory, .voting-history, [id*="VoterHistory"], table[class*="history"]');
+          if (historyTable) {
+            const historyRows = historyTable.querySelectorAll('tbody tr, tr:not(:first-child)');
+            historyRows.forEach(row => {
+              const cells = row.querySelectorAll('td');
+              if (cells.length >= 2) {
+                const dateText = cells[0]?.textContent?.trim() || '';
+                const electionType = cells[1]?.textContent?.trim() || '';
+                const partyVoted = cells[2]?.textContent?.trim() || null;
+                
+                if (dateText && electionType) {
+                  data.votingHistory.push({
+                    electionDate: dateText,
+                    electionType: electionType,
+                    voted: true,
+                    partyVoted: partyVoted,
+                  });
+                }
+              }
+            });
+          }
+          
           return data;
         });
         
@@ -189,6 +222,7 @@ async function lookupWithBrowserless(request: OHVoterLookupRequest): Promise<Vot
         stateHouseDistrict: result.stateHouseDistrict,
         stateSenateDistrict: result.stateSenateDistrict,
         schoolDistrict: result.schoolDistrict,
+        votingHistory: result.votingHistory || [],
       },
       method: 'browserless',
     };

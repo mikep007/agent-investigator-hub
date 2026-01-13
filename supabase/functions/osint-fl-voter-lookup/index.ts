@@ -12,6 +12,14 @@ interface FLVoterLookupRequest {
   county?: string;
 }
 
+interface VotingHistoryEntry {
+  electionDate: string;
+  electionType: string;
+  voted: boolean;
+  voteMethod?: string;
+  partyVoted?: string;
+}
+
 interface VoterResult {
   success: boolean;
   source: string;
@@ -30,6 +38,7 @@ interface VoterResult {
     congressionalDistrict?: string;
     stateHouseDistrict?: string;
     stateSenateDistrict?: string;
+    votingHistory?: VotingHistoryEntry[];
   };
   error?: string;
   method: string;
@@ -91,6 +100,7 @@ async function lookupWithBrowserless(request: FLVoterLookupRequest): Promise<Vot
             congressionalDistrict: null,
             stateHouseDistrict: null,
             stateSenateDistrict: null,
+            votingHistory: [],
           };
           
           // Check for not found
@@ -139,6 +149,29 @@ async function lookupWithBrowserless(request: FLVoterLookupRequest): Promise<Vot
             }
           }
           
+          // Florida provides voting history - look for history table
+          const historyTable = document.querySelector('#votingHistory, .voting-history, table[id*="history"]');
+          if (historyTable) {
+            const historyRows = historyTable.querySelectorAll('tbody tr, tr:not(:first-child)');
+            historyRows.forEach(row => {
+              const cells = row.querySelectorAll('td');
+              if (cells.length >= 2) {
+                const dateText = cells[0]?.textContent?.trim() || '';
+                const electionType = cells[1]?.textContent?.trim() || '';
+                const voteMethod = cells[2]?.textContent?.trim() || null;
+                
+                if (dateText && electionType) {
+                  data.votingHistory.push({
+                    electionDate: dateText,
+                    electionType: electionType,
+                    voted: true, // FL only shows elections where voter participated
+                    voteMethod: voteMethod,
+                  });
+                }
+              }
+            });
+          }
+          
           return data;
         });
         
@@ -178,6 +211,7 @@ async function lookupWithBrowserless(request: FLVoterLookupRequest): Promise<Vot
         congressionalDistrict: result.congressionalDistrict,
         stateHouseDistrict: result.stateHouseDistrict,
         stateSenateDistrict: result.stateSenateDistrict,
+        votingHistory: result.votingHistory || [],
       },
       method: 'browserless',
     };
