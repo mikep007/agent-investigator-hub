@@ -8,6 +8,7 @@ import RelatedPersonsCard from "./RelatedPersonsCard";
 import BusinessRegistryCard from "./BusinessRegistryCard";
 import PropertyRecordsCard from "./PropertyRecordsCard";
 import VoterRegistrationCard from "./VoterRegistrationCard";
+import FacialRecognitionCard from "./FacialRecognitionCard";
 import { useMemo } from "react";
 
 interface OSINTResultsGridProps {
@@ -220,6 +221,13 @@ const OSINTResultsGrid = ({
         {/* Voter Registration */}
         <VoterRegistrationCard 
           findings={findings}
+          targetName={targetName}
+        />
+
+        {/* Facial Recognition Search */}
+        <FacialRecognitionCard 
+          findings={findings}
+          investigationId={investigationId}
           targetName={targetName}
         />
 
