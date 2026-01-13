@@ -3,13 +3,24 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { 
   Vote, CheckCircle2, XCircle, MapPin, Building, 
-  Calendar, ExternalLink, Users, Flag, AlertCircle, Globe
+  Calendar, ExternalLink, Users, Flag, AlertCircle, Globe,
+  History, ChevronDown, ChevronUp
 } from "lucide-react";
 import { FindingData } from "./types";
+import { useState } from "react";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 interface VoterRegistrationCardProps {
   findings: FindingData[];
   targetName?: string;
+}
+
+interface VotingHistoryEntry {
+  electionDate: string;
+  electionType: string;
+  voted: boolean;
+  voteMethod?: string;
+  partyVoted?: string;
 }
 
 interface VoterData {
@@ -32,6 +43,7 @@ interface VoterData {
   electionDistrict?: string;
   voterId?: string;
   schoolDistrict?: string;
+  votingHistory?: VotingHistoryEntry[];
 }
 
 interface StateConfig {
@@ -99,6 +111,85 @@ const STATE_CONFIGS: Record<string, StateConfig> = {
     source: 'NC State Board of Elections',
     color: 'bg-cyan-500/10 text-cyan-600',
   },
+};
+
+// Component to display voting history timeline
+const VotingHistoryTimeline = ({ history }: { history: VotingHistoryEntry[] }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  
+  if (!history || history.length === 0) return null;
+  
+  const sortedHistory = [...history].sort((a, b) => 
+    new Date(b.electionDate).getTime() - new Date(a.electionDate).getTime()
+  );
+  
+  const votedCount = sortedHistory.filter(h => h.voted).length;
+  
+  return (
+    <Collapsible open={isOpen} onOpenChange={setIsOpen} className="mt-3">
+      <CollapsibleTrigger asChild>
+        <Button variant="ghost" size="sm" className="w-full justify-between text-muted-foreground hover:text-foreground">
+          <div className="flex items-center gap-2">
+            <History className="h-4 w-4" />
+            <span>Voting History ({votedCount}/{sortedHistory.length} elections)</span>
+          </div>
+          {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
+        </Button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="mt-2">
+        <div className="relative pl-4 border-l-2 border-muted space-y-3">
+          {sortedHistory.map((entry, idx) => (
+            <div key={idx} className="relative">
+              <div className={`absolute -left-[21px] w-4 h-4 rounded-full border-2 ${
+                entry.voted 
+                  ? 'bg-green-500 border-green-600' 
+                  : 'bg-muted border-muted-foreground/30'
+              }`} />
+              <div className="pl-4">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-sm">
+                    {new Date(entry.electionDate).toLocaleDateString('en-US', { 
+                      year: 'numeric', 
+                      month: 'short', 
+                      day: 'numeric' 
+                    })}
+                  </span>
+                  <Badge 
+                    variant={entry.voted ? "default" : "secondary"}
+                    className={entry.voted ? "bg-green-600 text-xs" : "text-xs"}
+                  >
+                    {entry.voted ? 'Voted' : 'Did Not Vote'}
+                  </Badge>
+                </div>
+                <div className="text-sm text-muted-foreground flex flex-wrap gap-2 mt-1">
+                  <span>{entry.electionType}</span>
+                  {entry.voteMethod && (
+                    <Badge variant="outline" className="text-xs">
+                      {entry.voteMethod}
+                    </Badge>
+                  )}
+                  {entry.partyVoted && (
+                    <Badge 
+                      variant="outline" 
+                      className={`text-xs ${
+                        entry.partyVoted.toLowerCase().includes('democrat')
+                          ? 'border-blue-500/50 text-blue-600'
+                          : entry.partyVoted.toLowerCase().includes('republican')
+                            ? 'border-red-500/50 text-red-600'
+                            : ''
+                      }`}
+                    >
+                      {entry.partyVoted}
+                    </Badge>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
+  );
 };
 
 const VoterRegistrationCard = ({ findings, targetName }: VoterRegistrationCardProps) => {
@@ -386,6 +477,11 @@ const VoterRegistrationCard = ({ findings, targetName }: VoterRegistrationCardPr
                         </div>
                       )}
                     </div>
+
+                    {/* Voting History Timeline */}
+                    {lookup.data.votingHistory && lookup.data.votingHistory.length > 0 && (
+                      <VotingHistoryTimeline history={lookup.data.votingHistory} />
+                    )}
 
                     <Button
                       variant="outline"

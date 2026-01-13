@@ -12,6 +12,14 @@ interface NCVoterLookupRequest {
   county?: string;
 }
 
+interface VotingHistoryEntry {
+  electionDate: string;
+  electionType: string;
+  voted: boolean;
+  voteMethod?: string;
+  partyVoted?: string;
+}
+
 interface VoterResult {
   success: boolean;
   source: string;
@@ -30,6 +38,7 @@ interface VoterResult {
     stateSenateDistrict?: string;
     stateHouseDistrict?: string;
     pollingPlace?: string;
+    votingHistory?: VotingHistoryEntry[];
   };
   error?: string;
   method: string;
@@ -96,6 +105,7 @@ async function lookupWithBrowserless(request: NCVoterLookupRequest): Promise<Vot
             congressionalDistrict: null,
             stateSenateDistrict: null,
             stateHouseDistrict: null,
+            votingHistory: [],
           };
           
           // Look for results table
@@ -129,6 +139,32 @@ async function lookupWithBrowserless(request: NCVoterLookupRequest): Promise<Vot
             // County
             const countyEl = voterDetail.querySelector('[class*="county"]');
             if (countyEl) data.county = countyEl.textContent.trim();
+          }
+          
+          // NC State Board provides voting history in a table
+          const historyTable = document.querySelector('#voterHistory, .voting-history, table[id*="history"], table[class*="history"]');
+          if (historyTable) {
+            const historyRows = historyTable.querySelectorAll('tbody tr, tr:not(:first-child)');
+            historyRows.forEach(row => {
+              const cells = row.querySelectorAll('td');
+              if (cells.length >= 2) {
+                const dateText = cells[0]?.textContent?.trim() || '';
+                const electionType = cells[1]?.textContent?.trim() || '';
+                const votedText = cells[2]?.textContent?.trim().toLowerCase() || '';
+                const voteMethod = cells[3]?.textContent?.trim() || null;
+                const partyVoted = cells[4]?.textContent?.trim() || null;
+                
+                if (dateText && electionType) {
+                  data.votingHistory.push({
+                    electionDate: dateText,
+                    electionType: electionType,
+                    voted: !votedText.includes('did not') && votedText !== 'n' && votedText !== 'no',
+                    voteMethod: voteMethod,
+                    partyVoted: partyVoted,
+                  });
+                }
+              }
+            });
           }
           
           // Check for no records
@@ -179,6 +215,7 @@ async function lookupWithBrowserless(request: NCVoterLookupRequest): Promise<Vot
         congressionalDistrict: result.congressionalDistrict,
         stateSenateDistrict: result.stateSenateDistrict,
         stateHouseDistrict: result.stateHouseDistrict,
+        votingHistory: result.votingHistory || [],
       },
       method: 'browserless',
     };
