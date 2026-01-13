@@ -32,9 +32,15 @@ const VoterRegistrationCard = ({ findings, targetName }: VoterRegistrationCardPr
   // Extract PA voter lookup data from findings
   const voterFindings = findings.filter(f => 
     f.agent_type === 'PA_voter' || 
+    f.agent_type === 'Pa_voter' ||
+    f.agent_type?.toLowerCase() === 'pa_voter' ||
     f.source?.includes('pavoterservices') ||
+    f.source?.includes('pa-voter') ||
     f.agent_type?.toLowerCase().includes('voter')
   );
+
+  console.log('[VoterRegistrationCard] All findings agent_types:', findings.map(f => f.agent_type));
+  console.log('[VoterRegistrationCard] Voter findings:', voterFindings);
 
   if (voterFindings.length === 0) return null;
 

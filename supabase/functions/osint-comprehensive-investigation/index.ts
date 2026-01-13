@@ -698,8 +698,27 @@ Deno.serve(async (req) => {
             }
           })
         );
-        searchTypes.push('pa_voter_lookup');
+        searchTypes.push('PA_voter');
       }
+    }
+    
+    // Also trigger PA voter lookup if we have a name but no address (manual check option)
+    // This ensures the card always appears for name searches
+    if (searchData.fullName && !searchData.address) {
+      const nameParts = searchData.fullName.trim().split(/\s+/);
+      const firstName = nameParts[0];
+      const lastName = nameParts.slice(1).join(' ') || nameParts[0];
+      
+      console.log('Running PA voter lookup for name search (no address provided)');
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-pa-voter-lookup', {
+          body: { 
+            firstName,
+            lastName,
+          }
+        })
+      );
+      searchTypes.push('PA_voter');
     }
 
     // Known Relatives / Associates - Search for connections
