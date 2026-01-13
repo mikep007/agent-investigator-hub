@@ -23,7 +23,8 @@ import {
   Hash,
   BarChart3,
   User,
-  Users
+  Users,
+  Heart
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "../ConfidenceScoreBadge";
@@ -55,6 +56,8 @@ interface WebResultItem {
   corroboratingFactors?: number;
   sourceType?: string;
   queryDescription?: string;
+  isFromFamilyQuery?: boolean;
+  queryCategory?: string;
 }
 
 interface QueryInfo {
@@ -143,6 +146,7 @@ const GoogleSearchResults = ({
       relative: 0,
       keywords: 0,
       nameMatch: 0,
+      familyConnection: 0,
     };
 
     confirmedResults.forEach(item => {
@@ -153,6 +157,7 @@ const GoogleSearchResults = ({
       if (item.hasKnownRelative || item.hasRelativeMatch) stats.relative++;
       if (item.hasKeywords && item.keywordMatches?.length) stats.keywords++;
       if (item.isExactMatch) stats.nameMatch++;
+      if (item.isFromFamilyQuery) stats.familyConnection++;
     });
 
     return stats;
@@ -182,6 +187,7 @@ const GoogleSearchResults = ({
         case 'location': return item.hasLocation;
         case 'relative': return item.hasKnownRelative || item.hasRelativeMatch;
         case 'keywords': return item.hasKeywords && item.keywordMatches?.length;
+        case 'familyConnection': return item.isFromFamilyQuery;
         default: return true;
       }
     });
@@ -438,6 +444,20 @@ const GoogleSearchResults = ({
                 </TooltipContent>
               </Tooltip>
             )}
+            {item.isFromFamilyQuery && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-rose-500/10 text-rose-600 dark:text-rose-400 text-xs gap-1 cursor-help border border-rose-300/30">
+                    <Heart className="h-3 w-3" />
+                    Family Connection
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p>Found via family/relative search query</p>
+                  {item.queryDescription && <p className="text-xs text-muted-foreground mt-1">{item.queryDescription}</p>}
+                </TooltipContent>
+              </Tooltip>
+            )}
             {item.hasKeywords && item.keywordMatches?.length > 0 && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -451,7 +471,7 @@ const GoogleSearchResults = ({
                 </TooltipContent>
               </Tooltip>
             )}
-            {item.queryDescription && (
+            {item.queryDescription && !item.isFromFamilyQuery && (
               <span className="text-xs text-muted-foreground/60 italic">
                 via {item.queryDescription}
               </span>
@@ -994,6 +1014,20 @@ const GoogleSearchResults = ({
                           <div className="w-3 h-3 rounded-full bg-purple-500" />
                           <Search className="h-3.5 w-3.5 text-purple-500" />
                           <span className="text-xs text-muted-foreground">{corroborationStats.keywords} keywords</span>
+                        </button>
+                      )}
+                      {corroborationStats.familyConnection > 0 && (
+                        <button
+                          onClick={() => setActiveCorroborationFilter(activeCorroborationFilter === 'familyConnection' ? null : 'familyConnection')}
+                          className={`flex items-center gap-2 p-2 rounded-md transition-all cursor-pointer ${
+                            activeCorroborationFilter === 'familyConnection' 
+                              ? 'bg-rose-500/30 ring-2 ring-rose-500' 
+                              : 'bg-rose-500/10 hover:bg-rose-500/20'
+                          }`}
+                        >
+                          <div className="w-3 h-3 rounded-full bg-rose-500" />
+                          <Heart className="h-3.5 w-3.5 text-rose-500" />
+                          <span className="text-xs text-muted-foreground">{corroborationStats.familyConnection} family</span>
                         </button>
                       )}
                     </div>
