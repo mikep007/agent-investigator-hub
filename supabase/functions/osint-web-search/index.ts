@@ -964,20 +964,51 @@ function buildDorkQueries(
     for (const relative of relatives.slice(0, 3)) {
       const cleanRelative = stripOuterQuotes(relative);
       if (cleanRelative.length > 2) {
-        // Relative + primary name
+        // Relative + primary name - PRIORITY 1 for family connections
         queries.push({
           query: `"${cleanRelative}" ${quotedPrimary}`,
           type: 'relative_name',
-          priority: 2,
+          priority: 1, // Upgraded - relatives are high value
+          category: 'family',
           description: `Relative/Associate "${cleanRelative}" + Name`,
         });
+
+        // Relative + target name + obituary/family keywords - CRITICAL for obituary discovery
+        queries.push({
+          query: `"${cleanRelative}" ${quotedPrimary} "obituary" OR "survived by" OR "passed away"`,
+          type: 'relative_obituary',
+          priority: 1,
+          category: 'family',
+          description: `Relative "${cleanRelative}" + Name + Obituary search`,
+        });
+        
+        // Search for funeral home results mentioning both names
+        queries.push({
+          query: `"${cleanRelative}" ${quotedPrimary} "funeral" OR "memorial" OR "tribute"`,
+          type: 'relative_funeral',
+          priority: 1,
+          category: 'family',
+          description: `Relative "${cleanRelative}" + Name + Funeral/Memorial`,
+        });
+
+        // Relative + last name only (catches shared family name in obituaries)
+        if (lastName) {
+          queries.push({
+            query: `"${cleanRelative}" "${lastName}" "obituary"`,
+            type: 'relative_lastname_obituary',
+            priority: 1,
+            category: 'family',
+            description: `Relative "${cleanRelative}" + Last name + Obituary`,
+          });
+        }
 
         // Relative + keywords
         for (const keyword of keywordList.slice(0, 2)) {
           queries.push({
             query: `"${cleanRelative}" "${keyword}"`,
             type: 'keyword_relative',
-            priority: 3,
+            priority: 2,
+            category: 'keywords',
             description: `Keyword "${keyword}" + Relative "${cleanRelative}"`,
           });
         }
