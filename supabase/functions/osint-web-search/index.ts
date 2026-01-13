@@ -1292,21 +1292,63 @@ function buildDorkQueries(
   return queries;
 }
 
-async function executeSearch(query: string, apiKey: string, searchEngineId: string): Promise<any> {
-  const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(query)}&num=10`;
+async function executeSearch(query: string, apiKey: string, searchEngineId: string, pages: number = 2): Promise<any> {
+  console.log(`Executing search: "${query}" (fetching ${pages} pages)`);
   
-  console.log(`Executing search: "${query}"`);
+  const allItems: any[] = [];
+  let totalResults = 0;
   
-  const response = await fetch(searchUrl);
-  const data = await response.json();
-  
-  if (data.error) {
-    console.error(`Search error for query "${query}":`, data.error.message);
-    return null;
+  // Fetch multiple pages of results (10 results per page, max 100 total via CSE)
+  for (let page = 0; page < pages; page++) {
+    const startIndex = page * 10 + 1; // CSE uses 1-based index
+    const searchUrl = `https://www.googleapis.com/customsearch/v1?key=${apiKey}&cx=${searchEngineId}&q=${encodeURIComponent(query)}&num=10&start=${startIndex}`;
+    
+    try {
+      const response = await fetch(searchUrl);
+      const data = await response.json();
+      
+      if (data.error) {
+        // If we get an error on page 2+, just break and return what we have
+        if (page > 0) {
+          console.log(`Stopping pagination at page ${page + 1}: ${data.error.message}`);
+          break;
+        }
+        console.error(`Search error for query "${query}":`, data.error.message);
+        return null;
+      }
+      
+      if (data.items && data.items.length > 0) {
+        allItems.push(...data.items);
+        totalResults = parseInt(data.searchInformation?.totalResults || '0');
+        console.log(`Page ${page + 1}: Got ${data.items.length} results`);
+      } else {
+        // No more results available
+        console.log(`Page ${page + 1}: No more results`);
+        break;
+      }
+      
+      // Don't fetch more pages if we've exhausted results
+      if (allItems.length >= totalResults) {
+        break;
+      }
+      
+      // Small delay between requests to avoid rate limiting
+      if (page < pages - 1) {
+        await new Promise(resolve => setTimeout(resolve, 100));
+      }
+    } catch (err) {
+      console.error(`Error fetching page ${page + 1}:`, err);
+      if (page === 0) return null;
+      break;
+    }
   }
   
-  console.log(`Query "${query.slice(0, 50)}..." returned ${data.items?.length || 0} results`);
-  return data;
+  console.log(`Query "${query.slice(0, 50)}..." returned ${allItems.length} total results`);
+  
+  return {
+    items: allItems,
+    searchInformation: { totalResults: totalResults.toString() }
+  };
 }
 
 Deno.serve(async (req) => {
