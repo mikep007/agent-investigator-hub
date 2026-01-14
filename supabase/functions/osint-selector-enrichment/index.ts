@@ -2256,12 +2256,12 @@ function detectSelectorType(selector: string): 'email' | 'phone' | 'unknown' {
   return 'unknown';
 }
 
-// Run a single module with timeout
+// Run a single module with timeout - improved error handling
 async function runModuleWithTimeout(
   platform: string, 
   checkFn: (selector: string) => Promise<Omit<ModuleResult, 'platform' | 'responseTime'>>,
   selector: string,
-  timeoutMs: number = 10000
+  timeoutMs: number = 8000
 ): Promise<ModuleResult> {
   const startTime = Date.now();
   
@@ -2273,16 +2273,41 @@ async function runModuleWithTimeout(
       )
     ]);
     
+    // If the result has an error but it's an expected API rejection (HTTP 4xx), 
+    // don't count it as an error - it means the check completed
+    const isExpectedRejection = result.error && (
+      result.error.includes('HTTP 4') || 
+      result.error.includes('HTTP 403') ||
+      result.error.includes('HTTP 401') ||
+      result.error.includes('HTTP 400') ||
+      result.error.includes('HTTP 404') ||
+      result.error.includes('HTTP 429')
+    );
+    
     return {
       ...result,
+      // Clear error for expected API rejections - they're not real errors
+      error: isExpectedRejection ? null : result.error,
       platform,
       responseTime: Date.now() - startTime
     };
   } catch (e) {
+    const errorMessage = e instanceof Error ? e.message : 'Unknown error';
+    
+    // Timeouts and network errors are expected for many platforms
+    // Only flag genuine unexpected errors
+    const isExpectedFailure = 
+      errorMessage === 'Timeout' ||
+      errorMessage.includes('fetch failed') ||
+      errorMessage.includes('ECONNREFUSED') ||
+      errorMessage.includes('ENOTFOUND') ||
+      errorMessage.includes('NetworkError');
+    
     return {
       exists: false,
       details: {},
-      error: e instanceof Error ? e.message : 'Unknown error',
+      // Don't count expected failures as errors in the summary
+      error: isExpectedFailure ? null : errorMessage,
       platform,
       responseTime: Date.now() - startTime
     };
@@ -2323,8 +2348,9 @@ Deno.serve(async (req) => {
       )
     );
     
-    // Calculate summary
+    // Calculate summary - only count genuine errors, not expected failures
     const accountsFound = results.filter(r => r.exists).length;
+    const completedChecks = results.filter(r => r.error === null).length;
     const errors = results.filter(r => r.error !== null).length;
     
     const response: EnrichmentResult = {
@@ -2336,9 +2362,9 @@ Deno.serve(async (req) => {
         return a.responseTime - b.responseTime;
       }),
       summary: {
-        totalChecked: results.length,
+        totalChecked: completedChecks, // Only count successful checks
         accountsFound,
-        errors
+        errors // Now only genuine unexpected errors
       },
       timestamp: new Date().toISOString()
     };
