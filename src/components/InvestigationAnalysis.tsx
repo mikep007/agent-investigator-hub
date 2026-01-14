@@ -4,6 +4,7 @@ import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Progress } from "@/components/ui/progress";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Brain, AlertTriangle, Users, TrendingUp, Search, Loader2, Link as LinkIcon, RefreshCw, FileDown, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { generateAnalysisPDF, generateAnalysisPDFBlob, AnalysisResult } from "@/utils/analysisExport";
@@ -290,6 +291,65 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
           </Button>
         </div>
       </div>
+
+      {/* Skeleton placeholder - waiting for analysis to start */}
+      {!loading && !analysis && !error && (
+        <div className="space-y-6 animate-fade-in">
+          {/* Risk Assessment Skeleton */}
+          <Card className="p-6">
+            <div className="flex items-start gap-4">
+              <Skeleton className="w-12 h-12 rounded-lg" />
+              <div className="flex-1 space-y-3">
+                <div className="flex items-center gap-3">
+                  <Skeleton className="h-6 w-32" />
+                  <Skeleton className="h-5 w-20 rounded-full" />
+                </div>
+                <Skeleton className="h-4 w-full" />
+                <Skeleton className="h-4 w-3/4" />
+              </div>
+            </div>
+          </Card>
+
+          {/* Key Findings Skeleton */}
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Skeleton className="w-5 h-5 rounded" />
+              <Skeleton className="h-6 w-28" />
+            </div>
+            <div className="space-y-3">
+              {[1, 2, 3].map((i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-lg bg-muted/50">
+                  <Skeleton className="w-6 h-6 rounded-full flex-shrink-0" />
+                  <div className="flex-1 space-y-2">
+                    <Skeleton className="h-4 w-full" />
+                    <Skeleton className="h-4 w-2/3" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          {/* Patterns Skeleton */}
+          <Card className="p-6">
+            <div className="flex items-center gap-2 mb-4">
+              <Skeleton className="w-5 h-5 rounded" />
+              <Skeleton className="h-6 w-36" />
+            </div>
+            <div className="space-y-2">
+              {[1, 2].map((i) => (
+                <div key={i} className="flex items-start gap-3 p-3 rounded-lg border border-border">
+                  <Skeleton className="w-2 h-2 rounded-full mt-2" />
+                  <Skeleton className="h-4 w-full" />
+                </div>
+              ))}
+            </div>
+          </Card>
+
+          <p className="text-xs text-center text-muted-foreground">
+            Analysis will begin automatically...
+          </p>
+        </div>
+      )}
 
       {loading && !analysis && (
         <Card className="p-8">
