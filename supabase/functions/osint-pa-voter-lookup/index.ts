@@ -47,16 +47,26 @@ async function lookupWithBrowserless(request: PAVoterLookupRequest): Promise<PAV
       success: false,
       source: 'pavoterservices.pa.gov',
       url: 'https://www.pavoterservices.pa.gov/pages/voterregistrationstatus.aspx',
-      error: 'BROWSERLESS_API_KEY not configured',
+      error: 'Service configuration error',
       method: 'browserless',
     };
   }
 
   try {
-    // Use Browserless function API for complex interactions
+    // Properly escape user inputs to prevent code injection
+    const safeFirstName = JSON.stringify(request.firstName);
+    const safeLastName = JSON.stringify(request.lastName);
+    const safeDob = request.dateOfBirth ? JSON.stringify(request.dateOfBirth) : null;
+    const safeCounty = request.county ? JSON.stringify(request.county) : null;
+
     const functionScript = `
       module.exports = async ({ page }) => {
+        const firstName = ${safeFirstName};
+        const lastName = ${safeLastName};
+        const dob = ${safeDob};
+        const county = ${safeCounty};
         const url = 'https://www.pavoterservices.pa.gov/pages/voterregistrationstatus.aspx';
+        
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
         
         // Wait for form to load
@@ -69,19 +79,17 @@ async function lookupWithBrowserless(request: PAVoterLookupRequest): Promise<PAV
         // Wait for name fields to appear
         await page.waitForSelector('#ctl00_ContentPlaceHolder1_txtVRSFirstName', { timeout: 5000 });
         
-        // Fill in the form
-        await page.type('#ctl00_ContentPlaceHolder1_txtVRSFirstName', '${request.firstName}');
-        await page.type('#ctl00_ContentPlaceHolder1_txtVRSLastName', '${request.lastName}');
+        // Fill in the form with safely escaped values
+        await page.type('#ctl00_ContentPlaceHolder1_txtVRSFirstName', firstName);
+        await page.type('#ctl00_ContentPlaceHolder1_txtVRSLastName', lastName);
         
-        ${request.dateOfBirth ? `
-        // Fill date of birth if provided
-        await page.type('#ctl00_ContentPlaceHolder1_txtVRSDOB', '${request.dateOfBirth}');
-        ` : ''}
+        if (dob) {
+          await page.type('#ctl00_ContentPlaceHolder1_txtVRSDOB', dob);
+        }
         
-        ${request.county ? `
-        // Select county if provided
-        await page.select('#ctl00_ContentPlaceHolder1_ddlVRSCounty', '${request.county}');
-        ` : ''}
+        if (county) {
+          await page.select('#ctl00_ContentPlaceHolder1_ddlVRSCounty', county);
+        }
         
         // Click search button
         await page.click('#ctl00_ContentPlaceHolder1_btnContinue');
@@ -191,8 +199,7 @@ async function lookupWithBrowserless(request: PAVoterLookupRequest): Promise<PAV
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Browserless error: ${response.status} - ${errorText}`);
+      throw new Error(`Browserless error: ${response.status}`);
     }
 
     const result = await response.json();
@@ -218,13 +225,12 @@ async function lookupWithBrowserless(request: PAVoterLookupRequest): Promise<PAV
       method: 'browserless',
     };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('PA Voter lookup error:', error);
     return {
       success: false,
       source: 'pavoterservices.pa.gov',
       url: 'https://www.pavoterservices.pa.gov/pages/voterregistrationstatus.aspx',
-      error: errorMessage,
+      error: 'Lookup failed',
       method: 'browserless',
     };
   }
@@ -285,12 +291,11 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[PA Voter Lookup] Error:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: errorMessage,
+        error: 'An error occurred',
         url: 'https://www.pavoterservices.pa.gov/pages/voterregistrationstatus.aspx',
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
