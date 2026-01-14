@@ -294,7 +294,7 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
 
       {/* Skeleton placeholder - waiting for analysis to start */}
       {!loading && !analysis && !error && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-6 animate-fade-in [&>*]:animate-pulse">
           {/* Risk Assessment Skeleton */}
           <Card className="p-6">
             <div className="flex items-start gap-4">
