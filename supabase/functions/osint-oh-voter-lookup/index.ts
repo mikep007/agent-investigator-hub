@@ -56,36 +56,47 @@ async function lookupWithBrowserless(request: OHVoterLookupRequest): Promise<Vot
       source: 'voterlookup.ohiosos.gov',
       url: OH_VOTER_URL,
       state: 'OH',
-      error: 'BROWSERLESS_API_KEY not configured',
+      error: 'Service configuration error',
       method: 'browserless',
     };
   }
 
   try {
+    // Properly escape user inputs to prevent code injection
+    const safeFirstName = JSON.stringify(request.firstName);
+    const safeLastName = JSON.stringify(request.lastName);
+    const safeDob = request.dateOfBirth ? JSON.stringify(request.dateOfBirth) : null;
+    const safeCounty = request.county ? JSON.stringify(request.county) : null;
+
     const functionScript = `
       module.exports = async ({ page }) => {
-        const url = '${OH_VOTER_URL}';
+        const firstName = ${safeFirstName};
+        const lastName = ${safeLastName};
+        const dob = ${safeDob};
+        const county = ${safeCounty};
+        const url = 'https://voterlookup.ohiosos.gov/voterlookup.aspx';
+        
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
         
         // Ohio's voter lookup has specific ASP.NET controls
         await page.waitForSelector('#ctl00_ContentPlaceHolder1_txtFirstName, input[id*="FirstName"]', { timeout: 10000 });
         
-        // Fill form
+        // Fill form with safely escaped values
         const firstField = await page.$('#ctl00_ContentPlaceHolder1_txtFirstName, input[id*="FirstName"]');
         const lastField = await page.$('#ctl00_ContentPlaceHolder1_txtLastName, input[id*="LastName"]');
         
-        if (firstField) await firstField.type('${request.firstName}');
-        if (lastField) await lastField.type('${request.lastName}');
+        if (firstField) await firstField.type(firstName);
+        if (lastField) await lastField.type(lastName);
         
-        ${request.dateOfBirth ? `
-        const dobField = await page.$('#ctl00_ContentPlaceHolder1_txtDOB, input[id*="DOB"]');
-        if (dobField) await dobField.type('${request.dateOfBirth}');
-        ` : ''}
+        if (dob) {
+          const dobField = await page.$('#ctl00_ContentPlaceHolder1_txtDOB, input[id*="DOB"]');
+          if (dobField) await dobField.type(dob);
+        }
         
-        ${request.county ? `
-        const countySelect = await page.$('#ctl00_ContentPlaceHolder1_ddlCounty, select[id*="County"]');
-        if (countySelect) await page.select('#ctl00_ContentPlaceHolder1_ddlCounty, select[id*="County"]', '${request.county}');
-        ` : ''}
+        if (county) {
+          const countySelect = await page.$('#ctl00_ContentPlaceHolder1_ddlCounty, select[id*="County"]');
+          if (countySelect) await page.select('#ctl00_ContentPlaceHolder1_ddlCounty, select[id*="County"]', county);
+        }
         
         // Submit
         const submitBtn = await page.$('#ctl00_ContentPlaceHolder1_btnSearch, input[type="submit"], button[type="submit"]');
@@ -227,14 +238,13 @@ async function lookupWithBrowserless(request: OHVoterLookupRequest): Promise<Vot
       method: 'browserless',
     };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('OH Voter lookup error:', error);
     return {
       success: false,
       source: 'voterlookup.ohiosos.gov',
       url: OH_VOTER_URL,
       state: 'OH',
-      error: errorMessage,
+      error: 'Lookup failed',
       method: 'browserless',
     };
   }
@@ -288,12 +298,11 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[OH Voter Lookup] Error:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: errorMessage,
+        error: 'An error occurred',
         url: OH_VOTER_URL,
         state: 'OH',
       }),

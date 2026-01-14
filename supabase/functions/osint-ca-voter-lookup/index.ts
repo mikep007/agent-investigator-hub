@@ -45,15 +45,26 @@ async function lookupWithBrowserless(request: CAVoterLookupRequest): Promise<Vot
       source: 'voterstatus.sos.ca.gov',
       url: CA_VOTER_URL,
       state: 'CA',
-      error: 'BROWSERLESS_API_KEY not configured',
+      error: 'Service configuration error',
       method: 'browserless',
     };
   }
 
   try {
+    // Properly escape user inputs to prevent code injection
+    const safeFirstName = JSON.stringify(request.firstName);
+    const safeLastName = JSON.stringify(request.lastName);
+    const safeDob = request.dateOfBirth ? JSON.stringify(request.dateOfBirth) : null;
+    const safeCounty = request.county ? JSON.stringify(request.county) : null;
+
     const functionScript = `
       module.exports = async ({ page }) => {
-        const url = '${CA_VOTER_URL}';
+        const firstName = ${safeFirstName};
+        const lastName = ${safeLastName};
+        const dob = ${safeDob};
+        const county = ${safeCounty};
+        const url = 'https://voterstatus.sos.ca.gov/';
+        
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
         
         await page.waitForTimeout(2000);
@@ -65,18 +76,18 @@ async function lookupWithBrowserless(request: CAVoterLookupRequest): Promise<Vot
         const lastNameInput = await page.$('#lastName') || await page.$('input[name="lastName"]');
         
         if (firstNameInput && lastNameInput) {
-          await firstNameInput.type('${request.firstName}');
-          await lastNameInput.type('${request.lastName}');
+          await firstNameInput.type(firstName);
+          await lastNameInput.type(lastName);
           
-          ${request.dateOfBirth ? `
-          const dobInput = await page.$('#dateOfBirth') || await page.$('input[name="dateOfBirth"]');
-          if (dobInput) await dobInput.type('${request.dateOfBirth}');
-          ` : ''}
+          if (dob) {
+            const dobInput = await page.$('#dateOfBirth') || await page.$('input[name="dateOfBirth"]');
+            if (dobInput) await dobInput.type(dob);
+          }
           
-          ${request.county ? `
-          const countySelect = await page.$('#county') || await page.$('select[name="county"]');
-          if (countySelect) await page.select('#county, select[name="county"]', '${request.county}');
-          ` : ''}
+          if (county) {
+            const countySelect = await page.$('#county') || await page.$('select[name="county"]');
+            if (countySelect) await page.select('#county, select[name="county"]', county);
+          }
           
           // Submit form
           const submitBtn = await page.$('button[type="submit"], input[type="submit"]');
@@ -142,8 +153,7 @@ async function lookupWithBrowserless(request: CAVoterLookupRequest): Promise<Vot
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Browserless error: ${response.status} - ${errorText}`);
+      throw new Error(`Browserless error: ${response.status}`);
     }
 
     const result = await response.json();
@@ -164,14 +174,13 @@ async function lookupWithBrowserless(request: CAVoterLookupRequest): Promise<Vot
       method: 'browserless',
     };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('CA Voter lookup error:', error);
     return {
       success: false,
       source: 'voterstatus.sos.ca.gov',
       url: CA_VOTER_URL,
       state: 'CA',
-      error: errorMessage,
+      error: 'Lookup failed',
       method: 'browserless',
     };
   }
@@ -225,12 +234,11 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[CA Voter Lookup] Error:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: errorMessage,
+        error: 'An error occurred',
         url: CA_VOTER_URL,
         state: 'CA',
       }),

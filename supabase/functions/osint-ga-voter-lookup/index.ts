@@ -46,15 +46,26 @@ async function lookupWithBrowserless(request: GAVoterLookupRequest): Promise<Vot
       source: 'mvp.sos.ga.gov',
       url: GA_VOTER_URL,
       state: 'GA',
-      error: 'BROWSERLESS_API_KEY not configured',
+      error: 'Service configuration error',
       method: 'browserless',
     };
   }
 
   try {
+    // Properly escape user inputs to prevent code injection
+    const safeFirstName = JSON.stringify(request.firstName);
+    const safeLastName = JSON.stringify(request.lastName);
+    const safeDob = request.dateOfBirth ? JSON.stringify(request.dateOfBirth) : null;
+    const safeCounty = request.county ? JSON.stringify(request.county) : null;
+
     const functionScript = `
       module.exports = async ({ page }) => {
-        const url = '${GA_VOTER_URL}';
+        const firstName = ${safeFirstName};
+        const lastName = ${safeLastName};
+        const dob = ${safeDob};
+        const county = ${safeCounty};
+        const url = 'https://mvp.sos.ga.gov/s/';
+        
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
         
         await page.waitForTimeout(3000);
@@ -74,18 +85,18 @@ async function lookupWithBrowserless(request: GAVoterLookupRequest): Promise<Vot
         const firstNameInput = await page.$('input[name*="firstName"]') || await page.$('input[id*="firstName"]');
         
         if (firstNameInput && lastNameInput) {
-          await firstNameInput.type('${request.firstName}');
-          await lastNameInput.type('${request.lastName}');
+          await firstNameInput.type(firstName);
+          await lastNameInput.type(lastName);
           
-          ${request.dateOfBirth ? `
-          const dobInput = await page.$('input[name*="dob"], input[name*="birthDate"]');
-          if (dobInput) await dobInput.type('${request.dateOfBirth}');
-          ` : ''}
+          if (dob) {
+            const dobInput = await page.$('input[name*="dob"], input[name*="birthDate"]');
+            if (dobInput) await dobInput.type(dob);
+          }
           
-          ${request.county ? `
-          const countySelect = await page.$('select[name*="county"]');
-          if (countySelect) await page.select('select[name*="county"]', '${request.county}');
-          ` : ''}
+          if (county) {
+            const countySelect = await page.$('select[name*="county"]');
+            if (countySelect) await page.select('select[name*="county"]', county);
+          }
           
           // Submit
           const submitBtn = await page.$('button[type="submit"], input[type="submit"]');
@@ -165,8 +176,7 @@ async function lookupWithBrowserless(request: GAVoterLookupRequest): Promise<Vot
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Browserless error: ${response.status} - ${errorText}`);
+      throw new Error(`Browserless error: ${response.status}`);
     }
 
     const result = await response.json();
@@ -190,14 +200,13 @@ async function lookupWithBrowserless(request: GAVoterLookupRequest): Promise<Vot
       method: 'browserless',
     };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('GA Voter lookup error:', error);
     return {
       success: false,
       source: 'mvp.sos.ga.gov',
       url: GA_VOTER_URL,
       state: 'GA',
-      error: errorMessage,
+      error: 'Lookup failed',
       method: 'browserless',
     };
   }
@@ -251,12 +260,11 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[GA Voter Lookup] Error:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: errorMessage,
+        error: 'An error occurred',
         url: GA_VOTER_URL,
         state: 'GA',
       }),

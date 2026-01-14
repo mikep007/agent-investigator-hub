@@ -55,15 +55,24 @@ async function lookupWithBrowserless(request: NCVoterLookupRequest): Promise<Vot
       source: 'vt.ncsbe.gov',
       url: NC_VOTER_URL,
       state: 'NC',
-      error: 'BROWSERLESS_API_KEY not configured',
+      error: 'Service configuration error',
       method: 'browserless',
     };
   }
 
   try {
+    // Properly escape user inputs to prevent code injection
+    const safeFirstName = JSON.stringify(request.firstName);
+    const safeLastName = JSON.stringify(request.lastName);
+    const safeCounty = request.county ? JSON.stringify(request.county) : null;
+
     const functionScript = `
       module.exports = async ({ page }) => {
-        const url = '${NC_VOTER_URL}';
+        const firstName = ${safeFirstName};
+        const lastName = ${safeLastName};
+        const county = ${safeCounty};
+        const url = 'https://vt.ncsbe.gov/RegLkup/';
+        
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
         
         await page.waitForTimeout(2000);
@@ -75,13 +84,13 @@ async function lookupWithBrowserless(request: NCVoterLookupRequest): Promise<Vot
         const firstNameInput = await page.$('#txtFirstName') || await page.$('input[name="FirstName"]');
         
         if (firstNameInput && lastNameInput) {
-          await lastNameInput.type('${request.lastName}');
-          await firstNameInput.type('${request.firstName}');
+          await lastNameInput.type(lastName);
+          await firstNameInput.type(firstName);
           
-          ${request.county ? `
-          const countySelect = await page.$('#ddlCounty') || await page.$('select[name="County"]');
-          if (countySelect) await page.select('#ddlCounty, select[name="County"]', '${request.county}');
-          ` : ''}
+          if (county) {
+            const countySelect = await page.$('#ddlCounty') || await page.$('select[name="County"]');
+            if (countySelect) await page.select('#ddlCounty, select[name="County"]', county);
+          }
           
           // Submit
           const submitBtn = await page.$('#btnSearch, input[type="submit"], button[type="submit"]');
@@ -193,8 +202,7 @@ async function lookupWithBrowserless(request: NCVoterLookupRequest): Promise<Vot
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Browserless error: ${response.status} - ${errorText}`);
+      throw new Error(`Browserless error: ${response.status}`);
     }
 
     const result = await response.json();
@@ -220,14 +228,13 @@ async function lookupWithBrowserless(request: NCVoterLookupRequest): Promise<Vot
       method: 'browserless',
     };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('NC Voter lookup error:', error);
     return {
       success: false,
       source: 'vt.ncsbe.gov',
       url: NC_VOTER_URL,
       state: 'NC',
-      error: errorMessage,
+      error: 'Lookup failed',
       method: 'browserless',
     };
   }
@@ -281,12 +288,11 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[NC Voter Lookup] Error:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: errorMessage,
+        error: 'An error occurred',
         url: NC_VOTER_URL,
         state: 'NC',
       }),

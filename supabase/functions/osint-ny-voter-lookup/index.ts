@@ -49,15 +49,28 @@ async function lookupWithBrowserless(request: NYVoterLookupRequest): Promise<Vot
       source: 'voterlookup.elections.ny.gov',
       url: NY_VOTER_URL,
       state: 'NY',
-      error: 'BROWSERLESS_API_KEY not configured',
+      error: 'Service configuration error',
       method: 'browserless',
     };
   }
 
   try {
+    // Properly escape user inputs to prevent code injection
+    const safeFirstName = JSON.stringify(request.firstName);
+    const safeLastName = JSON.stringify(request.lastName);
+    const safeDob = request.dateOfBirth ? JSON.stringify(request.dateOfBirth) : null;
+    const safeCounty = request.county ? JSON.stringify(request.county) : null;
+    const safeZipCode = request.zipCode ? JSON.stringify(request.zipCode) : null;
+
     const functionScript = `
       module.exports = async ({ page }) => {
-        const url = '${NY_VOTER_URL}';
+        const firstName = ${safeFirstName};
+        const lastName = ${safeLastName};
+        const dob = ${safeDob};
+        const county = ${safeCounty};
+        const zipCode = ${safeZipCode};
+        const url = 'https://voterlookup.elections.ny.gov/';
+        
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
         
         // Wait for form to load
@@ -67,23 +80,23 @@ async function lookupWithBrowserless(request: NYVoterLookupRequest): Promise<Vot
         const firstNameField = await page.$('input[name="FirstName"], #FirstName, [id*="firstName"]');
         const lastNameField = await page.$('input[name="LastName"], #LastName, [id*="lastName"]');
         
-        if (firstNameField) await firstNameField.type('${request.firstName}');
-        if (lastNameField) await lastNameField.type('${request.lastName}');
+        if (firstNameField) await firstNameField.type(firstName);
+        if (lastNameField) await lastNameField.type(lastName);
         
-        ${request.dateOfBirth ? `
-        const dobField = await page.$('input[name="DateOfBirth"], #DateOfBirth, [id*="dob"]');
-        if (dobField) await dobField.type('${request.dateOfBirth}');
-        ` : ''}
+        if (dob) {
+          const dobField = await page.$('input[name="DateOfBirth"], #DateOfBirth, [id*="dob"]');
+          if (dobField) await dobField.type(dob);
+        }
         
-        ${request.county ? `
-        const countyField = await page.$('select[name="County"], #County');
-        if (countyField) await page.select('select[name="County"], #County', '${request.county}');
-        ` : ''}
+        if (county) {
+          const countyField = await page.$('select[name="County"], #County');
+          if (countyField) await page.select('select[name="County"], #County', county);
+        }
         
-        ${request.zipCode ? `
-        const zipField = await page.$('input[name="ZipCode"], #ZipCode, [id*="zip"]');
-        if (zipField) await zipField.type('${request.zipCode}');
-        ` : ''}
+        if (zipCode) {
+          const zipField = await page.$('input[name="ZipCode"], #ZipCode, [id*="zip"]');
+          if (zipField) await zipField.type(zipCode);
+        }
         
         // Submit form
         const submitBtn = await page.$('button[type="submit"], input[type="submit"], #submit, .submit-btn');
@@ -196,14 +209,13 @@ async function lookupWithBrowserless(request: NYVoterLookupRequest): Promise<Vot
       method: 'browserless',
     };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('NY Voter lookup error:', error);
     return {
       success: false,
       source: 'voterlookup.elections.ny.gov',
       url: NY_VOTER_URL,
       state: 'NY',
-      error: errorMessage,
+      error: 'Lookup failed',
       method: 'browserless',
     };
   }
@@ -258,12 +270,11 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[NY Voter Lookup] Error:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: errorMessage,
+        error: 'An error occurred',
         url: NY_VOTER_URL,
         state: 'NY',
       }),

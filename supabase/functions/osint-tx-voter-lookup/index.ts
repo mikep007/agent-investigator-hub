@@ -46,15 +46,26 @@ async function lookupWithBrowserless(request: TXVoterLookupRequest): Promise<Vot
       source: 'teamrv-mvp.sos.texas.gov',
       url: TX_VOTER_URL,
       state: 'TX',
-      error: 'BROWSERLESS_API_KEY not configured',
+      error: 'Service configuration error',
       method: 'browserless',
     };
   }
 
   try {
+    // Properly escape user inputs to prevent code injection
+    const safeFirstName = JSON.stringify(request.firstName);
+    const safeLastName = JSON.stringify(request.lastName);
+    const safeDob = request.dateOfBirth ? JSON.stringify(request.dateOfBirth) : null;
+    const safeCounty = request.county ? JSON.stringify(request.county) : null;
+
     const functionScript = `
       module.exports = async ({ page }) => {
-        const url = '${TX_VOTER_URL}';
+        const firstName = ${safeFirstName};
+        const lastName = ${safeLastName};
+        const dob = ${safeDob};
+        const county = ${safeCounty};
+        const url = 'https://teamrv-mvp.sos.texas.gov/MVP/mvp.do';
+        
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
         
         // Wait for the page to load
@@ -67,25 +78,25 @@ async function lookupWithBrowserless(request: TXVoterLookupRequest): Promise<Vot
           await page.waitForNavigation({ timeout: 10000 }).catch(() => {});
         }
         
-        // Fill in the form fields
+        // Fill in the form fields with safely escaped values
         await page.waitForSelector('input[name="firstName"]', { timeout: 10000 }).catch(() => {});
         
         const firstNameInput = await page.$('input[name="firstName"]');
         const lastNameInput = await page.$('input[name="lastName"]');
         
         if (firstNameInput && lastNameInput) {
-          await firstNameInput.type('${request.firstName}');
-          await lastNameInput.type('${request.lastName}');
+          await firstNameInput.type(firstName);
+          await lastNameInput.type(lastName);
           
-          ${request.dateOfBirth ? `
-          const dobInput = await page.$('input[name="dob"]');
-          if (dobInput) await dobInput.type('${request.dateOfBirth}');
-          ` : ''}
+          if (dob) {
+            const dobInput = await page.$('input[name="dob"]');
+            if (dobInput) await dobInput.type(dob);
+          }
           
-          ${request.county ? `
-          const countySelect = await page.$('select[name="countyName"]');
-          if (countySelect) await page.select('select[name="countyName"]', '${request.county}');
-          ` : ''}
+          if (county) {
+            const countySelect = await page.$('select[name="countyName"]');
+            if (countySelect) await page.select('select[name="countyName"]', county);
+          }
           
           // Submit the form
           const submitBtn = await page.$('input[type="submit"], button[type="submit"]');
@@ -152,8 +163,7 @@ async function lookupWithBrowserless(request: TXVoterLookupRequest): Promise<Vot
     });
 
     if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(`Browserless error: ${response.status} - ${errorText}`);
+      throw new Error(`Browserless error: ${response.status}`);
     }
 
     const result = await response.json();
@@ -174,14 +184,13 @@ async function lookupWithBrowserless(request: TXVoterLookupRequest): Promise<Vot
       method: 'browserless',
     };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('TX Voter lookup error:', error);
     return {
       success: false,
       source: 'teamrv-mvp.sos.texas.gov',
       url: TX_VOTER_URL,
       state: 'TX',
-      error: errorMessage,
+      error: 'Lookup failed',
       method: 'browserless',
     };
   }
@@ -236,12 +245,11 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[TX Voter Lookup] Error:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: errorMessage,
+        error: 'An error occurred',
         url: TX_VOTER_URL,
         state: 'TX',
       }),

@@ -56,29 +56,37 @@ async function lookupWithBrowserless(request: FLVoterLookupRequest): Promise<Vot
       source: 'registration.elections.myflorida.com',
       url: FL_VOTER_URL,
       state: 'FL',
-      error: 'BROWSERLESS_API_KEY not configured',
+      error: 'Service configuration error',
       method: 'browserless',
     };
   }
 
   try {
+    // Properly escape user inputs to prevent code injection
+    const safeFirstName = JSON.stringify(request.firstName);
+    const safeLastName = JSON.stringify(request.lastName);
+    const safeDob = request.dateOfBirth ? JSON.stringify(request.dateOfBirth) : null;
+
     const functionScript = `
       module.exports = async ({ page }) => {
-        const url = '${FL_VOTER_URL}';
+        const firstName = ${safeFirstName};
+        const lastName = ${safeLastName};
+        const dob = ${safeDob};
+        const url = 'https://registration.elections.myflorida.com/CheckVoterStatus';
+        
         await page.goto(url, { waitUntil: 'networkidle2', timeout: 30000 });
         
         // Florida's site has a specific form structure
         await page.waitForSelector('#FirstName, input[name="FirstName"]', { timeout: 10000 });
         
-        // Fill form
-        await page.type('#FirstName, input[name="FirstName"]', '${request.firstName}');
-        await page.type('#LastName, input[name="LastName"]', '${request.lastName}');
+        // Fill form with safely escaped values
+        await page.type('#FirstName, input[name="FirstName"]', firstName);
+        await page.type('#LastName, input[name="LastName"]', lastName);
         
-        ${request.dateOfBirth ? `
-        // DOB is usually in separate fields or one field
-        const dobField = await page.$('#DateOfBirth, input[name="DateOfBirth"]');
-        if (dobField) await dobField.type('${request.dateOfBirth}');
-        ` : ''}
+        if (dob) {
+          const dobField = await page.$('#DateOfBirth, input[name="DateOfBirth"]');
+          if (dobField) await dobField.type(dob);
+        }
         
         // Submit
         const submitBtn = await page.$('input[type="submit"], button[type="submit"], #btnSearch');
@@ -216,14 +224,13 @@ async function lookupWithBrowserless(request: FLVoterLookupRequest): Promise<Vot
       method: 'browserless',
     };
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('FL Voter lookup error:', error);
     return {
       success: false,
       source: 'registration.elections.myflorida.com',
       url: FL_VOTER_URL,
       state: 'FL',
-      error: errorMessage,
+      error: 'Lookup failed',
       method: 'browserless',
     };
   }
@@ -277,12 +284,11 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
     console.error('[FL Voter Lookup] Error:', error);
     return new Response(
       JSON.stringify({ 
         success: false, 
-        error: errorMessage,
+        error: 'An error occurred',
         url: FL_VOTER_URL,
         state: 'FL',
       }),
