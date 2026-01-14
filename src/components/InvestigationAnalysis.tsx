@@ -162,6 +162,14 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
     }
   };
 
+  // Clear analysis when investigation changes
+  useEffect(() => {
+    setAnalysis(null);
+    setError(null);
+    setProgress(0);
+    setElapsedTime(0);
+  }, [investigationId]);
+
   useEffect(() => {
     if (active && investigationId && !analysis && !loading) {
       // Auto-analyze when investigation becomes active
