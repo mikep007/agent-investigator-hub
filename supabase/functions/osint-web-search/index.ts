@@ -1704,25 +1704,43 @@ Deno.serve(async (req) => {
           // This is less reliable - could be different people with same names
           confidenceScore = 0.25;
         } else {
-          // No name match - but check if this is a keyword-only query result
-          // If ALL user-provided keywords appear in the result, it's potentially relevant
-          // (e.g., a page about their company/organization)
+          // No name match in snippet - but this could still be a valid result
+          // Google often returns relevant results where the name isn't in the snippet
           
-          // Check if ALL keywords match (for keyword-only relevance)
-          const allKeywordsMatch = keywordList.length > 0 && 
-            keywordList.every((kw: string) => textToCheck.toLowerCase().includes(kw.toLowerCase()));
+          // CASE 1: Result came from a keyword+name query (e.g., "Michael Petrie" "Social Detection")
+          // If Google returned this result for that query, trust it - the name may be on the page
+          // but just not in the snippet Google chose to display
+          const isFromKeywordNameQuery = result.queryType === 'keyword_name' || 
+                                          result.queryType === 'keyword_name_location' ||
+                                          result.queryType === 'keywords_combined_all' ||
+                                          result.queryType === 'keywords_or_combined';
+          
+          // Check if any user keywords match in the result (validates relevance)
+          const hasAnyKeywordMatch = keywordList.length > 0 && 
+            keywordList.some((kw: string) => textToCheck.toLowerCase().includes(kw.toLowerCase()));
           
           // Check if any multi-word keywords match exactly (e.g., "Social Detection")
           const hasExactMultiWordMatch = keywordList.some((kw: string) => 
             kw.includes(' ') && textToCheck.toLowerCase().includes(kw.toLowerCase())
           );
           
-          // Check if this result came from a keyword-only query type
+          // Check if this result came from ANY keyword-related query
           const isFromKeywordQuery = result.queryType?.startsWith('keyword_') || 
                                       result.queryType?.includes('keyword');
           
-          if ((allKeywordsMatch || hasExactMultiWordMatch) && isFromKeywordQuery) {
-            // Keyword-only match - lower confidence but still include
+          if (isFromKeywordNameQuery && hasAnyKeywordMatch) {
+            // Keyword+Name query result where keywords appear - TRUST Google's relevance
+            // The name was in the query, keywords are present - likely valid result
+            isKeywordOnlyMatch = true;
+            confidenceScore = 0.50; // Higher than pure keyword-only since query included name
+            console.log(`  [KEYWORD+NAME QUERY] Including result from "${result.queryType}" - keywords found, name was in query: ${item.link}`);
+          } else if (hasExactMultiWordMatch && isFromKeywordQuery) {
+            // Exact multi-word keyword match from any keyword query
+            isKeywordOnlyMatch = true;
+            confidenceScore = 0.40;
+            console.log(`  [EXACT KEYWORD] Including result with exact multi-word keyword match: ${item.link}`);
+          } else if (hasAnyKeywordMatch && isFromKeywordQuery) {
+            // Some keywords match from a keyword query - lower confidence
             isKeywordOnlyMatch = true;
             confidenceScore = 0.35; // Below confirmed threshold, will be "Possible Match"
             console.log(`  [KEYWORD-ONLY] Including result with keyword match but no name: ${item.link}`);
