@@ -362,14 +362,15 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
       }
     }
 
-    // Count filled fields including city/state
+    // Count filled fields including city/state and relatives
     const filledFields = [
       searchData.fullName,
       searchData.address || (searchData.city && searchData.state ? `${searchData.city}, ${searchData.state}` : ''),
       searchData.email,
       searchData.phone,
       searchData.username,
-      searchData.keywords
+      searchData.keywords,
+      bulkRelatives.length > 0 ? 'relatives' : '', // Count relatives as a parameter if any exist
     ].filter(field => field?.trim()).length + bulkEmails.length + bulkUsernames.length;
 
     toast({
