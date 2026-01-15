@@ -906,94 +906,128 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
     <>
       {filteredLogs.map((log) => {
         // Sherlock Results - handle both foundPlatforms and profileLinks formats
+        // Using same 2-column grid layout as Holehe email results
         const sherlockPlatforms = log.data?.foundPlatforms || log.data?.profileLinks || [];
         if ((log.agent_type === 'Sherlock' || log.agent_type === 'Sherlock_from_email') && sherlockPlatforms.length > 0) {
           return (
             <div key={log.id} className="space-y-4">
               <div className="flex items-center gap-2 mb-2">
-                <Shield className="h-5 w-5 text-primary" />
+                <User className="h-5 w-5 text-primary" />
                 <h3 className="text-base font-medium">
                   Username "{log.data.username}" found on {sherlockPlatforms.length} platforms
                 </h3>
+                <Badge variant="secondary" className="ml-auto text-xs">
+                  @{log.data.username}
+                </Badge>
               </div>
-              {sherlockPlatforms.map((platform: any, idx: number) => (
-                <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
-                  <div className="flex items-start gap-2">
-                    <div className="flex-shrink-0 mt-1">
-                      <PlatformLogo platform={platform.name || platform.platform || 'unknown'} />
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="text-sm text-muted-foreground mb-1">{platform.name || platform.platform}</div>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <a
-                            href={platform.url}
-                            target="_blank"
-                            rel="noopener noreferrer nofollow"
-                            className="block group-hover:underline"
-                          >
-                            <h3 className="text-xl text-primary line-clamp-1 mb-1">
-                              Profile on {platform.name || platform.platform}
-                            </h3>
-                          </a>
-                        </TooltipTrigger>
-                        <TooltipContent>
-                          <div className="flex items-start gap-2 max-w-xs">
-                            <Info className="h-4 w-4 flex-shrink-0 mt-0.5" />
-                            <span>Click to open in new tab. Some platforms may require manual verification.</span>
-                          </div>
-                        </TooltipContent>
-                      </Tooltip>
-                      <div className="flex items-center gap-2 mt-1 mb-2">
-                        <p className="text-sm text-muted-foreground truncate flex-1">
-                          {platform.url}
-                        </p>
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-7 px-2"
-                          onClick={() => {
-                            navigator.clipboard.writeText(platform.url);
-                            toast({ title: "Link copied to clipboard" });
-                          }}
-                        >
-                          <Copy className="h-3 w-3" />
-                        </Button>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {sherlockPlatforms.map((platform: any, idx: number) => (
+                  <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors bg-card">
+                    <div className="flex items-start gap-3">
+                      {/* Platform Logo/Avatar - matching Holehe style */}
+                      <div className="flex-shrink-0">
+                        {platform.profileImage ? (
+                          <img 
+                            src={platform.profileImage} 
+                            alt={platform.name || platform.platform}
+                            className="w-12 h-12 rounded-lg object-cover border border-border"
+                            onError={(e) => {
+                              e.currentTarget.style.display = 'none';
+                              e.currentTarget.nextElementSibling?.classList.remove('hidden');
+                            }}
+                          />
+                        ) : null}
+                        <div className={`w-12 h-12 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center overflow-hidden ${platform.profileImage ? 'hidden' : ''}`}>
+                          <PlatformLogo platform={platform.name || platform.platform || 'unknown'} size="lg" />
+                        </div>
                       </div>
-                      <div className="flex gap-2 items-center">
-                        <Button
-                          size="sm"
-                          variant={platform.verificationStatus === 'verified' ? 'default' : 'ghost'}
-                          className="h-7 text-xs"
-                          onClick={() => updatePlatformVerification(log.id, platform.url, 'verified', 'sherlock')}
-                        >
-                          <Check className="h-3 w-3 mr-1" />
-                          Verified
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={platform.verificationStatus === 'inaccurate' ? 'destructive' : 'ghost'}
-                          className="h-7 text-xs"
-                          onClick={() => updatePlatformVerification(log.id, platform.url, 'inaccurate', 'sherlock')}
-                        >
-                          <X className="h-3 w-3 mr-1" />
-                          Inaccurate
-                        </Button>
-                        {platform.verificationStatus === 'verified' && (
-                          <Badge variant="default" className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="text-base font-semibold text-foreground">
+                            {platform.name || platform.platform}
+                          </h4>
+                          <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2 truncate">
+                          @{log.data.username} • {new URL(platform.url).hostname}
+                        </p>
+                        <div className="flex gap-2 items-center flex-wrap">
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-7 text-xs"
+                                onClick={() => handleDeepDive(platform.name || platform.platform, log.id)}
+                              >
+                                <Sparkles className="h-3 w-3 mr-1" />
+                                Deep Dive
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Investigate this account in detail</TooltipContent>
+                          </Tooltip>
+                          <Tooltip>
+                            <TooltipTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                className="h-7 px-2"
+                                onClick={() => window.open(platform.url, '_blank')}
+                              >
+                                <ExternalLink className="h-3 w-3" />
+                              </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>Open profile</TooltipContent>
+                          </Tooltip>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            className="h-7 px-2"
+                            onClick={() => {
+                              navigator.clipboard.writeText(platform.url);
+                              toast({ title: "Link copied to clipboard" });
+                            }}
+                          >
+                            <Copy className="h-3 w-3" />
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={platform.verificationStatus === 'verified' ? 'default' : 'ghost'}
+                            className="h-7 text-xs"
+                            onClick={() => updatePlatformVerification(log.id, platform.url, 'verified', 'sherlock')}
+                          >
+                            <Check className="h-3 w-3 mr-1" />
                             Verified
-                          </Badge>
-                        )}
-                        {platform.verificationStatus === 'inaccurate' && (
-                          <Badge variant="destructive" className="bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/50">
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant={platform.verificationStatus === 'inaccurate' ? 'destructive' : 'ghost'}
+                            className="h-7 text-xs"
+                            onClick={() => updatePlatformVerification(log.id, platform.url, 'inaccurate', 'sherlock')}
+                          >
+                            <X className="h-3 w-3 mr-1" />
                             Inaccurate
-                          </Badge>
+                          </Button>
+                        </div>
+                        {platform.verificationStatus && (
+                          <div className="mt-2">
+                            {platform.verificationStatus === 'verified' && (
+                              <Badge variant="default" className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50">
+                                Verified
+                              </Badge>
+                            )}
+                            {platform.verificationStatus === 'inaccurate' && (
+                              <Badge variant="destructive" className="bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/50">
+                                Inaccurate
+                              </Badge>
+                            )}
+                          </div>
                         )}
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
           );
         }
