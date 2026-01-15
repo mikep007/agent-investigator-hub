@@ -1007,20 +1007,29 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
               <div className="flex items-center gap-2 mb-2">
                 <Mail className="h-5 w-5 text-primary" />
                 <h3 className="text-base font-medium">Email found on {holeheFound.length} platforms</h3>
+                <Badge variant="secondary" className="ml-auto text-xs">
+                  {log.data?.email || 'Email lookup'}
+                </Badge>
               </div>
-              {holeheFound.map((result: any, idx: number) => (
-                  <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
-                    <div className="flex items-start gap-2">
-                      <div className="flex-shrink-0 mt-1">
-                        <CheckCircle2 className="h-4 w-4 text-green-500" />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {holeheFound.map((result: any, idx: number) => (
+                  <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors bg-card">
+                    <div className="flex items-start gap-3">
+                      {/* Platform Logo/Avatar */}
+                      <div className="flex-shrink-0">
+                        <div className="w-12 h-12 rounded-lg bg-gradient-to-br from-primary/20 to-primary/5 border border-primary/20 flex items-center justify-center overflow-hidden">
+                          <PlatformLogo platform={result.name || result.domain || 'unknown'} size="lg" />
+                        </div>
                       </div>
                       <div className="flex-1 min-w-0">
-                        <div className="text-sm text-muted-foreground mb-1">{result.domain}</div>
-                        <h3 className="text-xl text-foreground mb-1">
-                          {result.name}
-                        </h3>
-                        <p className="text-sm text-muted-foreground mb-2">
-                          Account registered on this platform
+                        <div className="flex items-center gap-2 mb-1">
+                          <h4 className="text-base font-semibold text-foreground">
+                            {result.name || result.domain}
+                          </h4>
+                          <CheckCircle2 className="h-4 w-4 text-green-500 flex-shrink-0" />
+                        </div>
+                        <p className="text-xs text-muted-foreground mb-2">
+                          Account registered • {result.domain}
                         </p>
                         <div className="flex gap-2 items-center flex-wrap">
                           <Tooltip>
@@ -1028,10 +1037,10 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-8"
+                                className="h-7 text-xs"
                                 onClick={() => handleDeepDive(result.name, log.id)}
                               >
-                                <Sparkles className="h-3 w-3 mr-2" />
+                                <Sparkles className="h-3 w-3 mr-1" />
                                 Deep Dive
                               </Button>
                             </TooltipTrigger>
@@ -1055,21 +1064,26 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                             <X className="h-3 w-3 mr-1" />
                             Inaccurate
                           </Button>
-                          {result.verificationStatus === 'verified' && (
-                            <Badge variant="default" className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50">
-                              Verified
-                            </Badge>
-                          )}
-                          {result.verificationStatus === 'inaccurate' && (
-                            <Badge variant="destructive" className="bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/50">
-                              Inaccurate
-                            </Badge>
-                          )}
                         </div>
+                        {result.verificationStatus && (
+                          <div className="mt-2">
+                            {result.verificationStatus === 'verified' && (
+                              <Badge variant="default" className="bg-green-500/20 text-green-700 dark:text-green-400 border-green-500/50">
+                                Verified
+                              </Badge>
+                            )}
+                            {result.verificationStatus === 'inaccurate' && (
+                              <Badge variant="destructive" className="bg-red-500/20 text-red-700 dark:text-red-400 border-red-500/50">
+                                Inaccurate
+                              </Badge>
+                            )}
+                          </div>
+                        )}
                       </div>
                     </div>
                   </div>
                 ))}
+              </div>
             </div>
           );
         }
@@ -2232,12 +2246,107 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                 )}
                 
                 {filteredLogs.length > 0 ? (
-                  <>
-                    {renderWebResults(filteredLogs)}
-                    {renderSocialResults(filteredLogs)}
-                    {renderAddressResults(filteredLogs)}
-                    {renderContactResults(filteredLogs)}
-                  </>
+                  <div className="space-y-8">
+                    {/* Web Results Section */}
+                    {webLogs.length > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 border-b border-border pb-2 sticky top-0 bg-background z-10">
+                          <Globe className="h-5 w-5 text-blue-500" />
+                          <h3 className="text-lg font-semibold">Web Results</h3>
+                          <Badge variant="secondary" className="ml-auto">{webLogs.length} sources</Badge>
+                        </div>
+                        {renderWebResults(webLogs)}
+                      </div>
+                    )}
+                    
+                    {/* Email Account Discovery Section */}
+                    {(() => {
+                      const emailAccountLogs = filteredLogs.filter(log => 
+                        log.agent_type === 'Holehe' || log.agent_type === 'Email_intelligence'
+                      );
+                      if (emailAccountLogs.length === 0) return null;
+                      return (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 border-b border-border pb-2 sticky top-0 bg-background z-10">
+                            <Mail className="h-5 w-5 text-cyan-500" />
+                            <h3 className="text-lg font-semibold">Email Account Discovery</h3>
+                            <Badge variant="secondary" className="ml-auto">
+                              {emailAccountLogs.reduce((acc, log) => acc + (log.data?.accountsFound || 0), 0)} accounts
+                            </Badge>
+                          </div>
+                          {renderSocialResults(emailAccountLogs)}
+                        </div>
+                      );
+                    })()}
+                    
+                    {/* Username Discovery Section */}
+                    {(() => {
+                      const usernameAccountLogs = filteredLogs.filter(log => 
+                        log.agent_type === 'Sherlock' || log.agent_type === 'Sherlock_from_email'
+                      );
+                      if (usernameAccountLogs.length === 0) return null;
+                      return (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 border-b border-border pb-2 sticky top-0 bg-background z-10">
+                            <User className="h-5 w-5 text-purple-500" />
+                            <h3 className="text-lg font-semibold">Username Discovery</h3>
+                            <Badge variant="secondary" className="ml-auto">
+                              {usernameAccountLogs.reduce((acc, log) => {
+                                const platforms = log.data?.profileLinks || log.data?.foundPlatforms || [];
+                                return acc + platforms.length;
+                              }, 0)} platforms
+                            </Badge>
+                          </div>
+                          {renderSocialResults(usernameAccountLogs)}
+                        </div>
+                      );
+                    })()}
+                    
+                    {/* Social Profiles Section */}
+                    {(() => {
+                      const socialProfileLogs = filteredLogs.filter(log => 
+                        log.agent_type === 'Social' || log.agent_type === 'Social_name' || 
+                        log.agent_type === 'Idcrawl' || log.agent_type === 'Toutatis' ||
+                        log.agent_type === 'Toutatis_from_email' || log.agent_type === 'Instaloader' ||
+                        log.agent_type === 'Instaloader_from_email'
+                      );
+                      if (socialProfileLogs.length === 0) return null;
+                      return (
+                        <div className="space-y-4">
+                          <div className="flex items-center gap-2 border-b border-border pb-2 sticky top-0 bg-background z-10">
+                            <Instagram className="h-5 w-5 text-pink-500" />
+                            <h3 className="text-lg font-semibold">Social Profiles</h3>
+                            <Badge variant="secondary" className="ml-auto">{socialProfileLogs.length} sources</Badge>
+                          </div>
+                          {renderSocialResults(socialProfileLogs)}
+                        </div>
+                      );
+                    })()}
+                    
+                    {/* Address Results Section */}
+                    {addressLogs.length > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 border-b border-border pb-2 sticky top-0 bg-background z-10">
+                          <MapPin className="h-5 w-5 text-green-500" />
+                          <h3 className="text-lg font-semibold">Address & Location</h3>
+                          <Badge variant="secondary" className="ml-auto">{addressLogs.length} results</Badge>
+                        </div>
+                        {renderAddressResults(addressLogs)}
+                      </div>
+                    )}
+                    
+                    {/* Contact/People Records Section */}
+                    {peopleLogs.length > 0 && (
+                      <div className="space-y-4">
+                        <div className="flex items-center gap-2 border-b border-border pb-2 sticky top-0 bg-background z-10">
+                          <User className="h-5 w-5 text-orange-500" />
+                          <h3 className="text-lg font-semibold">People Records</h3>
+                          <Badge variant="secondary" className="ml-auto">{peopleLogs.length} sources</Badge>
+                        </div>
+                        {renderContactResults(peopleLogs)}
+                      </div>
+                    )}
+                  </div>
                 ) : (
                   <div className="text-center text-muted-foreground py-8">
                     No results match your search
@@ -2607,47 +2716,98 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                     const platforms = log.data?.profileLinks || log.data?.foundPlatforms || [];
                     if (platforms.length === 0) return null;
                     
+                    // Categorize platforms
+                    const categories: Record<string, any[]> = {
+                      'Social Media': [],
+                      'Professional': [],
+                      'Gaming': [],
+                      'Music & Audio': [],
+                      'Video & Streaming': [],
+                      'Development': [],
+                      'Dating': [],
+                      'Shopping & Commerce': [],
+                      'Other': []
+                    };
+                    
+                    platforms.forEach((p: any) => {
+                      const name = (p.name || p.platform || '').toLowerCase();
+                      if (['twitter', 'x', 'facebook', 'instagram', 'snapchat', 'tiktok', 'pinterest', 'tumblr', 'reddit', 'mastodon'].some(s => name.includes(s))) {
+                        categories['Social Media'].push(p);
+                      } else if (['linkedin', 'indeed', 'fiverr', 'freelancer', 'upwork', 'dribbble', 'behance'].some(s => name.includes(s))) {
+                        categories['Professional'].push(p);
+                      } else if (['steam', 'xbox', 'playstation', 'psn', 'roblox', 'fortnite', 'epic', 'chess', 'twitch'].some(s => name.includes(s))) {
+                        categories['Gaming'].push(p);
+                      } else if (['spotify', 'soundcloud', 'lastfm', 'bandcamp', 'mixcloud', 'apple music', 'deezer', 'bandlab'].some(s => name.includes(s))) {
+                        categories['Music & Audio'].push(p);
+                      } else if (['youtube', 'vimeo', 'dailymotion', 'tiktok'].some(s => name.includes(s))) {
+                        categories['Video & Streaming'].push(p);
+                      } else if (['github', 'gitlab', 'bitbucket', 'stackoverflow', 'hackerrank', 'codepen', 'replit'].some(s => name.includes(s))) {
+                        categories['Development'].push(p);
+                      } else if (['tinder', 'bumble', 'hinge', 'okcupid', 'match', 'plenty'].some(s => name.includes(s))) {
+                        categories['Dating'].push(p);
+                      } else if (['ebay', 'amazon', 'etsy', 'poshmark', 'depop', 'mercari'].some(s => name.includes(s))) {
+                        categories['Shopping & Commerce'].push(p);
+                      } else {
+                        categories['Other'].push(p);
+                      }
+                    });
+                    
                     return (
-                      <div key={log.id} className="space-y-4">
-                        <div className="flex items-center gap-2 mb-2">
+                      <div key={log.id} className="space-y-6">
+                        <div className="flex items-center gap-2 mb-4 border-b pb-2">
                           <User className="h-5 w-5 text-primary" />
-                          <h3 className="text-base font-medium">
-                            Username "{log.data.username}" found on {platforms.length} platforms
+                          <h3 className="text-lg font-semibold">
+                            Username: "{log.data.username}"
                           </h3>
+                          <Badge variant="default" className="ml-auto">
+                            {platforms.length} platforms
+                          </Badge>
                         </div>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                          {platforms.map((platform: any, idx: number) => (
-                            <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors">
-                              <div className="flex items-start gap-3">
-                                <div className="flex-shrink-0 mt-0.5">
-                                  <PlatformLogo platform={platform.name || platform.platform || 'unknown'} />
-                                </div>
-                                <div className="flex-1 min-w-0">
-                                  <div className="text-sm font-medium mb-1">{platform.name || platform.platform}</div>
-                                  <a
-                                    href={platform.url}
-                                    target="_blank"
-                                    rel="noopener noreferrer nofollow"
-                                    className="text-sm text-primary hover:underline truncate block"
-                                  >
-                                    {platform.url}
-                                  </a>
-                                </div>
-                                <Button
-                                  size="sm"
-                                  variant="ghost"
-                                  className="h-7 px-2"
-                                  onClick={() => {
-                                    navigator.clipboard.writeText(platform.url);
-                                    toast({ title: "Link copied to clipboard" });
-                                  }}
-                                >
-                                  <Copy className="h-3 w-3" />
-                                </Button>
+                        
+                        {Object.entries(categories).map(([category, categoryPlatforms]) => {
+                          if (categoryPlatforms.length === 0) return null;
+                          return (
+                            <div key={category} className="space-y-3">
+                              <div className="flex items-center gap-2">
+                                <h4 className="text-sm font-medium text-muted-foreground">{category}</h4>
+                                <Badge variant="outline" className="text-xs">{categoryPlatforms.length}</Badge>
+                              </div>
+                              <div className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {categoryPlatforms.map((platform: any, idx: number) => (
+                                  <div key={idx} className="group border border-border rounded-lg p-3 hover:border-primary/50 transition-colors bg-card">
+                                    <div className="flex items-center gap-3">
+                                      <div className="w-10 h-10 rounded-lg bg-muted flex items-center justify-center flex-shrink-0">
+                                        <PlatformLogo platform={platform.name || platform.platform || 'unknown'} size="lg" />
+                                      </div>
+                                      <div className="flex-1 min-w-0">
+                                        <div className="text-sm font-medium">{platform.name || platform.platform}</div>
+                                        <a
+                                          href={platform.url}
+                                          target="_blank"
+                                          rel="noopener noreferrer nofollow"
+                                          className="text-xs text-primary hover:underline truncate block"
+                                        >
+                                          View Profile →
+                                        </a>
+                                      </div>
+                                      <Button
+                                        size="sm"
+                                        variant="ghost"
+                                        className="h-7 px-2 opacity-0 group-hover:opacity-100 transition-opacity"
+                                        onClick={() => {
+                                          navigator.clipboard.writeText(platform.url);
+                                          toast({ title: "Link copied to clipboard" });
+                                        }}
+                                      >
+                                        <Copy className="h-3 w-3" />
+                                      </Button>
+                                    </div>
+                                  </div>
+                                ))}
                               </div>
                             </div>
-                          ))}
-                        </div>
+                          );
+                        })}
                       </div>
                     );
                   })

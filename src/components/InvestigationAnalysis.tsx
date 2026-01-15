@@ -133,11 +133,23 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
     startProgress();
 
     try {
+      // Use a longer timeout for the fetch - 65 seconds to exceed edge function timeout
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 65000);
+
       const { data, error: fnError } = await supabase.functions.invoke('analyze-investigation', {
         body: { investigationId }
       });
 
-      if (fnError) throw fnError;
+      clearTimeout(timeoutId);
+
+      if (fnError) {
+        // Check for network/timeout errors
+        if (fnError.message?.includes('Failed to fetch') || fnError.message?.includes('network')) {
+          throw new Error('Network timeout - the analysis is taking longer than expected. Please try again.');
+        }
+        throw fnError;
+      }
 
       if (data.error) {
         throw new Error(data.error);
@@ -150,7 +162,15 @@ const InvestigationAnalysis = ({ investigationId, active, target }: Investigatio
         description: "AI-powered investigation analysis is ready",
       });
     } catch (err: any) {
-      const errorMessage = err.message || "Failed to analyze investigation";
+      let errorMessage = err.message || "Failed to analyze investigation";
+      
+      // Handle common error cases with user-friendly messages
+      if (err.name === 'AbortError' || errorMessage.includes('timeout') || errorMessage.includes('Failed to fetch')) {
+        errorMessage = 'Analysis timed out. The server may be busy - please try again in a moment.';
+      } else if (errorMessage.includes('rate limit')) {
+        errorMessage = 'Rate limit reached. Please wait a moment before trying again.';
+      }
+      
       setError(errorMessage);
       stopProgress(false);
       toast({
