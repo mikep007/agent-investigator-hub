@@ -80,40 +80,11 @@ const RelatedPersonsCard = ({
         });
       }
 
-      // Extract same-surname relatives from web search discoveredRelatives
-      // These are filtered to only include people with the target's last name
-      if (finding.agent_type === 'Web' && finding.data?.discoveredRelatives) {
-        const discovered = finding.data.discoveredRelatives;
-        if (Array.isArray(discovered)) {
-          discovered.forEach((name: string) => {
-            // Strict validation: must be 2 words, each 2+ chars, proper name format
-            const trimmed = name?.trim();
-            if (!trimmed) return;
-            
-            const words = trimmed.split(/\s+/);
-            // Must be exactly 2 words (First Last) to be valid
-            if (words.length !== 2) return;
-            
-            const [first, last] = words;
-            // Each word must be 2+ chars and start with capital
-            if (first.length < 2 || last.length < 2) return;
-            if (!/^[A-Z][a-z]+$/.test(first) || !/^[A-Z][a-z]+$/.test(last)) return;
-            
-            // Avoid common non-name patterns
-            const nonNames = ['one', 'two', 'the', 'and', 'his', 'her', 'beloved', 'brother', 'sister', 'father', 'mother'];
-            if (nonNames.includes(first.toLowerCase()) || nonNames.includes(last.toLowerCase())) return;
-            
-            if (!confirmed.find(c => c.name.toLowerCase() === trimmed.toLowerCase())) {
-              confirmed.push({
-                name: trimmed,
-                source: 'confirmed',
-                relationship: 'Same surname (from web search)',
-                confidence: 0.5 // Lower confidence for web-discovered
-              });
-            }
-          });
-        }
-      }
+      // NOTE: We intentionally do NOT treat web-derived "discoveredRelatives" as confirmed.
+      // Web snippets (obituaries, directories, scraped pages) frequently list same-surname names
+      // that are not actually related to the target person, so including them here causes
+      // "unknown relatives" to show up as Confirmed.
+      // If we want to surface these later, they should be shown in a separate "Needs review" section.
     });
 
     return confirmed;
