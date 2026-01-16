@@ -80,6 +80,30 @@ const RelatedPersonsCard = ({
         });
       }
 
+      // Extract from Power Automate Global Findings - possible names/aliases
+      if (finding.agent_type === 'Power_automate') {
+        const powerData = finding.data?.data || finding.data;
+        const persons = powerData?.persons || [];
+        
+        persons.forEach((person: any) => {
+          // Extract possible names as associates (aliases, not confirmed relatives)
+          if (person.aliases && Array.isArray(person.aliases)) {
+            person.aliases.forEach((alias: string) => {
+              if (alias && 
+                  alias.trim().length > 2 && 
+                  !confirmed.find(c => c.name.toLowerCase() === alias.toLowerCase())) {
+                confirmed.push({
+                  name: alias.trim(),
+                  source: 'confirmed',
+                  relationship: 'Associated identity (Global Findings)',
+                  confidence: (person.confidence || 50) / 100
+                });
+              }
+            });
+          }
+        });
+      }
+
       // NOTE: We intentionally do NOT treat web-derived "discoveredRelatives" as confirmed.
       // Web snippets (obituaries, directories, scraped pages) frequently list same-surname names
       // that are not actually related to the target person, so including them here causes
