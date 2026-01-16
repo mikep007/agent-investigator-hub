@@ -97,6 +97,10 @@ export function usePowerAutomatePolling({
     }
   }, []); // No dependencies - uses refs
 
+  // Store workorderid in a ref to ensure we always poll with the same ID
+  const workorderIdRef = useRef<string | null>(null);
+  const findingIdRef = useRef<string | null>(null);
+
   useEffect(() => {
     if (!investigationId || !findings.length) {
       stopPolling();
@@ -118,10 +122,13 @@ export function usePowerAutomatePolling({
     // Check if data is complete (not pending)
     const hasCompleteData = findingData?.persons && Array.isArray(findingData.persons);
     const isPending = (findingData?.pending === true || findingData?.status === 'pending') && !hasCompleteData;
-    const workorderid = findingData?.workorderid;
+    
+    // IMPORTANT: Only extract workorderid from a pending finding
+    // Once we start polling, we keep using the same workorderid stored in ref
+    const newWorkorderid = isPending ? findingData?.workorderid : null;
 
     // If already complete, stop polling
-    if (hasCompleteData || (!isPending && !workorderid)) {
+    if (hasCompleteData || (!isPending && !newWorkorderid)) {
       if (isPollingRef.current) {
         console.log('[PowerAutomate] Results complete, stopping polling');
         stopPolling();
@@ -129,17 +136,25 @@ export function usePowerAutomatePolling({
       return;
     }
 
-    if (!workorderid) {
+    // If this is a new workorder or first time seeing one, store it
+    if (newWorkorderid && newWorkorderid !== lastWorkorderIdRef.current) {
+      console.log('[PowerAutomate] New workorderid detected:', newWorkorderid, '(was:', lastWorkorderIdRef.current, ')');
       stopPolling();
-      return;
-    }
-
-    // If workorder changed, reset polling
-    if (lastWorkorderIdRef.current !== workorderid) {
-      stopPolling();
-      lastWorkorderIdRef.current = workorderid;
+      lastWorkorderIdRef.current = newWorkorderid;
+      workorderIdRef.current = newWorkorderid;
+      findingIdRef.current = powerAutomateFinding.id;
       pollCountRef.current = 0;
       setPollCount(0);
+    }
+
+    // Need a valid workorderid to poll
+    const activeWorkorderId = workorderIdRef.current;
+    const activeFindingId = findingIdRef.current;
+    
+    if (!activeWorkorderId || !activeFindingId) {
+      console.log('[PowerAutomate] No active workorderid to poll');
+      stopPolling();
+      return;
     }
 
     // Already polling for this workorder
@@ -147,14 +162,26 @@ export function usePowerAutomatePolling({
       return;
     }
 
-    console.log('[PowerAutomate] Starting polling for workorderid:', workorderid);
+    console.log('[PowerAutomate] Starting polling for workorderid:', activeWorkorderId, 'findingId:', activeFindingId);
     isPollingRef.current = true;
     setIsPolling(true);
 
     // Poll immediately, then every 30 seconds
     const poll = async () => {
       if (!isPollingRef.current) return; // Guard against running after stop
-      const result = await pollForResults(workorderid, powerAutomateFinding.id);
+      
+      // Always use the stored refs to ensure we poll with the original IDs
+      const wid = workorderIdRef.current;
+      const fid = findingIdRef.current;
+      
+      if (!wid || !fid) {
+        console.log('[PowerAutomate] Lost workorderid/findingId reference, stopping poll');
+        stopPolling();
+        return;
+      }
+      
+      console.log('[PowerAutomate] Polling with workorderid:', wid);
+      const result = await pollForResults(wid, fid);
       if (!result.stillPending) {
         stopPolling();
       }
