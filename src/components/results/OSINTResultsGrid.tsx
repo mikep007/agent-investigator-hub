@@ -20,6 +20,8 @@ interface OSINTResultsGridProps {
   onVerify?: (platformUrl: string, status: 'verified' | 'inaccurate') => void;
   onDeepDive?: (platform: string, findingId: string) => void;
   onPivot?: (type: string, value: string) => void;
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 interface ExtractedPlatform {
@@ -49,7 +51,9 @@ const OSINTResultsGrid = ({
   aiSuggestedPersons = [],
   onVerify, 
   onDeepDive,
-  onPivot
+  onPivot,
+  onRefresh,
+  isRefreshing
 }: OSINTResultsGridProps) => {
   // Extract all platforms from findings into OSINT Industries format
   const platforms = useMemo(() => {
@@ -227,7 +231,7 @@ const OSINTResultsGrid = ({
         <ResultsSummaryBar findings={findings} targetName={targetName} />
 
         {/* Source Status Indicator */}
-        <SourceStatusIndicator findings={findings} />
+        <SourceStatusIndicator findings={findings} onRefresh={onRefresh} isRefreshing={isRefreshing} />
 
         {/* Relatives & Associates Section */}
         <RelatedPersonsCard 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -61,6 +61,7 @@ interface LogEntry {
 const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationPanelProps) => {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [webKeywordFilter, setWebKeywordFilter] = useState("");
   const [deepDiveDialog, setDeepDiveDialog] = useState<{ open: boolean; platform: string; findingId: string } | null>(null);
@@ -72,6 +73,125 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
   const [aiSuggestedPersons, setAiSuggestedPersons] = useState<string[]>([]);
   const { toast } = useToast();
 
+  // Extracted fetchFindings as a callback for reuse
+  const fetchFindings = useCallback(async () => {
+    if (!investigationId) return;
+    
+    const { data: findings, error } = await supabase
+      .from('findings')
+      .select('*')
+      .eq('investigation_id', investigationId)
+      .order('created_at', { ascending: true });
+
+    if (error) {
+      console.error('Error fetching findings:', error);
+      return;
+    }
+
+    // Extract search data and failed agents from diagnostic finding
+    const diagnosticFinding = findings?.find(f => f.agent_type === 'System');
+    if (diagnosticFinding?.data) {
+      const data = diagnosticFinding.data as any;
+      if (data?.searchContext) {
+        setSearchData({
+          fullName: data.searchContext.fullName,
+          email: data.searchContext.hasEmail ? 'provided' : undefined,
+          phone: data.searchContext.hasPhone ? 'provided' : undefined,
+          username: data.searchContext.hasUsername ? 'provided' : undefined,
+          address: data.searchContext.hasAddress ? 'provided' : undefined,
+          keywords: data.searchContext.keywords?.join(', '),
+        });
+      }
+      if (data?.diagnostics?.failedAgents) {
+        setFailedAgents(data.diagnostics.failedAgents);
+      }
+      if (data?.diagnostics?.aiSuggestedPersons) {
+        setAiSuggestedPersons(data.diagnostics.aiSuggestedPersons);
+      }
+    }
+
+    // Convert findings to log entries
+    const newLogs: LogEntry[] = (findings || []).map(finding => {
+      const data = finding.data as any;
+      let status: LogEntry['status'] = 'success';
+      let message = data?.message || finding.source;
+
+      // Handle different finding types for status
+      if (finding.agent_type === 'People_search' || finding.agent_type === 'PeopleSearch' || finding.agent_type === 'People_search_phone') {
+        if (data?.blocked || data?.merged?.blocked) {
+          message = 'Blocked by CAPTCHA - use manual verification links';
+        } else if (data?.merged) {
+          const phoneCount = data.merged.phones?.length || 0;
+          const emailCount = data.merged.emails?.length || 0;
+          const relatives = data.merged.relatives?.length || 0;
+          message = `Found ${phoneCount} phones, ${emailCount} emails, ${relatives} relatives`;
+        }
+      } else if (finding.agent_type === 'Sherlock' || finding.agent_type === 'Sherlock_from_email') {
+        if (data?.error) {
+          message = data.error;
+        } else if (data?.foundPlatforms || data?.profileLinks) {
+          const platforms = data.foundPlatforms || data.profileLinks || [];
+          message = `Found ${platforms.length} accounts`;
+        }
+      } else if (finding.agent_type === 'Holehe') {
+        if (data?.error) {
+          message = data.error;
+        } else if (data?.allResults || data?.registeredOn) {
+          const results = data.allResults || data.registeredOn || [];
+          const existing = results.filter((r: any) => r.exists !== false).length;
+          message = `Found ${existing} registered accounts`;
+        }
+      } else if (finding.agent_type === 'Power_automate') {
+        const powerData = data?.data || data;
+        const personCount = powerData?.personCount || powerData?.persons?.length || 0;
+        const summary = powerData?.summary || {};
+        const totalData = (summary.totalEmails || 0) + (summary.totalPhones || 0) + 
+                          (summary.totalAddresses || 0) + (summary.totalSocialProfiles || 0);
+        const hasPersonsData = powerData?.persons && Array.isArray(powerData.persons) && powerData.persons.length > 0;
+        const isExplicitlyComplete = powerData?.status === 'complete' || powerData?.pending === false;
+        const isPending = !isExplicitlyComplete && !hasPersonsData && (powerData?.status === 'pending' || powerData?.pending === true || data?.pending === true);
+        
+        if (isPending) {
+          message = 'Global Findings search in progress...';
+          status = 'processing';
+        } else if (personCount > 0) {
+          message = `Global Findings: ${personCount} person${personCount > 1 ? 's' : ''}, ${totalData} data point${totalData > 1 ? 's' : ''}`;
+          status = 'success';
+        } else {
+          message = 'Global Findings: No results found';
+          status = 'success';
+        }
+      } else {
+        message = finding.source;
+      }
+
+      return {
+        id: finding.id,
+        timestamp: finding.created_at,
+        agent: finding.source,
+        agent_type: finding.agent_type,
+        message,
+        status,
+        data: finding.data,
+        verification_status: finding.verification_status as LogEntry['verification_status'],
+        confidence_score: finding.confidence_score || undefined,
+      };
+    });
+
+    setLogs(newLogs);
+  }, [investigationId]);
+
+  // Refresh handler for manual refresh
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    await fetchFindings();
+    setRefreshing(false);
+    toast({
+      title: "Refreshed",
+      description: "Data sources have been refreshed",
+    });
+  }, [fetchFindings, toast]);
+
   useEffect(() => {
     if (!active || !investigationId) {
       setLogs([]);
@@ -80,174 +200,7 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
     }
 
     setLoading(true);
-
-    const fetchFindings = async () => {
-      const { data: findings, error } = await supabase
-        .from('findings')
-        .select('*')
-        .eq('investigation_id', investigationId)
-        .order('created_at', { ascending: true });
-
-      if (error) {
-        console.error('Error fetching findings:', error);
-        setLoading(false);
-        return;
-      }
-
-      // Extract search data and failed agents from diagnostic finding
-      const diagnosticFinding = findings?.find(f => f.agent_type === 'System');
-      if (diagnosticFinding?.data) {
-        const data = diagnosticFinding.data as any;
-        if (data.searchSummary) {
-          const summary = data.searchSummary;
-          const failed = summary
-            .filter((s: any) => s.status === 'error' || s.status === 'failed')
-            .map((s: any) => s.type);
-          setFailedAgents(failed);
-        }
-        
-        // Extract original search parameters if available
-        if (findings && findings.length > 0) {
-          const firstFinding = findings.find(f => {
-            const fData = f.data as any;
-            return fData?.searchContext;
-          });
-          if (firstFinding) {
-            const fData = firstFinding.data as any;
-            if (fData?.searchContext) {
-              setSearchData({
-                fullName: fData.searchContext.fullName,
-                email: fData.searchContext.hasEmail ? 'provided' : undefined,
-                phone: fData.searchContext.hasPhone ? 'provided' : undefined,
-                username: fData.searchContext.hasUsername ? 'provided' : undefined,
-                address: fData.searchContext.hasAddress ? 'provided' : undefined,
-                keywords: fData.searchContext.keywords?.join(', '),
-              });
-            }
-          }
-          
-          // Extract AI-suggested persons from analysis findings
-          const analysisFinding = findings.find(f => f.agent_type === 'Analysis');
-          if (analysisFinding) {
-            const analysisData = analysisFinding.data as any;
-            if (analysisData?.relatedPersons) {
-              setAiSuggestedPersons(analysisData.relatedPersons);
-            }
-          }
-        }
-      }
-
-      if (findings) {
-        setLoading(findings.length === 0);
-        const formattedLogs: LogEntry[] = findings.map((finding) => {
-          const data = finding.data as any;
-          let message = '';
-          let status: "success" | "processing" | "pending" = "success";
-
-          if (finding.agent_type === 'Social' || finding.agent_type === 'Social_name') {
-            const profiles = data.profiles || [];
-            const found = profiles.filter((p: any) => p.exists);
-            message = found.length > 0 
-              ? `Found ${found.length} profile match${found.length > 1 ? 'es' : ''}`
-              : 'No profiles found';
-          } else if (finding.agent_type === 'Idcrawl') {
-            const profiles = data.profiles || [];
-            message = profiles.length > 0
-              ? `Found ${profiles.length} social profile${profiles.length > 1 ? 's' : ''} via IDCrawl`
-              : 'No profiles found on IDCrawl';
-          } else if (finding.agent_type === 'Web') {
-            const items = data.items || [];
-            message = items.length > 0
-              ? `Found ${items.length} web match${items.length > 1 ? 'es' : ''}`
-              : data.error || 'No web results found';
-          } else if (finding.agent_type === 'Email') {
-            message = data.isValid 
-              ? `Email verified`
-              : 'Email not verified';
-          } else if (finding.agent_type === 'Phone') {
-            message = data.validity?.isValid
-              ? `Phone number verified`
-              : 'Phone number not verified';
-          } else if (finding.agent_type === 'Username') {
-            message = data.foundOn > 0
-              ? `Found ${data.foundOn} username match${data.foundOn > 1 ? 'es' : ''}`
-              : 'No username matches found';
-          } else if (finding.agent_type === 'Address') {
-            message = data.found
-              ? `Found ${data.count} location match${data.count > 1 ? 'es' : ''}`
-              : 'No locations found';
-          } else if (finding.agent_type === 'Holehe') {
-            message = data.accountsFound > 0
-              ? `Email found on ${data.accountsFound} platform${data.accountsFound > 1 ? 's' : ''}`
-              : 'No accounts found for this email';
-          } else if (finding.agent_type === 'Sherlock') {
-            message = data.foundPlatforms?.length > 0
-              ? `Username found on ${data.foundPlatforms.length} platform${data.foundPlatforms.length > 1 ? 's' : ''}`
-              : 'No accounts found for this username';
-          } else if (finding.agent_type === 'People_search') {
-            const results = data.results || [];
-            const totalContacts = results.reduce((acc: number, r: any) => 
-              acc + (r.phones?.length || 0) + (r.emails?.length || 0), 0
-            );
-            message = totalContacts > 0
-              ? `Found ${totalContacts} contact detail${totalContacts > 1 ? 's' : ''} from public records`
-              : 'No public records found';
-          } else if (finding.agent_type === 'Toutatis' || finding.agent_type === 'Toutatis_from_email') {
-            const dataPoints = data.dataPoints?.length || 0;
-            const hasManualLinks = data.manualVerificationLinks?.length > 0;
-            message = dataPoints > 0
-              ? `Instagram: ${dataPoints} data point${dataPoints > 1 ? 's' : ''} extracted`
-              : hasManualLinks 
-                ? 'Instagram profile - anonymous viewers available'
-                : 'Instagram profile lookup';
-          } else if (finding.agent_type === 'Instaloader' || finding.agent_type === 'Instaloader_from_email') {
-            const hasProfile = data.profileData?.success;
-            const hasManualLinks = data.manualVerificationLinks?.length > 0;
-            message = hasProfile
-              ? `Instagram profile data downloaded`
-              : hasManualLinks 
-                ? 'Instagram profile - story viewers available'
-                : 'Instagram profile lookup';
-          } else if (finding.agent_type === 'Power_automate') {
-            const personCount = data.personCount || data.data?.personCount || 0;
-            const summary = data.summary || data.data?.summary || {};
-            const totalData = (summary.totalEmails || 0) + (summary.totalPhones || 0) + (summary.totalAddresses || 0) + (summary.totalSocialProfiles || 0);
-            // Check if still pending - data is complete when status is 'complete' OR has persons data
-            const hasPersonsData = data.persons && Array.isArray(data.persons);
-            const isExplicitlyComplete = data.status === 'complete' || data.pending === false;
-            const isPending = !isExplicitlyComplete && !hasPersonsData && (data.status === 'pending' || data.pending === true);
-            if (isPending) {
-              message = 'Global Findings search in progress...';
-              status = 'processing';
-            } else if (personCount > 0) {
-              message = `Global Findings: ${personCount} person${personCount > 1 ? 's' : ''}, ${totalData} data point${totalData > 1 ? 's' : ''}`;
-              status = 'success';
-            } else {
-              message = 'Global Findings: No results found';
-              status = 'success';
-            }
-          } else {
-            message = finding.source;
-          }
-
-          return {
-            id: finding.id,
-            timestamp: finding.created_at,
-            agent: finding.source,
-            message,
-            status,
-            data,
-            agent_type: finding.agent_type,
-            verification_status: finding.verification_status as 'verified' | 'needs_review' | 'inaccurate',
-            confidence_score: finding.confidence_score || undefined
-          };
-        });
-
-        setLogs(formattedLogs);
-      }
-    };
-
-    fetchFindings();
+    fetchFindings().finally(() => setLoading(false));
 
     // Polling fallback - check for new findings every 2 seconds for first 30 seconds
     let pollCount = 0;
@@ -281,7 +234,7 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
       clearInterval(pollInterval);
       supabase.removeChannel(channel);
     };
-  }, [active, investigationId]);
+  }, [active, investigationId, fetchFindings]);
 
   const updateVerificationStatus = async (findingId: string, status: 'verified' | 'needs_review' | 'inaccurate') => {
     try {
@@ -2538,6 +2491,8 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                 }}
                 onDeepDive={handleDeepDive}
                 onPivot={onPivot}
+                onRefresh={handleRefresh}
+                isRefreshing={refreshing}
               />
             </div>
           </TabsContent>
