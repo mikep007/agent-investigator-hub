@@ -57,8 +57,8 @@ interface PowerAutomateResult {
 }
 
 function normalizeResults(results: PowerAutomateResult[]) {
-  // Limit to top 50 persons to avoid oversized payloads
-  const limitedResults = results.slice(0, 50);
+  // Limit to top 100 persons to avoid oversized payloads
+  const limitedResults = results.slice(0, 100);
   
   const persons = limitedResults.map(person => ({
     full_name: person.full_name,
