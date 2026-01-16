@@ -57,7 +57,7 @@ export function usePowerAutomatePolling({
           .update({
             data: data.data,
             confidence_score: 75,
-            verification_status: 'complete'
+            verification_status: 'verified'
           })
           .eq('id', findingId);
 
