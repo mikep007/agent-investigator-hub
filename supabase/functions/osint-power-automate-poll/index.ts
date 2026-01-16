@@ -144,14 +144,33 @@ Deno.serve(async (req) => {
 
     console.log('Polling for Power Automate results, workorderid:', workorderid);
 
-    const response = await fetch(RESULTS_URL, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-      },
-      body: JSON.stringify({ workorderid }),
-    });
+    // Add timeout to prevent hanging
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 25000); // 25 second timeout
+
+    let response;
+    try {
+      response = await fetch(RESULTS_URL, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-api-key': apiKey,
+        },
+        body: JSON.stringify({ workorderid }),
+        signal: controller.signal,
+      });
+    } catch (fetchError: any) {
+      clearTimeout(timeoutId);
+      console.error('Fetch error:', fetchError.message);
+      return new Response(JSON.stringify({
+        success: false,
+        pending: true,
+        message: 'Network error, will retry',
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+    clearTimeout(timeoutId);
 
     if (!response.ok) {
       console.error('Power Automate poll failed:', response.status);
@@ -238,8 +257,18 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('osint-power-automate-poll error:', error);
+    // Handle network errors gracefully - treat as pending to retry
+    if (error.message?.includes('Network') || error.message?.includes('connection') || error.name === 'AbortError') {
+      return new Response(JSON.stringify({
+        success: false,
+        pending: true,
+        message: 'Network issue, will retry',
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
     return new Response(JSON.stringify({
       success: false,
       error: error instanceof Error ? error.message : 'Unknown error',
