@@ -57,7 +57,10 @@ interface PowerAutomateResult {
 }
 
 function normalizeResults(results: PowerAutomateResult[]) {
-  const persons = results.map(person => ({
+  // Limit to top 50 persons to avoid oversized payloads
+  const limitedResults = results.slice(0, 50);
+  
+  const persons = limitedResults.map(person => ({
     full_name: person.full_name,
     firstName: person.firstname,
     lastName: person.lastname,
@@ -66,47 +69,48 @@ function normalizeResults(results: PowerAutomateResult[]) {
     confidence: person.confidence,
     dob: person.dob,
     dod: person.dod,
-    addresses: person.possibleAddresses.map(addr => ({
+    // Limit arrays to prevent huge payloads
+    addresses: (person.possibleAddresses || []).slice(0, 10).map(addr => ({
       street: addr.street1,
-      street2: addr.street2,
       city: addr.city,
       state: addr.stateprovince,
       zip: addr.zippostalcode,
       full: addr.addressline,
       confidence: addr.confidence,
     })),
-    emails: person.possibleEmail.map(e => ({
+    emails: (person.possibleEmail || []).slice(0, 10).map(e => ({
       email: e.email,
-      type: e.type,
       confidence: e.confidence,
     })),
-    phones: person.possiblePhone.map(p => ({
+    phones: (person.possiblePhone || []).slice(0, 10).map(p => ({
       phone: p.phone,
       confidence: p.confidence,
     })),
-    aliases: person.possibleName.map(n => n.name).filter(Boolean),
-    socialProfiles: person.possibleSocialProfile
+    aliases: (person.possibleName || []).slice(0, 5).map(n => n.name).filter(Boolean),
+    socialProfiles: (person.possibleSocialProfile || [])
       .filter(sp => sp.profileurl)
+      .slice(0, 10)
       .map(sp => ({
         url: sp.profileurl,
         username: sp.profileusername,
         name: sp.profilename,
-        bio: sp.bio,
         pictureUrl: sp.pictureurl,
         confidence: sp.confidence,
       })),
   }));
 
-  const totalEmails = results.reduce((sum, p) => sum + p.possibleEmail.length, 0);
-  const totalPhones = results.reduce((sum, p) => sum + p.possiblePhone.length, 0);
-  const totalAddresses = results.reduce((sum, p) => sum + p.possibleAddresses.length, 0);
+  const totalEmails = results.reduce((sum, p) => sum + (p.possibleEmail?.length || 0), 0);
+  const totalPhones = results.reduce((sum, p) => sum + (p.possiblePhone?.length || 0), 0);
+  const totalAddresses = results.reduce((sum, p) => sum + (p.possibleAddresses?.length || 0), 0);
   const totalSocialProfiles = results.reduce((sum, p) => 
-    sum + p.possibleSocialProfile.filter(sp => sp.profileurl).length, 0);
+    sum + (p.possibleSocialProfile?.filter(sp => sp.profileurl)?.length || 0), 0);
 
+  // Don't include rawResults - it duplicates data and makes payload huge
   return {
     source: 'PowerAutomate',
     sourceLabel: 'Global Findings',
-    personCount: persons.length,
+    personCount: results.length,
+    personsIncluded: persons.length,
     summary: {
       totalEmails,
       totalPhones,
@@ -114,7 +118,6 @@ function normalizeResults(results: PowerAutomateResult[]) {
       totalSocialProfiles,
     },
     persons,
-    rawResults: results,
     timestamp: new Date().toISOString(),
   };
 }
