@@ -113,7 +113,7 @@ async function checkResultsOnce(apiKey: string, workorderid: string): Promise<Po
 }
 
 async function submitCase(apiKey: string, searchData: SearchData): Promise<{ workorderid: string } | null> {
-  console.log('Submitting case to Power Automate:', searchData);
+  console.log('Submitting case to Power Automate with searchData:', JSON.stringify(searchData));
   
   const requestBody = {
     typeOfCase: [1],
@@ -131,6 +131,8 @@ async function submitCase(apiKey: string, searchData: SearchData): Promise<{ wor
       email: searchData.email || ""
     }
   };
+
+  console.log('Power Automate request body:', JSON.stringify(requestBody));
 
   try {
     const response = await fetch(SUBMIT_URL, {
