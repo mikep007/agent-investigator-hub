@@ -2060,7 +2060,7 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
           const persons = powerData?.persons || [];
           const summary = powerData?.summary || {};
           
-          if (powerData?.status === 'pending') {
+          if (powerData?.status === 'pending' || powerData?.pending === true) {
             return (
               <div key={log.id} className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4">
                 <div className="flex items-center gap-2">
@@ -2068,8 +2068,11 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                   <h4 className="font-medium text-amber-600 dark:text-amber-400">Global Findings - Processing</h4>
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">
-                  Your request has been submitted and is being processed. Results will appear once ready.
+                  Your request has been submitted and is being processed. Polling every 30 seconds...
                 </p>
+                <div className="mt-3 h-1.5 bg-amber-500/20 rounded-full overflow-hidden">
+                  <div className="h-full bg-amber-500 animate-pulse rounded-full" style={{ width: '60%' }} />
+                </div>
               </div>
             );
           }

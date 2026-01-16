@@ -7,8 +7,8 @@ const corsHeaders = {
 
 const SUBMIT_URL = 'https://41ae7b753004e478ae9fccc9566122.19.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/9d92c539ada14bc6b85a39e32b8a2d14/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=Vorj6ao8FHhbFAfTWZs5T_TaLsjD2oEPJs4OzZjiff8';
 const RESULTS_URL = 'https://41ae7b753004e478ae9fccc9566122.19.environment.api.powerplatform.com:443/powerautomate/automations/direct/workflows/fa15cee7c118490d98b2b3697cc038df/triggers/manual/paths/invoke?api-version=1&sp=%2Ftriggers%2Fmanual%2Frun&sv=1.0&sig=FJXEOOnLEZLZUscQv-7kvSt_C5WuBRWyz-3Y0MNy1YM';
-const MAX_POLL_ATTEMPTS = 20; // 20 * 30 seconds = 10 minutes max
-const POLL_INTERVAL_MS = 30000; // 30 seconds
+// Frontend handles polling - we just submit and return immediately with pending status
+const INITIAL_WAIT_MS = 5000; // Wait 5 seconds before returning to allow quick results
 
 interface SearchData {
   fullName?: string;
@@ -73,6 +73,45 @@ async function sleep(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
+async function checkResultsOnce(apiKey: string, workorderid: string): Promise<PowerAutomateResult[] | null> {
+  console.log('Checking for results once, workorderid:', workorderid);
+  
+  try {
+    const response = await fetch(RESULTS_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+      },
+      body: JSON.stringify({ workorderid }),
+    });
+
+    if (!response.ok) {
+      console.error('Power Automate check failed:', response.status);
+      return null;
+    }
+
+    const result = await response.json();
+    
+    // Check if still processing
+    if (result.message?.includes('still being created') || result.message?.includes('try again later')) {
+      console.log('Results still processing');
+      return null;
+    }
+
+    // Check if we got valid results
+    if (Array.isArray(result) && result.length > 0) {
+      console.log(`Got ${result.length} results from Power Automate`);
+      return result as PowerAutomateResult[];
+    }
+
+    return null;
+  } catch (error) {
+    console.error('Power Automate check error:', error);
+    return null;
+  }
+}
+
 async function submitCase(apiKey: string, searchData: SearchData): Promise<{ workorderid: string } | null> {
   console.log('Submitting case to Power Automate:', searchData);
   
@@ -128,54 +167,7 @@ async function submitCase(apiKey: string, searchData: SearchData): Promise<{ wor
   }
 }
 
-async function pollForResults(apiKey: string, workorderid: string): Promise<PowerAutomateResult[] | null> {
-  console.log('Polling for results, workorderid:', workorderid);
-
-  for (let attempt = 0; attempt < MAX_POLL_ATTEMPTS; attempt++) {
-    try {
-      const response = await fetch(RESULTS_URL, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-api-key': apiKey,
-        },
-        body: JSON.stringify({ workorderid }),
-      });
-
-      if (!response.ok) {
-        console.error('Power Automate poll failed:', response.status, await response.text());
-        await sleep(POLL_INTERVAL_MS);
-        continue;
-      }
-
-      const result = await response.json();
-      console.log(`Poll attempt ${attempt + 1} result:`, typeof result, Array.isArray(result) ? 'array' : 'not array');
-
-      // Check if still processing
-      if (result.message?.includes('still being created') || result.message?.includes('try again later')) {
-        console.log('Results still processing, waiting...');
-        await sleep(POLL_INTERVAL_MS);
-        continue;
-      }
-
-      // Check if we got valid results (array of person data)
-      if (Array.isArray(result) && result.length > 0) {
-        console.log(`Got ${result.length} results from Power Automate`);
-        return result as PowerAutomateResult[];
-      }
-
-      // Unexpected response format
-      console.log('Unexpected response format, waiting...', result);
-      await sleep(POLL_INTERVAL_MS);
-    } catch (error) {
-      console.error('Power Automate poll error:', error);
-      await sleep(POLL_INTERVAL_MS);
-    }
-  }
-
-  console.log('Max poll attempts reached, no results');
-  return null;
-}
+// Old pollForResults removed - frontend now handles polling via osint-power-automate-poll
 
 function normalizeResults(results: PowerAutomateResult[], searchData: SearchData) {
   // Normalize to common format used by other OSINT functions
@@ -287,29 +279,31 @@ Deno.serve(async (req) => {
 
     console.log('Case submitted, workorderid:', submitResult.workorderid);
 
-    // Step 2: Poll for results
-    const results = await pollForResults(apiKey, submitResult.workorderid);
+    // Step 2: Wait briefly and check once for quick results
+    await sleep(INITIAL_WAIT_MS);
+    const quickResults = await checkResultsOnce(apiKey, submitResult.workorderid);
     
-    if (!results || results.length === 0) {
+    if (quickResults && quickResults.length > 0) {
+      // Got results quickly, return them
+      const normalizedData = normalizeResults(quickResults, searchData);
       return new Response(JSON.stringify({
         success: true,
         workorderid: submitResult.workorderid,
-        status: 'pending',
-        message: 'Case submitted but results not yet available. Check back later.',
-        data: null,
+        status: 'complete',
+        data: normalizedData,
       }), {
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       });
     }
 
-    // Step 3: Normalize and return results
-    const normalizedData = normalizeResults(results, searchData);
-
+    // Return pending status - frontend will handle polling via osint-power-automate-poll
     return new Response(JSON.stringify({
       success: true,
       workorderid: submitResult.workorderid,
-      status: 'complete',
-      data: normalizedData,
+      status: 'pending',
+      pending: true,
+      message: 'Global Findings are being generated. Results will appear automatically.',
+      data: null,
     }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });

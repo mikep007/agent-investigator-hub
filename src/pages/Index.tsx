@@ -27,6 +27,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SaveToCaseDialog from "@/components/cases/SaveToCaseDialog";
 import InvestigationBreadcrumb from "@/components/InvestigationBreadcrumb";
 import EnrichInvestigation from "@/components/EnrichInvestigation";
+import { usePowerAutomatePolling } from "@/hooks/usePowerAutomatePolling";
 
 interface InvestigationHistoryItem {
   id: string;
@@ -153,6 +154,24 @@ const Index = () => {
       supabase.removeChannel(channel);
     };
   }, [currentInvestigationId]);
+
+  // Power Automate polling - keeps investigation active while polling for results
+  const { isPolling: isPowerAutomatePolling } = usePowerAutomatePolling({
+    investigationId: currentInvestigationId,
+    findings,
+    onResultsReceived: () => {
+      toast({
+        title: "Global Findings Ready",
+        description: "Power Automate results have been received and integrated.",
+      });
+    }
+  });
+
+  // Check if we should show as still investigating
+  const hasPendingPowerAutomate = findings.some(f => 
+    f.agent_type === 'Power_automate' && 
+    (f.data?.pending === true || f.data?.status === 'pending')
+  );
 
   const startComprehensiveInvestigation = async (searchData: {
     fullName: string;
