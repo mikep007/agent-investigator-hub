@@ -17,7 +17,14 @@ export function usePowerAutomatePolling({
   const isPollingRef = useRef(false);
   const [isPolling, setIsPolling] = useState(false);
   const [pollCount, setPollCount] = useState(0);
+  const pollCountRef = useRef(0);
   const lastWorkorderIdRef = useRef<string | null>(null);
+  const onResultsReceivedRef = useRef(onResultsReceived);
+
+  // Keep ref updated
+  useEffect(() => {
+    onResultsReceivedRef.current = onResultsReceived;
+  }, [onResultsReceived]);
 
   const stopPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
@@ -29,9 +36,11 @@ export function usePowerAutomatePolling({
     console.log('[PowerAutomate] Polling stopped');
   }, []);
 
-  const pollForResults = useCallback(async (workorderid: string, findingId: string) => {
-    console.log('[PowerAutomate] Polling for results, workorderid:', workorderid);
-    setPollCount(prev => prev + 1);
+  // Use ref-based poll function to avoid recreating on every render
+  const pollForResults = useCallback(async (workorderid: string, findingId: string): Promise<{ stillPending: boolean }> => {
+    pollCountRef.current += 1;
+    setPollCount(pollCountRef.current);
+    console.log('[PowerAutomate] Polling for results, workorderid:', workorderid, 'poll #', pollCountRef.current);
     
     try {
       const { data, error } = await supabase.functions.invoke('osint-power-automate-poll', {
@@ -44,7 +53,7 @@ export function usePowerAutomatePolling({
       }
 
       if (data?.pending) {
-        console.log('[PowerAutomate] Results still pending, poll count:', pollCount);
+        console.log('[PowerAutomate] Results still pending, poll count:', pollCountRef.current);
         return { stillPending: true };
       }
 
@@ -77,7 +86,7 @@ export function usePowerAutomatePolling({
           });
         }
         
-        onResultsReceived?.();
+        onResultsReceivedRef.current?.();
         return { stillPending: false };
       }
 
@@ -86,7 +95,7 @@ export function usePowerAutomatePolling({
       console.error('[PowerAutomate] Poll exception:', err);
       return { stillPending: true };
     }
-  }, [onResultsReceived, pollCount]);
+  }, []); // No dependencies - uses refs
 
   useEffect(() => {
     if (!investigationId || !findings.length) {
@@ -129,6 +138,7 @@ export function usePowerAutomatePolling({
     if (lastWorkorderIdRef.current !== workorderid) {
       stopPolling();
       lastWorkorderIdRef.current = workorderid;
+      pollCountRef.current = 0;
       setPollCount(0);
     }
 
@@ -143,6 +153,7 @@ export function usePowerAutomatePolling({
 
     // Poll immediately, then every 30 seconds
     const poll = async () => {
+      if (!isPollingRef.current) return; // Guard against running after stop
       const result = await pollForResults(workorderid, powerAutomateFinding.id);
       if (!result.stillPending) {
         stopPolling();
@@ -154,9 +165,10 @@ export function usePowerAutomatePolling({
     pollingIntervalRef.current = setInterval(poll, 30000); // 30 seconds
 
     return () => {
-      stopPolling();
+      // Don't stop polling on cleanup - let it continue across re-renders
+      // Only stop when explicitly needed (workorder change, complete, etc.)
     };
-  }, [investigationId, findings, pollForResults, stopPolling]);
+  }, [investigationId, findings, stopPolling, pollForResults]);
 
   // Cleanup on unmount
   useEffect(() => {
