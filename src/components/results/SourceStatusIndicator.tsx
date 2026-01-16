@@ -302,11 +302,11 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
         if (!seenSources.has('Global Findings')) {
           seenSources.add('Global Findings');
           const powerData = data?.data || data;
-          if (powerData?.status === 'pending') {
+          if (powerData?.status === 'pending' || powerData?.pending === true || data?.pending === true) {
             statuses.push({
               name: 'Global Findings',
               status: 'pending',
-              note: 'Processing...',
+              note: 'Polling every 30 seconds...',
             });
           } else if (data.error || data.success === false) {
             statuses.push({
@@ -338,6 +338,7 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
   const successCount = statuses.filter(s => s.status === 'success').length;
   const blockedCount = statuses.filter(s => s.status === 'blocked').length;
   const errorCount = statuses.filter(s => s.status === 'error').length;
+  const pendingCount = statuses.filter(s => s.status === 'pending').length;
 
   if (statuses.length === 0) {
     return null;
@@ -395,6 +396,12 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
               {errorCount} Failed
             </span>
           )}
+          {pendingCount > 0 && (
+            <span className="flex items-center gap-1 text-muted-foreground">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              {pendingCount} Processing
+            </span>
+          )}
         </div>
       </div>
 
@@ -432,6 +439,11 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
                   {source.status === 'error' && (
                     <div className="text-red-600">
                       {source.note || 'Request failed'}
+                    </div>
+                  )}
+                  {source.status === 'pending' && (
+                    <div className="text-muted-foreground">
+                      {source.note || 'Results are being generated...'}
                     </div>
                   )}
                 </div>
