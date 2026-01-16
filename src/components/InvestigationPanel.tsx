@@ -208,6 +208,17 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
               : hasManualLinks 
                 ? 'Instagram profile - story viewers available'
                 : 'Instagram profile lookup';
+          } else if (finding.agent_type === 'Power_automate') {
+            const personCount = data.personCount || data.data?.personCount || 0;
+            const summary = data.summary || data.data?.summary || {};
+            const totalData = (summary.totalEmails || 0) + (summary.totalPhones || 0) + (summary.totalAddresses || 0) + (summary.totalSocialProfiles || 0);
+            if (data.status === 'pending') {
+              message = 'Global Findings search in progress...';
+            } else if (personCount > 0) {
+              message = `Global Findings: ${personCount} person${personCount > 1 ? 's' : ''}, ${totalData} data point${totalData > 1 ? 's' : ''}`;
+            } else {
+              message = 'Global Findings: No results found';
+            }
           } else {
             message = finding.source;
           }
@@ -608,7 +619,8 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
   const peopleLogs = filteredLogs.filter(log => 
     log.agent_type === 'Email' || 
     log.agent_type === 'Phone' || 
-    log.agent_type === 'People_search'
+    log.agent_type === 'People_search' ||
+    log.agent_type === 'Power_automate'
   );
   
   // Data breaches
@@ -2038,6 +2050,224 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                   </div>
                 );
               })()}
+            </div>
+          );
+        }
+
+        // Power Automate Global Findings Results
+        if (log.agent_type === 'Power_automate') {
+          const powerData = log.data?.data || log.data;
+          const persons = powerData?.persons || [];
+          const summary = powerData?.summary || {};
+          
+          if (powerData?.status === 'pending') {
+            return (
+              <div key={log.id} className="border border-amber-500/30 bg-amber-500/5 rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-amber-500 animate-pulse" />
+                  <h4 className="font-medium text-amber-600 dark:text-amber-400">Global Findings - Processing</h4>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">
+                  Your request has been submitted and is being processed. Results will appear once ready.
+                </p>
+              </div>
+            );
+          }
+          
+          if (persons.length === 0) {
+            return (
+              <div key={log.id} className="border border-border rounded-lg p-4">
+                <div className="flex items-center gap-2">
+                  <Zap className="h-5 w-5 text-primary" />
+                  <h4 className="font-medium">Global Findings</h4>
+                </div>
+                <p className="text-sm text-muted-foreground mt-2">No additional data found from this source.</p>
+              </div>
+            );
+          }
+          
+          return (
+            <div key={log.id} className="space-y-4">
+              <div className="flex items-center gap-2 mb-2">
+                <Zap className="h-5 w-5 text-primary" />
+                <h3 className="text-base font-medium">Global Findings</h3>
+                <Badge variant="secondary" className="text-xs">
+                  {persons.length} person{persons.length > 1 ? 's' : ''}
+                </Badge>
+                {summary.totalEmails > 0 && (
+                  <Badge variant="outline" className="text-xs">
+                    <Mail className="h-3 w-3 mr-1" />
+                    {summary.totalEmails}
+                  </Badge>
+                )}
+                {summary.totalPhones > 0 && (
+                  <Badge variant="outline" className="text-xs">
+                    <Phone className="h-3 w-3 mr-1" />
+                    {summary.totalPhones}
+                  </Badge>
+                )}
+                {summary.totalAddresses > 0 && (
+                  <Badge variant="outline" className="text-xs">
+                    <MapPin className="h-3 w-3 mr-1" />
+                    {summary.totalAddresses}
+                  </Badge>
+                )}
+              </div>
+              
+              {persons.map((person: any, idx: number) => (
+                <div key={idx} className="border border-border rounded-lg p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-medium text-foreground">{person.full_name}</h4>
+                      {person.age && (
+                        <Badge variant="outline" className="text-xs">Age {person.age}</Badge>
+                      )}
+                    </div>
+                    <Badge variant="secondary" className="text-xs">Global Findings</Badge>
+                  </div>
+
+                  {/* Aliases */}
+                  {person.aliases && person.aliases.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <User className="h-4 w-4" />
+                        Also Known As:
+                      </div>
+                      <div className="pl-6 text-sm text-foreground flex flex-wrap gap-2">
+                        {person.aliases.map((alias: string, aIdx: number) => (
+                          <Badge key={aIdx} variant="outline" className="text-xs">{alias}</Badge>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Emails */}
+                  {person.emails && person.emails.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <Mail className="h-4 w-4" />
+                        Email Addresses ({person.emails.length}):
+                      </div>
+                      <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-1">
+                        {person.emails.slice(0, 10).map((emailObj: any, eIdx: number) => (
+                          <div 
+                            key={eIdx} 
+                            className="text-sm text-foreground flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => onPivot?.('email', emailObj.email)}
+                          >
+                            <span className="truncate">{emailObj.email}</span>
+                            {emailObj.confidence && (
+                              <span className="text-xs text-muted-foreground">({emailObj.confidence}%)</span>
+                            )}
+                          </div>
+                        ))}
+                        {person.emails.length > 10 && (
+                          <div className="text-xs text-muted-foreground">
+                            +{person.emails.length - 10} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Phone Numbers */}
+                  {person.phones && person.phones.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <Phone className="h-4 w-4" />
+                        Phone Numbers ({person.phones.length}):
+                      </div>
+                      <div className="pl-6 grid grid-cols-2 sm:grid-cols-3 gap-1">
+                        {person.phones.slice(0, 6).map((phoneObj: any, pIdx: number) => (
+                          <div 
+                            key={pIdx} 
+                            className="text-sm text-foreground flex items-center gap-2 cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => onPivot?.('phone', phoneObj.phone)}
+                          >
+                            {phoneObj.phone}
+                          </div>
+                        ))}
+                        {person.phones.length > 6 && (
+                          <div className="text-xs text-muted-foreground">
+                            +{person.phones.length - 6} more
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Addresses */}
+                  {person.addresses && person.addresses.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <MapPin className="h-4 w-4" />
+                        Addresses ({person.addresses.length}):
+                      </div>
+                      <div className="pl-6 space-y-1">
+                        {person.addresses.slice(0, 4).map((addr: any, aIdx: number) => (
+                          <div 
+                            key={aIdx} 
+                            className="text-sm text-foreground cursor-pointer hover:text-primary transition-colors"
+                            onClick={() => onPivot?.('address', addr.full || `${addr.street}, ${addr.city}, ${addr.state} ${addr.zip}`)}
+                          >
+                            {addr.full || `${addr.street}, ${addr.city}, ${addr.state} ${addr.zip}`}
+                          </div>
+                        ))}
+                        {person.addresses.length > 4 && (
+                          <div className="text-xs text-muted-foreground">
+                            +{person.addresses.length - 4} more addresses
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Social Profiles */}
+                  {person.socialProfiles && person.socialProfiles.length > 0 && (
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 text-sm font-medium text-muted-foreground">
+                        <Globe className="h-4 w-4" />
+                        Social Profiles ({person.socialProfiles.length}):
+                      </div>
+                      <div className="pl-6 grid grid-cols-1 sm:grid-cols-2 gap-2">
+                        {person.socialProfiles.map((profile: any, sIdx: number) => (
+                          <a
+                            key={sIdx}
+                            href={profile.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="flex items-center gap-2 p-2 rounded border border-border hover:bg-accent/50 transition-colors group"
+                          >
+                            {profile.pictureUrl ? (
+                              <img 
+                                src={profile.pictureUrl} 
+                                alt="" 
+                                className="w-8 h-8 rounded-full object-cover"
+                                onError={(e) => {
+                                  (e.target as HTMLImageElement).style.display = 'none';
+                                }}
+                              />
+                            ) : (
+                              <div className="w-8 h-8 rounded-full bg-muted flex items-center justify-center">
+                                <User className="h-4 w-4 text-muted-foreground" />
+                              </div>
+                            )}
+                            <div className="flex-1 min-w-0">
+                              <div className="text-sm font-medium truncate">
+                                {profile.name || profile.username || 'Profile'}
+                              </div>
+                              <div className="text-xs text-muted-foreground truncate">
+                                {profile.url}
+                              </div>
+                            </div>
+                            <ExternalLink className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
             </div>
           );
         }
