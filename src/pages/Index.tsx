@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -116,22 +116,25 @@ const Index = () => {
   };
 
   // Fetch findings when investigation changes
+  // Extract fetchFindings so it can be called from other places
+  const fetchFindings = useCallback(async () => {
+    if (!currentInvestigationId) return;
+    
+    const { data } = await supabase
+      .from('findings')
+      .select('*')
+      .eq('investigation_id', currentInvestigationId);
+    
+    if (data) {
+      setFindings(data);
+    }
+  }, [currentInvestigationId]);
+
   useEffect(() => {
     if (!currentInvestigationId) {
       setFindings([]);
       return;
     }
-
-    const fetchFindings = async () => {
-      const { data } = await supabase
-        .from('findings')
-        .select('*')
-        .eq('investigation_id', currentInvestigationId);
-      
-      if (data) {
-        setFindings(data);
-      }
-    };
 
     fetchFindings();
 
@@ -153,7 +156,7 @@ const Index = () => {
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [currentInvestigationId]);
+  }, [currentInvestigationId, fetchFindings]);
 
   // Power Automate polling - keeps investigation active while polling for results
   const { isPolling: isPowerAutomatePolling } = usePowerAutomatePolling({
@@ -164,7 +167,8 @@ const Index = () => {
         title: "Global Findings Ready",
         description: "Power Automate results have been received and integrated.",
       });
-    }
+    },
+    refetchFindings: fetchFindings
   });
 
   // Check if we should show as still investigating

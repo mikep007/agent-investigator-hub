@@ -6,12 +6,14 @@ interface PowerAutomatePollingOptions {
   investigationId: string | null;
   findings: any[];
   onResultsReceived?: () => void;
+  refetchFindings?: () => void;
 }
 
 export function usePowerAutomatePolling({ 
   investigationId, 
   findings,
-  onResultsReceived 
+  onResultsReceived,
+  refetchFindings
 }: PowerAutomatePollingOptions) {
   const pollingIntervalRef = useRef<NodeJS.Timeout | null>(null);
   const isPollingRef = useRef(false);
@@ -20,11 +22,16 @@ export function usePowerAutomatePolling({
   const pollCountRef = useRef(0);
   const lastWorkorderIdRef = useRef<string | null>(null);
   const onResultsReceivedRef = useRef(onResultsReceived);
+  const refetchFindingsRef = useRef(refetchFindings);
 
-  // Keep ref updated
+  // Keep refs updated
   useEffect(() => {
     onResultsReceivedRef.current = onResultsReceived;
   }, [onResultsReceived]);
+
+  useEffect(() => {
+    refetchFindingsRef.current = refetchFindings;
+  }, [refetchFindings]);
 
   const stopPolling = useCallback(() => {
     if (pollingIntervalRef.current) {
@@ -84,6 +91,11 @@ export function usePowerAutomatePolling({
             description: `Found ${personCount} person(s) with ${totalResults} total data points`,
             duration: 5000,
           });
+          
+          // Force refetch findings to ensure UI updates immediately
+          // This is needed because realtime updates may be delayed
+          console.log('[PowerAutomate] Triggering findings refetch');
+          refetchFindingsRef.current?.();
         }
         
         onResultsReceivedRef.current?.();
