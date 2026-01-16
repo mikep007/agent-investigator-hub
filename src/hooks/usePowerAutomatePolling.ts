@@ -100,6 +100,28 @@ export function usePowerAutomatePolling({
   // Store workorderid in a ref to ensure we always poll with the same ID
   const workorderIdRef = useRef<string | null>(null);
   const findingIdRef = useRef<string | null>(null);
+  const activeInvestigationIdRef = useRef<string | null>(null);
+
+  // Reset any persisted workorder/finding refs when the investigation changes.
+  // Without this, a new investigation can accidentally keep polling with a previous workorderid.
+  useEffect(() => {
+    if (investigationId === activeInvestigationIdRef.current) return;
+
+    console.log('[PowerAutomate] Investigation changed; resetting polling refs', {
+      from: activeInvestigationIdRef.current,
+      to: investigationId,
+    });
+
+    stopPolling();
+    activeInvestigationIdRef.current = investigationId;
+
+    workorderIdRef.current = null;
+    findingIdRef.current = null;
+    lastWorkorderIdRef.current = null;
+
+    pollCountRef.current = 0;
+    setPollCount(0);
+  }, [investigationId, stopPolling]);
 
   useEffect(() => {
     if (!investigationId || !findings.length) {
@@ -107,10 +129,16 @@ export function usePowerAutomatePolling({
       return;
     }
 
-    // Find the Power Automate finding that's still pending
-    const powerAutomateFinding = findings.find(f => 
-      f.agent_type === 'Power_automate'
-    );
+    // Find the most recent Power Automate finding (there can be multiple from retries/reruns)
+    const powerAutomateFindings = findings
+      .filter((f) => f.agent_type === 'Power_automate')
+      .sort((a, b) => {
+        const aTime = new Date(a.created_at ?? 0).getTime();
+        const bTime = new Date(b.created_at ?? 0).getTime();
+        return bTime - aTime;
+      });
+
+    const powerAutomateFinding = powerAutomateFindings[0];
 
     if (!powerAutomateFinding) {
       stopPolling();
