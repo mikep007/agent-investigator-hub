@@ -164,7 +164,39 @@ Deno.serve(async (req) => {
       });
     }
 
-    const result = await response.json();
+    // Get response as text first to handle non-JSON responses
+    const responseText = await response.text();
+    console.log('Poll response (first 100 chars):', responseText.substring(0, 100));
+
+    // Check if response is plain text indicating pending status
+    if (responseText.startsWith('Global Fin') || responseText.includes('still being created') || responseText.includes('try again')) {
+      console.log('Results still processing (text response)');
+      return new Response(JSON.stringify({
+        success: true,
+        pending: true,
+        workorderid,
+        message: 'Global Findings are still being generated.',
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Try to parse as JSON
+    let result;
+    try {
+      result = JSON.parse(responseText);
+    } catch (parseError) {
+      console.log('Response is not JSON, treating as pending:', responseText.substring(0, 50));
+      return new Response(JSON.stringify({
+        success: true,
+        pending: true,
+        workorderid,
+        message: 'Waiting for results to be generated.',
+      }), {
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+      });
+    }
+
     console.log('Poll result type:', typeof result, Array.isArray(result) ? `array(${result.length})` : 'not array');
 
     // Check if still processing
