@@ -67,11 +67,18 @@ export function usePowerAutomatePolling({
       if (data?.success && data?.data) {
         console.log('[PowerAutomate] ✅ Results received!', data.data);
         
+        // Ensure data has the proper structure without pending flags
+        const cleanedData = {
+          ...data.data,
+          pending: false,
+          status: 'complete'
+        };
+        
         // Update the finding with the new results - this will trigger realtime update
         const { error: updateError } = await supabase
           .from('findings')
           .update({
-            data: data.data,
+            data: cleanedData,
             confidence_score: 75,
             verification_status: 'verified'
           })
@@ -95,6 +102,9 @@ export function usePowerAutomatePolling({
           // Force refetch findings to ensure UI updates immediately
           // This is needed because realtime updates may be delayed
           console.log('[PowerAutomate] Triggering findings refetch');
+          
+          // Small delay to ensure the database write is committed before refetch
+          await new Promise(resolve => setTimeout(resolve, 300));
           refetchFindingsRef.current?.();
         }
         
