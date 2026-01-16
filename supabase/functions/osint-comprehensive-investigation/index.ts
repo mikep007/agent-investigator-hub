@@ -187,6 +187,24 @@ Deno.serve(async (req) => {
       searchTypes.push('idcrawl');
     }
 
+    // Global Findings - Power Automate comprehensive data aggregation
+    // Runs for any search with at least one parameter
+    if (hasAtLeastOneParam) {
+      console.log('Running Power Automate Global Findings search');
+      searchPromises.push(
+        supabaseClient.functions.invoke('osint-power-automate', {
+          body: { 
+            fullName: searchData.fullName,
+            address: searchData.address,
+            email: searchData.email,
+            phone: searchData.phone,
+            username: searchData.username,
+          }
+        })
+      );
+      searchTypes.push('power_automate');
+    }
+
     // Email enumeration
     if (searchData.email) {
       // Run Selector Enrichment - 80+ platform real-time account checks
