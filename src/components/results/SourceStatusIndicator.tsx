@@ -6,7 +6,8 @@ import {
   ShieldAlert, 
   AlertTriangle,
   Loader2,
-  Globe
+  Globe,
+  RefreshCw
 } from "lucide-react";
 import { FindingData } from "./types";
 import {
@@ -18,6 +19,8 @@ import {
 
 interface SourceStatusIndicatorProps {
   findings: FindingData[];
+  onRefresh?: () => void;
+  isRefreshing?: boolean;
 }
 
 interface SourceStatus {
@@ -28,7 +31,7 @@ interface SourceStatus {
   note?: string;
 }
 
-const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
+const SourceStatusIndicator = ({ findings, onRefresh, isRefreshing }: SourceStatusIndicatorProps) => {
   // Extract source statuses from findings
   const getSourceStatuses = (): SourceStatus[] => {
     const statuses: SourceStatus[] = [];
@@ -302,7 +305,11 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
         if (!seenSources.has('Global Findings')) {
           seenSources.add('Global Findings');
           const powerData = data?.data || data;
-          if (powerData?.status === 'pending' || powerData?.pending === true || data?.pending === true) {
+          const hasPersonsData = powerData?.persons && Array.isArray(powerData.persons) && powerData.persons.length > 0;
+          const isExplicitlyComplete = powerData?.status === 'complete' || powerData?.pending === false;
+          const isPending = !isExplicitlyComplete && !hasPersonsData && (powerData?.status === 'pending' || powerData?.pending === true || data?.pending === true);
+          
+          if (isPending) {
             statuses.push({
               name: 'Global Findings',
               status: 'pending',
@@ -403,6 +410,26 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               {pendingCount} Processing
             </span>
+          )}
+          {onRefresh && (
+            <TooltipProvider>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className="h-6 w-6 ml-1"
+                    onClick={onRefresh}
+                    disabled={isRefreshing}
+                  >
+                    <RefreshCw className={`h-3.5 w-3.5 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  <span className="text-xs">Refresh data sources</span>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           )}
         </div>
       </div>
