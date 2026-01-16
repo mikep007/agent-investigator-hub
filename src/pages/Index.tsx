@@ -172,12 +172,14 @@ const Index = () => {
   });
 
   // Check if we should show as still investigating
-  // Only consider pending if no actual data has been received yet
+  // Data is complete when status is 'complete' OR has persons data
   const hasPendingPowerAutomate = findings.some(f => {
     if (f.agent_type !== 'Power_automate') return false;
-    const hasPersonsData = f.data?.persons && Array.isArray(f.data.persons);
-    const isPending = (f.data?.pending === true || f.data?.status === 'pending');
-    return isPending && !hasPersonsData;
+    const data = f.data as any;
+    const hasPersonsData = data?.persons && Array.isArray(data.persons);
+    const isExplicitlyComplete = data?.status === 'complete' || data?.pending === false;
+    const isPending = !isExplicitlyComplete && !hasPersonsData && (data?.pending === true || data?.status === 'pending');
+    return isPending;
   });
 
   const startComprehensiveInvestigation = async (searchData: {
