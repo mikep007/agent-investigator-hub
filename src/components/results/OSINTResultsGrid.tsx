@@ -176,6 +176,45 @@ const OSINTResultsGrid = ({
           });
         }
       }
+
+      // Power Automate Global Findings - social profiles
+      if (finding.agent_type === 'Power_automate') {
+        const powerData = data?.data || data;
+        const persons = powerData?.persons || [];
+        
+        persons.forEach((person: any) => {
+          if (person.socialProfiles && Array.isArray(person.socialProfiles)) {
+            person.socialProfiles.forEach((sp: any) => {
+              if (sp.url && !seenUrls.has(sp.url)) {
+                seenUrls.add(sp.url);
+                // Try to detect platform from URL
+                let platform = 'Unknown';
+                const urlLower = sp.url.toLowerCase();
+                if (urlLower.includes('facebook.com')) platform = 'Facebook';
+                else if (urlLower.includes('twitter.com') || urlLower.includes('x.com')) platform = 'Twitter';
+                else if (urlLower.includes('linkedin.com')) platform = 'LinkedIn';
+                else if (urlLower.includes('instagram.com')) platform = 'Instagram';
+                else if (urlLower.includes('tiktok.com')) platform = 'TikTok';
+                else if (urlLower.includes('myspace.com')) platform = 'MySpace';
+                else if (urlLower.includes('myyearbook.com')) platform = 'MeetMe';
+                else if (urlLower.includes('pandora.com')) platform = 'Pandora';
+                else if (urlLower.includes('gravatar.com')) platform = 'Gravatar';
+                
+                extracted.push({
+                  platform,
+                  url: sp.url,
+                  findingId,
+                  username: sp.username || sp.name,
+                  fullName: person.full_name,
+                  profileImage: sp.pictureUrl,
+                  verified: false,
+                  isPublic: true,
+                });
+              }
+            });
+          }
+        });
+      }
     });
 
     return extracted;

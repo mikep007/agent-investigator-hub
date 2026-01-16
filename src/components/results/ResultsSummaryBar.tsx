@@ -106,6 +106,42 @@ const ResultsSummaryBar = ({ findings, targetName }: ResultsSummaryBarProps) => 
           }
         }
       });
+
+      // Extract from Power Automate Global Findings
+      if (finding.agent_type === 'Power_automate') {
+        const powerData = data?.data || data;
+        const persons = powerData?.persons || [];
+        
+        // Count sources
+        stats.sourcesFound += persons.length;
+        
+        persons.forEach((person: any) => {
+          // Extract names/aliases as usernames
+          if (person.aliases) {
+            person.aliases.forEach((alias: string) => {
+              if (alias) stats.names.add(alias);
+            });
+          }
+          if (person.full_name) {
+            stats.names.add(person.full_name);
+          }
+          
+          // Extract locations from addresses
+          if (person.addresses) {
+            person.addresses.forEach((addr: any) => {
+              const loc = addr.city && addr.state ? `${addr.city}, ${addr.state}` : addr.full;
+              if (loc) stats.locations.add(loc);
+            });
+          }
+          
+          // Extract usernames from social profiles
+          if (person.socialProfiles) {
+            person.socialProfiles.forEach((sp: any) => {
+              if (sp.username) stats.usernames.add(sp.username);
+            });
+          }
+        });
+      }
     });
 
     return stats;

@@ -62,6 +62,58 @@ const PersonProfileCard = ({ findings, targetName, inputKeywords = [], aiSuggest
         });
       }
 
+      // Extract from Power Automate Global Findings
+      if (finding.agent_type === 'Power_automate') {
+        const powerData = data?.data || data;
+        const persons = powerData?.persons || [];
+        
+        persons.forEach((person: any) => {
+          // Extract emails
+          if (person.emails) {
+            person.emails.forEach((e: any) => {
+              const email = e.email || e;
+              if (email && !profile.emails?.includes(email)) {
+                profile.emails?.push(email);
+              }
+            });
+          }
+          
+          // Extract phones
+          if (person.phones) {
+            person.phones.forEach((p: any) => {
+              const phone = p.phone || p;
+              if (phone && !profile.phones?.includes(phone)) {
+                profile.phones?.push(phone);
+              }
+            });
+          }
+          
+          // Extract addresses
+          if (person.addresses) {
+            person.addresses.forEach((addr: any) => {
+              const loc = addr.full || `${addr.street}, ${addr.city}, ${addr.state} ${addr.zip}`;
+              if (loc && !profile.locations?.includes(loc)) {
+                profile.locations?.push(loc);
+              }
+            });
+          }
+          
+          // Extract aliases as usernames
+          if (person.aliases) {
+            person.aliases.forEach((alias: string) => {
+              if (alias && !profile.usernames?.includes(alias)) {
+                profile.usernames?.push(alias);
+              }
+            });
+          }
+          
+          // Extract age
+          if (person.age && !profile.age) {
+            profile.age = person.age;
+          }
+        });
+      }
+
       // Extract from address search
       if (finding.agent_type === 'Address' && data.location) {
         const addr = data.location.formatted_address;

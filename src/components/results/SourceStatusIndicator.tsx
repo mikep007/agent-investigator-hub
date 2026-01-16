@@ -296,6 +296,38 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
           }
         }
       }
+
+      // Power Automate Global Findings
+      if (agentType === 'Power_automate') {
+        if (!seenSources.has('Global Findings')) {
+          seenSources.add('Global Findings');
+          const powerData = data?.data || data;
+          if (powerData?.status === 'pending') {
+            statuses.push({
+              name: 'Global Findings',
+              status: 'pending',
+              note: 'Processing...',
+            });
+          } else if (data.error || data.success === false) {
+            statuses.push({
+              name: 'Global Findings',
+              status: 'error',
+              note: data.error || 'Failed to retrieve data',
+            });
+          } else {
+            const persons = powerData?.persons || [];
+            const summary = powerData?.summary || {};
+            const totalResults = (summary.totalEmails || 0) + (summary.totalPhones || 0) + 
+                                 (summary.totalAddresses || 0) + (summary.totalSocialProfiles || 0);
+            statuses.push({
+              name: 'Global Findings',
+              status: 'success',
+              resultsCount: totalResults,
+              note: persons.length > 0 ? `${persons.length} person(s) found` : undefined,
+            });
+          }
+        }
+      }
     });
 
     return statuses;
