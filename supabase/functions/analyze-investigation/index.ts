@@ -198,82 +198,115 @@ Web mentions: ${dataSummary.webMentions.slice(0, 3).join('; ') || 'None'}
 
 Analyze and provide insights.`;
 
-    // Use AbortController with timeout to prevent hanging requests
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), 55000); // 55 second timeout
+    // Helper function to make AI request with retry logic
+    async function makeAIRequest(retryCount = 0): Promise<any> {
+      const maxRetries = 2;
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 55000);
 
-    let aiResponse;
-    try {
-      aiResponse = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${LOVABLE_API_KEY}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          model: 'google/gemini-2.5-flash-lite',
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt }
-          ],
-          tools: [{
-            type: "function",
-            function: {
-              name: "provide_analysis",
-              description: "Return structured investigation analysis",
-              parameters: {
-                type: "object",
-                properties: {
-                  riskLevel: { type: "string", enum: ["low", "medium", "high", "critical"] },
-                  summary: { type: "string" },
-                  keyFindings: { type: "array", items: { type: "string" } },
-                  patterns: { type: "array", items: { type: "string" } },
-                  relatedPersons: { type: "array", items: { type: "string" } },
-                  anomalies: { type: "array", items: { type: "string" } },
-                  recommendations: { type: "array", items: { type: "string" } }
-                },
-                required: ["riskLevel", "summary", "keyFindings", "recommendations"],
-                additionalProperties: false
+      try {
+        const response = await fetch('https://ai.gateway.lovable.dev/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${LOVABLE_API_KEY}`,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            model: 'google/gemini-2.5-flash-lite',
+            messages: [
+              { role: 'system', content: systemPrompt },
+              { role: 'user', content: userPrompt }
+            ],
+            tools: [{
+              type: "function",
+              function: {
+                name: "provide_analysis",
+                description: "Return structured investigation analysis",
+                parameters: {
+                  type: "object",
+                  properties: {
+                    riskLevel: { type: "string", enum: ["low", "medium", "high", "critical"] },
+                    summary: { type: "string" },
+                    keyFindings: { type: "array", items: { type: "string" } },
+                    patterns: { type: "array", items: { type: "string" } },
+                    relatedPersons: { type: "array", items: { type: "string" } },
+                    anomalies: { type: "array", items: { type: "string" } },
+                    recommendations: { type: "array", items: { type: "string" } }
+                  },
+                  required: ["riskLevel", "summary", "keyFindings", "recommendations"],
+                  additionalProperties: false
+                }
               }
-            }
-          }],
-          tool_choice: { type: "function", function: { name: "provide_analysis" } }
-        }),
-        signal: controller.signal
-      });
-    } catch (fetchError: any) {
-      clearTimeout(timeoutId);
-      if (fetchError.name === 'AbortError') {
-        console.error('AI request timed out after 55 seconds');
-        return new Response(
-          JSON.stringify({ error: "Analysis timed out. Please try again." }),
-          { status: 504, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      throw fetchError;
-    }
-    clearTimeout(timeoutId);
+            }],
+            tool_choice: { type: "function", function: { name: "provide_analysis" } }
+          }),
+          signal: controller.signal
+        });
 
-    if (!aiResponse.ok) {
-      if (aiResponse.status === 429) {
-        return new Response(
-          JSON.stringify({ error: "Rate limit exceeded. Please try again later." }),
-          { status: 429, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
+        clearTimeout(timeoutId);
+
+        if (!response.ok) {
+          if (response.status === 429) {
+            throw { status: 429, message: "Rate limit exceeded. Please try again later." };
+          }
+          if (response.status === 402) {
+            throw { status: 402, message: "Payment required. Please add credits to your workspace." };
+          }
+          if ((response.status === 502 || response.status === 503) && retryCount < maxRetries) {
+            console.log(`AI gateway error ${response.status}, retrying... (attempt ${retryCount + 1})`);
+            await new Promise(r => setTimeout(r, 1000 * (retryCount + 1))); // backoff
+            return makeAIRequest(retryCount + 1);
+          }
+          const errorText = await response.text();
+          console.error('AI gateway error:', response.status, errorText);
+          throw new Error('AI analysis failed');
+        }
+
+        const data = await response.json();
+        console.log('AI Response:', JSON.stringify(data, null, 2));
+
+        // Check for network error in response
+        if (data.choices?.[0]?.error?.code === 502 || data.choices?.[0]?.error?.message?.includes('Network')) {
+          if (retryCount < maxRetries) {
+            console.log('AI network error detected, retrying...');
+            await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+            return makeAIRequest(retryCount + 1);
+          }
+          throw new Error('Network connection lost. Please try again.');
+        }
+
+        return data;
+      } catch (fetchError: any) {
+        clearTimeout(timeoutId);
+        if (fetchError.name === 'AbortError') {
+          console.error('AI request timed out after 55 seconds');
+          throw { status: 504, message: "Analysis timed out. Please try again." };
+        }
+        if (fetchError.status) {
+          throw fetchError; // Re-throw structured errors
+        }
+        // Retry on network errors
+        if (retryCount < maxRetries) {
+          console.log('Network error, retrying...', fetchError.message);
+          await new Promise(r => setTimeout(r, 1000 * (retryCount + 1)));
+          return makeAIRequest(retryCount + 1);
+        }
+        throw fetchError;
       }
-      if (aiResponse.status === 402) {
-        return new Response(
-          JSON.stringify({ error: "Payment required. Please add credits to your workspace." }),
-          { status: 402, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-        );
-      }
-      const errorText = await aiResponse.text();
-      console.error('AI gateway error:', aiResponse.status, errorText);
-      throw new Error('AI analysis failed');
     }
 
-    const aiData = await aiResponse.json();
-    console.log('AI Response:', JSON.stringify(aiData, null, 2));
+    let aiData;
+    try {
+      aiData = await makeAIRequest();
+    } catch (err: any) {
+      if (err.status) {
+        return new Response(
+          JSON.stringify({ error: err.message }),
+          { status: err.status, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      throw err;
+    }
 
     // Extract analysis from tool call
     let analysis;
