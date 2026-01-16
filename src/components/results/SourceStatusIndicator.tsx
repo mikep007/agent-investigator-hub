@@ -353,7 +353,7 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
       case 'error':
         return <XCircle className="h-3.5 w-3.5 text-red-500" />;
       case 'pending':
-        return <Loader2 className="h-3.5 w-3.5 text-muted-foreground animate-spin" />;
+        return <Loader2 className="h-3.5 w-3.5 text-blue-500 animate-spin" />;
       default:
         return <Globe className="h-3.5 w-3.5 text-muted-foreground" />;
     }
@@ -362,11 +362,13 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
   const getStatusColor = (status: SourceStatus['status']) => {
     switch (status) {
       case 'success':
-        return 'bg-green-500/10 text-green-600 border-green-500/20';
+        return 'bg-green-500/10 text-green-600 border-green-500/20 transition-all duration-500';
       case 'blocked':
         return 'bg-amber-500/10 text-amber-600 border-amber-500/20';
       case 'error':
         return 'bg-red-500/10 text-red-600 border-red-500/20';
+      case 'pending':
+        return 'bg-blue-500/10 text-blue-600 border-blue-500/20 animate-pulse';
       default:
         return 'bg-muted text-muted-foreground';
     }
@@ -397,7 +399,7 @@ const SourceStatusIndicator = ({ findings }: SourceStatusIndicatorProps) => {
             </span>
           )}
           {pendingCount > 0 && (
-            <span className="flex items-center gap-1 text-muted-foreground">
+            <span className="flex items-center gap-1 text-blue-600">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               {pendingCount} Processing
             </span>
