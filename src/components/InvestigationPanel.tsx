@@ -648,6 +648,37 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
     log.agent_type === 'Selector_enrichment_phone'
   );
 
+  // Calculate actual item counts for tabs (not just number of findings)
+  const accountsCount = accountLogs.reduce((acc, log) => {
+    // Sum actual accounts found
+    if (log.data?.accountsFound) return acc + log.data.accountsFound;
+    if (log.data?.foundCount) return acc + log.data.foundCount;
+    const platforms = log.data?.profileLinks || log.data?.foundPlatforms || [];
+    return acc + platforms.length;
+  }, 0);
+
+  const peopleCount = peopleLogs.reduce((acc, log) => {
+    // Power Automate - count persons
+    if (log.agent_type === 'Power_automate') {
+      const powerData = log.data?.data || log.data;
+      return acc + (powerData?.persons?.length || powerData?.personCount || 0);
+    }
+    // People search - count results
+    const results = log.data?.results || [];
+    return acc + results.length;
+  }, 0);
+
+  const breachesCount = breachLogs.reduce((acc, log) => {
+    // LeakCheck - count breach sources
+    const sources = log.data?.sources || log.data?.results || [];
+    return acc + sources.length;
+  }, 0);
+
+  const courtCount = courtLogs.reduce((acc, log) => {
+    const records = log.data?.records || log.data?.results || [];
+    return acc + (records.length || (log.data?.totalRecords || 0));
+  }, 0);
+
   // Transform enrichment logs into the format expected by SelectorEnrichmentResults
   const getEnrichmentData = () => {
     if (enrichmentLogs.length === 0) return null;
@@ -2388,7 +2419,7 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                 >
                   <User className="h-3.5 w-3.5 mr-1.5" />
                   Accounts
-                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{accountLogs.length}</Badge>
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{accountsCount}</Badge>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="address" 
@@ -2404,7 +2435,7 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                 >
                   <Mail className="h-3.5 w-3.5 mr-1.5" />
                   People
-                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{peopleLogs.length}</Badge>
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{peopleCount}</Badge>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="breaches" 
@@ -2412,7 +2443,7 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                 >
                   <Shield className="h-3.5 w-3.5 mr-1.5" />
                   Breaches
-                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{breachLogs.length}</Badge>
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{breachesCount}</Badge>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="court" 
@@ -2420,7 +2451,7 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                 >
                   <Scale className="h-3.5 w-3.5 mr-1.5" />
                   Court
-                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{courtLogs.length}</Badge>
+                  <Badge variant="secondary" className="ml-1.5 h-4 px-1.5 text-[10px]">{courtCount}</Badge>
                 </TabsTrigger>
                 <TabsTrigger 
                   value="usernames" 
