@@ -31,11 +31,36 @@ serve(async (req) => {
   }
 
   try {
-    const { url } = await req.json();
+    const body = await req.json();
+    
+    // Handle Static Maps URL generation
+    if (body.lat !== undefined && body.lng !== undefined) {
+      const { lat, lng, width = 200, height = 120, zoom = 15 } = body;
+      const apiKey = Deno.env.get('GOOGLE_API_KEY');
+      
+      if (!apiKey) {
+        console.error('GOOGLE_API_KEY not configured');
+        return new Response(
+          JSON.stringify({ error: 'Service unavailable' }),
+          { status: 503, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
+      }
+      
+      const staticMapUrl = `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=${zoom}&size=${width}x${height}&scale=2&maptype=roadmap&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
+      
+      console.log('Static map URL generated');
+      return new Response(
+        JSON.stringify({ signedUrl: staticMapUrl }),
+        { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+    
+    // Handle URL signing (existing functionality)
+    const { url } = body;
     
     if (!url) {
       return new Response(
-        JSON.stringify({ error: 'URL is required' }),
+        JSON.stringify({ error: 'URL or lat/lng is required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -86,10 +111,9 @@ serve(async (req) => {
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-    console.error('Error signing URL:', errorMessage);
+    console.error('Error processing request:', error);
     return new Response(
-      JSON.stringify({ error: errorMessage }),
+      JSON.stringify({ error: 'An error occurred' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
   }

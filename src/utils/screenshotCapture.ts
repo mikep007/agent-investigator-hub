@@ -53,12 +53,17 @@ export const captureScreenshot = async (
       return { success: false, error: error.message };
     }
 
-    // Get public URL
-    const { data: urlData } = supabase.storage
+    // Get signed URL with 1 hour expiry for secure access
+    const { data: urlData, error: urlError } = await supabase.storage
       .from('case-screenshots')
-      .getPublicUrl(data.path);
+      .createSignedUrl(data.path, 3600); // 1 hour expiry
 
-    return { success: true, url: urlData.publicUrl };
+    if (urlError) {
+      console.error('Signed URL error:', urlError);
+      return { success: false, error: urlError.message };
+    }
+
+    return { success: true, url: urlData.signedUrl };
   } catch (err: any) {
     console.error('Screenshot capture error:', err);
     return { success: false, error: err.message || 'Failed to capture screenshot' };
