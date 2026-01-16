@@ -212,8 +212,12 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
             const personCount = data.personCount || data.data?.personCount || 0;
             const summary = data.summary || data.data?.summary || {};
             const totalData = (summary.totalEmails || 0) + (summary.totalPhones || 0) + (summary.totalAddresses || 0) + (summary.totalSocialProfiles || 0);
-            if (data.status === 'pending') {
+            // Check if still pending - must have pending flag AND no persons data
+            const hasPersonsData = data.persons && Array.isArray(data.persons);
+            const isPending = (data.status === 'pending' || data.pending === true) && !hasPersonsData;
+            if (isPending) {
               message = 'Global Findings search in progress...';
+              status = 'processing';
             } else if (personCount > 0) {
               message = `Global Findings: ${personCount} person${personCount > 1 ? 's' : ''}, ${totalData} data point${totalData > 1 ? 's' : ''}`;
             } else {
@@ -253,13 +257,13 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
       }
     }, 2000);
 
-    // Realtime subscription for ongoing updates
+    // Realtime subscription for ongoing updates (both INSERT and UPDATE)
     const channel = supabase
-      .channel(`findings-${investigationId}`)
+      .channel(`findings-panel-${investigationId}`)
       .on(
         'postgres_changes',
         {
-          event: 'INSERT',
+          event: '*', // Listen to INSERT, UPDATE, DELETE
           schema: 'public',
           table: 'findings',
           filter: `investigation_id=eq.${investigationId}`,
