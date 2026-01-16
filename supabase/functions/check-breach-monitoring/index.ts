@@ -33,6 +33,7 @@ serve(async (req) => {
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const leakCheckApiKey = Deno.env.get('LEAKCHECK_API_KEY');
+    const internalSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
 
     if (!leakCheckApiKey) {
       throw new Error('LEAKCHECK_API_KEY not configured');
@@ -111,17 +112,27 @@ serve(async (req) => {
                   newAlertsCount++;
                   console.log(`New breach alert created for ${subject.subject_value} in ${sourceName}`);
 
-                  // Send email notification
-                  await supabase.functions.invoke('send-breach-alert-email', {
-                    body: {
-                      userId: subject.user_id,
-                      subjectValue: subject.subject_value,
-                      subjectType: subject.subject_type,
-                      breachSource: sourceName,
-                      breachDate: sourceInfo?.date,
-                      breachData,
-                    },
-                  });
+                  // Send email notification with internal secret
+                  try {
+                    const emailUrl = `${supabaseUrl}/functions/v1/send-breach-alert-email`;
+                    await fetch(emailUrl, {
+                      method: 'POST',
+                      headers: {
+                        'Content-Type': 'application/json',
+                        'x-internal-secret': internalSecret || '',
+                      },
+                      body: JSON.stringify({
+                        userId: subject.user_id,
+                        subjectValue: subject.subject_value,
+                        subjectType: subject.subject_type,
+                        breachSource: sourceName,
+                        breachDate: sourceInfo?.date,
+                        breachData,
+                      }),
+                    });
+                  } catch (emailError) {
+                    console.error('Error sending breach alert email:', emailError);
+                  }
                 }
               }
             }

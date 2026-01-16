@@ -13,6 +13,21 @@ serve(async (req) => {
   }
 
   try {
+    // Verify internal secret for authentication (only callable from internal functions)
+    const internalSecret = req.headers.get('x-internal-secret');
+    const expectedSecret = Deno.env.get('INTERNAL_FUNCTION_SECRET');
+    
+    if (!expectedSecret || internalSecret !== expectedSecret) {
+      console.error('Unauthorized call to send-breach-alert-email');
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized' }),
+        {
+          status: 401,
+          headers: { ...corsHeaders, 'Content-Type': 'application/json' },
+        }
+      );
+    }
+
     const { userId, subjectValue, subjectType, breachSource, breachDate, breachData } = await req.json();
 
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
@@ -22,9 +37,9 @@ serve(async (req) => {
     if (!resendApiKey) {
       console.error('RESEND_API_KEY not configured');
       return new Response(
-        JSON.stringify({ error: 'Email service not configured' }),
+        JSON.stringify({ error: 'Service unavailable' }),
         {
-          status: 500,
+          status: 503,
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
         }
       );

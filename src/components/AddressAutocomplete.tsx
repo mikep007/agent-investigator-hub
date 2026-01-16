@@ -1,7 +1,8 @@
 /// <reference types="google.maps" />
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { MapPin, X } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
 
 declare global {
   interface Window {
@@ -35,6 +36,7 @@ const AddressAutocomplete = ({
   const [suggestions, setSuggestions] = useState<google.maps.places.AutocompletePrediction[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedLocation, setSelectedLocation] = useState<SelectedLocation | null>(null);
+  const [mapUrl, setMapUrl] = useState<string | null>(null);
   const autocompleteService = useRef<google.maps.places.AutocompleteService | null>(null);
   const placesService = useRef<google.maps.places.PlacesService | null>(null);
   const wrapperRef = useRef<HTMLDivElement>(null);
@@ -66,8 +68,34 @@ const AddressAutocomplete = ({
   useEffect(() => {
     if (!value.trim()) {
       setSelectedLocation(null);
+      setMapUrl(null);
     }
   }, [value]);
+
+  // Fetch static map URL from server when location is selected
+  const fetchStaticMapUrl = useCallback(async (lat: number, lng: number) => {
+    try {
+      const { data, error } = await supabase.functions.invoke('sign-maps-url', {
+        body: { lat, lng, width: 200, height: 120, zoom: 15 }
+      });
+      if (error) {
+        console.error('Error fetching static map:', error);
+        return;
+      }
+      setMapUrl(data.signedUrl);
+    } catch (err) {
+      console.error('Error fetching static map:', err);
+    }
+  }, []);
+
+  // Update map when location changes
+  useEffect(() => {
+    if (selectedLocation) {
+      fetchStaticMapUrl(selectedLocation.lat, selectedLocation.lng);
+    } else {
+      setMapUrl(null);
+    }
+  }, [selectedLocation, fetchStaticMapUrl]);
 
   const handleInputChange = (inputValue: string) => {
     onChange(inputValue);
@@ -127,12 +155,8 @@ const AddressAutocomplete = ({
   const clearLocation = () => {
     onChange("");
     setSelectedLocation(null);
+    setMapUrl(null);
     setSuggestions([]);
-  };
-
-  const getStaticMapUrl = (lat: number, lng: number) => {
-    const apiKey = 'AIzaSyAbmCozXMINQ_7Z6avw9dfjbRXOkhcAOIs';
-    return `https://maps.googleapis.com/maps/api/staticmap?center=${lat},${lng}&zoom=15&size=200x120&scale=2&maptype=roadmap&markers=color:red%7C${lat},${lng}&key=${apiKey}`;
   };
 
   return (
@@ -161,14 +185,21 @@ const AddressAutocomplete = ({
         </div>
 
         {/* Map Preview Thumbnail */}
-        {selectedLocation && (
+        {selectedLocation && mapUrl && (
           <div className="relative w-[100px] h-[60px] rounded-md overflow-hidden border border-border shrink-0">
             <img
-              src={getStaticMapUrl(selectedLocation.lat, selectedLocation.lng)}
+              src={mapUrl}
               alt="Location preview"
               className="w-full h-full object-cover"
             />
             <div className="absolute inset-0 bg-gradient-to-t from-background/40 to-transparent" />
+          </div>
+        )}
+
+        {/* Loading state when location selected but no map yet */}
+        {selectedLocation && !mapUrl && (
+          <div className="w-[100px] h-[60px] rounded-md border border-border flex items-center justify-center bg-muted/30 shrink-0">
+            <MapPin className="w-4 h-4 text-muted-foreground animate-pulse" />
           </div>
         )}
 
