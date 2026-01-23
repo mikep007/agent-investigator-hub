@@ -43,13 +43,46 @@ const AddressAutocomplete = ({
   const mapDivRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    // Initialize Google Places Services
-    if (window.google && window.google.maps && window.google.maps.places) {
-      autocompleteService.current = new google.maps.places.AutocompleteService();
-      // Create a dummy div for PlacesService (required but not displayed)
-      const dummyDiv = document.createElement('div');
-      placesService.current = new google.maps.places.PlacesService(dummyDiv);
+    // Load Google Maps if not already loaded
+    const initGoogleServices = () => {
+      if (window.google && window.google.maps && window.google.maps.places) {
+        autocompleteService.current = new google.maps.places.AutocompleteService();
+        const dummyDiv = document.createElement('div');
+        placesService.current = new google.maps.places.PlacesService(dummyDiv);
+      }
+    };
+
+    if (window.google && window.google.maps) {
+      initGoogleServices();
+      return;
     }
+
+    // Check if script is already loading
+    const existingScript = document.querySelector('script[src*="maps.googleapis.com"]');
+    if (existingScript) {
+      const checkLoaded = setInterval(() => {
+        if (window.google && window.google.maps) {
+          clearInterval(checkLoaded);
+          initGoogleServices();
+        }
+      }, 100);
+      setTimeout(() => clearInterval(checkLoaded), 10000);
+      return;
+    }
+
+    // Load the script dynamically
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      console.error("VITE_GOOGLE_MAPS_API_KEY not configured");
+      return;
+    }
+    const script = document.createElement("script");
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}&libraries=places`;
+    script.async = true;
+    script.defer = true;
+    script.onload = initGoogleServices;
+    script.onerror = () => console.error("Failed to load Google Maps script");
+    document.head.appendChild(script);
   }, []);
 
   useEffect(() => {
