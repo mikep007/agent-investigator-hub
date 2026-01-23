@@ -11,6 +11,7 @@ import Comparison from "./pages/Comparison";
 import Cases from "./pages/Cases";
 import CaseDetail from "./pages/CaseDetail";
 import SelectorEnrichment from "./pages/SelectorEnrichment";
+import WazeDashboard from "./pages/WazeDashboard";
 
 const queryClient = new QueryClient();
 
@@ -28,6 +29,7 @@ const App = () => (
           <Route path="/cases" element={<Cases />} />
           <Route path="/cases/:id" element={<CaseDetail />} />
           <Route path="/selector-enrichment" element={<SelectorEnrichment />} />
+          <Route path="/waze" element={<WazeDashboard />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />
         </Routes>
