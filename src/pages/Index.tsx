@@ -23,6 +23,7 @@ import ReportDisplay from "@/components/ReportDisplay";
 import ComprehensiveSearchForm from "@/components/ComprehensiveSearchForm";
 import RelationshipGraph from "@/components/RelationshipGraph";
 import OSINTLinkMap, { PivotData } from "@/components/OSINTLinkMap";
+import PalantirLinkGraph from "@/components/PalantirLinkGraph";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SaveToCaseDialog from "@/components/cases/SaveToCaseDialog";
 import InvestigationBreadcrumb from "@/components/InvestigationBreadcrumb";
@@ -491,6 +492,16 @@ const Index = () => {
               />
             </div>
           )}
+
+          {/* Full-Width Palantir Link Graph */}
+          <Card className="mb-6 p-0 bg-transparent border-border/50 overflow-hidden">
+            <PalantirLinkGraph 
+              active={activeInvestigation} 
+              investigationId={currentInvestigationId}
+              targetName={targetName}
+              onPivot={handlePivot}
+            />
+          </Card>
 
           {/* Visualization and Analysis Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
