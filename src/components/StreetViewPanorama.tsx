@@ -71,9 +71,15 @@ const StreetViewPanorama = ({ latitude, longitude, staticImageUrl }: StreetViewP
       return;
     }
 
-    // Only load if not already present
+    // Only load if not already present - use env variable for API key
+    const apiKey = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+    if (!apiKey) {
+      console.error("VITE_GOOGLE_MAPS_API_KEY not configured");
+      setError(true);
+      return;
+    }
     const script = document.createElement("script");
-    script.src = `https://maps.googleapis.com/maps/api/js?key=AIzaSyAbmCozXMINQ_7Z6avw9dfjbRXOkhcAOIs`;
+    script.src = `https://maps.googleapis.com/maps/api/js?key=${apiKey}`;
     script.async = true;
     script.defer = true;
     script.onload = () => setScriptLoaded(true);
