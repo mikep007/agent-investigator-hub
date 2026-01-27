@@ -2,13 +2,14 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import 'leaflet.heat';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, MapPin, User, Clock, Navigation, AlertTriangle, RefreshCw, HelpCircle, ChevronDown, Download, FileSpreadsheet, FileJson, Sun, Moon } from 'lucide-react';
+import { Loader2, MapPin, User, Clock, Navigation, AlertTriangle, RefreshCw, HelpCircle, ChevronDown, Download, FileSpreadsheet, FileJson, Sun, Moon, Flame, CircleDot } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
@@ -23,6 +24,8 @@ import {
   exportAllAlertsToCSV,
   exportAllAlertsToJSON,
 } from '@/utils/wazeExport';
+import { Toggle } from '@/components/ui/toggle';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 
 // Fix for default marker icons in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -105,6 +108,41 @@ function FitBoundsHandler({ bounds }: { bounds: L.LatLngBounds | null }) {
   return null;
 }
 
+// Heatmap layer component
+function HeatmapLayer({ points, isDarkMode }: { points: [number, number, number][]; isDarkMode: boolean }) {
+  const map = useMap();
+  const heatLayerRef = useRef<L.HeatLayer | null>(null);
+
+  useEffect(() => {
+    if (heatLayerRef.current) {
+      map.removeLayer(heatLayerRef.current);
+    }
+
+    if (points.length > 0) {
+      // Create heatmap with intensity values
+      heatLayerRef.current = (L as any).heatLayer(points, {
+        radius: 25,
+        blur: 15,
+        maxZoom: 17,
+        max: 1.0,
+        minOpacity: 0.4,
+        gradient: isDarkMode
+          ? { 0.4: '#3b82f6', 0.6: '#8b5cf6', 0.8: '#f97316', 1: '#ef4444' }
+          : { 0.4: '#60a5fa', 0.6: '#a78bfa', 0.8: '#fb923c', 1: '#f87171' }
+      });
+      heatLayerRef.current.addTo(map);
+    }
+
+    return () => {
+      if (heatLayerRef.current) {
+        map.removeLayer(heatLayerRef.current);
+      }
+    };
+  }, [map, points, isDarkMode]);
+
+  return null;
+}
+
 export default function WazeDashboard() {
   const [alerts, setAlerts] = useState<WazeAlert[]>([]);
   const [loading, setLoading] = useState(false);
@@ -116,6 +154,7 @@ export default function WazeDashboard() {
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [showHowToUse, setShowHowToUse] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
+  const [viewMode, setViewMode] = useState<'markers' | 'heatmap'>('markers');
   const boundsRef = useRef<L.LatLngBounds | null>(null);
   const alertsRef = useRef<Map<string, WazeAlert>>(new Map());
 
@@ -315,6 +354,13 @@ export default function WazeDashboard() {
   // Get unique usernames for autocomplete
   const uniqueUsernames = [...new Set(alerts.filter(a => a.username !== 'Anonymous').map(a => a.username))];
 
+  // Calculate heatmap points from alerts
+  const heatmapPoints: [number, number, number][] = alerts.map(alert => [
+    alert.lat,
+    alert.lon,
+    0.5 // intensity value
+  ]);
+
   // Theme configuration
   const theme = {
     bg: isDarkMode ? '#1a1a1a' : '#f8fafc',
@@ -472,8 +518,13 @@ export default function WazeDashboard() {
             <MapBoundsHandler onBoundsChange={handleBoundsChange} />
             <FitBoundsHandler bounds={fitBounds} />
 
-            {/* Alert Markers */}
-            {alerts.map((alert) => (
+            {/* Heatmap Layer */}
+            {viewMode === 'heatmap' && (
+              <HeatmapLayer points={heatmapPoints} isDarkMode={isDarkMode} />
+            )}
+
+            {/* Alert Markers - only show in markers mode or for tracked user */}
+            {viewMode === 'markers' && alerts.map((alert) => (
               <Marker
                 key={alert.id}
                 position={[alert.lat, alert.lon]}
@@ -512,6 +563,32 @@ export default function WazeDashboard() {
               </Marker>
             ))}
 
+            {/* Tracked User Markers - always show when tracking in heatmap mode */}
+            {viewMode === 'heatmap' && trackedUser && alerts
+              .filter(a => a.username.toLowerCase() === trackedUser.toLowerCase())
+              .map((alert) => (
+                <Marker
+                  key={alert.id}
+                  position={[alert.lat, alert.lon]}
+                  icon={trackedIcon}
+                >
+                  <Popup className="waze-popup">
+                    <div className="p-2" style={{ color: '#333' }}>
+                      <div className="font-bold text-lg mb-2">{formatAlertType(alert.type, alert.subtype)}</div>
+                      <div className="flex items-center gap-2 text-sm mb-1">
+                        <User className="h-3 w-3" />
+                        <span>{alert.username}</span>
+                      </div>
+                      <div className="flex items-center gap-2 text-sm mb-1">
+                        <Clock className="h-3 w-3" />
+                        <span>{alert.time.toLocaleString()}</span>
+                      </div>
+                    </div>
+                  </Popup>
+                </Marker>
+              ))
+            }
+
             {/* Tracked User Path */}
             {trackedPath.length >= 2 && (
               <Polyline
@@ -535,6 +612,38 @@ export default function WazeDashboard() {
             <div className="px-3 py-2 rounded-lg transition-colors duration-300" style={{ backgroundColor: theme.statsOverlay, border: `1px solid ${theme.border}` }}>
               <span className="text-primary font-bold">{uniqueUsernames.length}</span>
               <span className="ml-1 text-sm transition-colors duration-300" style={{ color: theme.text }}>unique users</span>
+            </div>
+          </div>
+
+          {/* View Mode Toggle */}
+          <div className="absolute top-4 right-4">
+            <div className="rounded-lg p-1 transition-colors duration-300" style={{ backgroundColor: theme.statsOverlay, border: `1px solid ${theme.border}` }}>
+              <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value as 'markers' | 'heatmap')}>
+                <ToggleGroupItem 
+                  value="markers" 
+                  aria-label="Show markers"
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    viewMode === 'markers' 
+                      ? 'bg-primary text-white' 
+                      : isDarkMode ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <CircleDot className="h-3.5 w-3.5 mr-1.5" />
+                  Markers
+                </ToggleGroupItem>
+                <ToggleGroupItem 
+                  value="heatmap" 
+                  aria-label="Show heatmap"
+                  className={`px-3 py-1.5 text-xs font-medium transition-colors ${
+                    viewMode === 'heatmap' 
+                      ? 'bg-primary text-white' 
+                      : isDarkMode ? 'text-gray-300 hover:text-white' : 'text-gray-600 hover:text-gray-900'
+                  }`}
+                >
+                  <Flame className="h-3.5 w-3.5 mr-1.5" />
+                  Heatmap
+                </ToggleGroupItem>
+              </ToggleGroup>
             </div>
           </div>
         </div>
