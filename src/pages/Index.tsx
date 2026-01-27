@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Brain, Network, LogOut, FileText, Activity, CheckCircle2, Search, GitCompare, FolderOpen, Share2, Clock, Save, ArrowRight, X, Fingerprint, Navigation } from "lucide-react";
+import { Brain, Network, LogOut, FileText, Activity, CheckCircle2, Search, GitCompare, FolderOpen, Share2, Clock, Save, ArrowRight, X, Fingerprint, Navigation, Menu } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -17,6 +17,13 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import InvestigationAnalysis from "@/components/InvestigationAnalysis";
 import InvestigationPanel from "@/components/InvestigationPanel";
 import ReportDisplay from "@/components/ReportDisplay";
@@ -375,51 +382,37 @@ const Index = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={() => navigate('/cases')}>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Menu className="w-4 h-4 mr-2" />
+                      Tools
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-56">
+                    <DropdownMenuItem onClick={() => navigate('/cases')}>
                       <FolderOpen className="w-4 h-4 mr-2" />
                       Case Files
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Manage saved investigation case files</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={() => navigate('/comparison')}>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/comparison')}>
                       <GitCompare className="w-4 h-4 mr-2" />
-                      Compare
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Compare multiple investigations side-by-side</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={() => navigate('/selector-enrichment')}>
+                      Compare Investigations
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/selector-enrichment')}>
                       <Fingerprint className="w-4 h-4 mr-2" />
                       Selector Enrichment
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Check email/phone against 80+ platforms</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={() => navigate('/breach-monitoring')}>
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onClick={() => navigate('/breach-monitoring')}>
                       <Activity className="w-4 h-4 mr-2" />
                       Breach Monitor
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Monitor subjects for data breaches</TooltipContent>
-                </Tooltip>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="outline" size="sm" onClick={() => navigate('/waze')}>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate('/waze')}>
                       <Navigation className="w-4 h-4 mr-2" />
                       Waze Tracker
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Real-time Waze surveillance dashboard</TooltipContent>
-                </Tooltip>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button variant="ghost" size="sm" onClick={handleSignOut}>
