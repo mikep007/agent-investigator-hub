@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, MapPin, User, Clock, Navigation, AlertTriangle, RefreshCw, HelpCircle, ChevronDown, Download, FileSpreadsheet, FileJson } from 'lucide-react';
+import { Loader2, MapPin, User, Clock, Navigation, AlertTriangle, RefreshCw, HelpCircle, ChevronDown, Download, FileSpreadsheet, FileJson, Sun, Moon } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
@@ -115,6 +115,7 @@ export default function WazeDashboard() {
   const [fitBounds, setFitBounds] = useState<L.LatLngBounds | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
   const [showHowToUse, setShowHowToUse] = useState(false);
+  const [isDarkMode, setIsDarkMode] = useState(true);
   const boundsRef = useRef<L.LatLngBounds | null>(null);
   const alertsRef = useRef<Map<string, WazeAlert>>(new Map());
 
@@ -314,34 +315,68 @@ export default function WazeDashboard() {
   // Get unique usernames for autocomplete
   const uniqueUsernames = [...new Set(alerts.filter(a => a.username !== 'Anonymous').map(a => a.username))];
 
+  // Theme configuration
+  const theme = {
+    bg: isDarkMode ? '#1a1a1a' : '#f8fafc',
+    bgSecondary: isDarkMode ? '#242424' : '#ffffff',
+    border: isDarkMode ? '#333' : '#e2e8f0',
+    text: isDarkMode ? '#ffffff' : '#1e293b',
+    textSecondary: isDarkMode ? '#888' : '#64748b',
+    textMuted: isDarkMode ? '#666' : '#94a3b8',
+    cardBg: isDarkMode ? '#242424' : '#ffffff',
+    tableBg: isDarkMode ? '#1a1a1a' : '#f1f5f9',
+    hoverBg: isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100',
+    inputBg: isDarkMode ? 'bg-transparent' : 'bg-white',
+    inputBorder: isDarkMode ? 'border-gray-600' : 'border-gray-300',
+    inputText: isDarkMode ? 'text-white placeholder:text-gray-500' : 'text-gray-900 placeholder:text-gray-400',
+    selectBg: isDarkMode ? 'bg-gray-900' : 'bg-white',
+    selectBorder: isDarkMode ? 'border-gray-700' : 'border-gray-200',
+    selectText: isDarkMode ? 'text-white' : 'text-gray-900',
+    selectHover: isDarkMode ? 'hover:bg-gray-800' : 'hover:bg-gray-100',
+    buttonOutline: isDarkMode ? 'border-gray-600 text-white hover:bg-gray-800' : 'border-gray-300 text-gray-700 hover:bg-gray-100',
+    mapTile: isDarkMode 
+      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+    statsOverlay: isDarkMode ? 'rgba(26, 26, 26, 0.9)' : 'rgba(255, 255, 255, 0.95)',
+  };
+
   return (
-    <div className="h-screen w-screen flex flex-col" style={{ backgroundColor: '#1a1a1a' }}>
+    <div className="h-screen w-screen flex flex-col transition-colors duration-300" style={{ backgroundColor: theme.bg }}>
       {/* Header */}
-      <header className="px-6 py-4 border-b" style={{ borderColor: '#333' }}>
+      <header className="px-6 py-4 border-b transition-colors duration-300" style={{ borderColor: theme.border }}>
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white flex items-center gap-3">
+            <h1 className="text-2xl font-bold flex items-center gap-3 transition-colors duration-300" style={{ color: theme.text }}>
               <Navigation className="h-7 w-7 text-primary" />
               Waze Surveillance Dashboard
             </h1>
-            <p className="text-sm mt-1" style={{ color: '#888' }}>
+            <p className="text-sm mt-1 transition-colors duration-300" style={{ color: theme.textSecondary }}>
               Tracking public Waze reports in real-time. Inspired by Palantir's data visualization style.
             </p>
           </div>
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <Button
+              variant="outline"
+              size="icon"
+              onClick={() => setIsDarkMode(!isDarkMode)}
+              className={`h-9 w-9 ${theme.buttonOutline} transition-colors duration-300`}
+              title={isDarkMode ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              {isDarkMode ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+            </Button>
             <Select value={server} onValueChange={setServer}>
-              <SelectTrigger className="w-32 bg-transparent border-gray-600 text-white">
+              <SelectTrigger className={`w-32 ${theme.inputBg} ${theme.inputBorder} transition-colors duration-300`} style={{ color: theme.text }}>
                 <SelectValue />
               </SelectTrigger>
-              <SelectContent className="bg-gray-900 border-gray-700">
-                <SelectItem value="row" className="text-white hover:bg-gray-800">Global (ROW)</SelectItem>
-                <SelectItem value="usa" className="text-white hover:bg-gray-800">USA</SelectItem>
-                <SelectItem value="il" className="text-white hover:bg-gray-800">Israel</SelectItem>
+              <SelectContent className={`${theme.selectBg} ${theme.selectBorder} z-50`}>
+                <SelectItem value="row" className={`${theme.selectText} ${theme.selectHover}`}>Global (ROW)</SelectItem>
+                <SelectItem value="usa" className={`${theme.selectText} ${theme.selectHover}`}>USA</SelectItem>
+                <SelectItem value="il" className={`${theme.selectText} ${theme.selectHover}`}>Israel</SelectItem>
               </SelectContent>
             </Select>
             <Collapsible open={showHowToUse} onOpenChange={setShowHowToUse}>
               <CollapsibleTrigger asChild>
-                <Button variant="outline" className="border-gray-600 text-white hover:bg-gray-800">
+                <Button variant="outline" className={theme.buttonOutline}>
                   <HelpCircle className="h-4 w-4 mr-2" />
                   How to Use
                   <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${showHowToUse ? 'rotate-180' : ''}`} />
@@ -357,7 +392,7 @@ export default function WazeDashboard() {
               <span className="ml-2">Refresh</span>
             </Button>
             {lastUpdate && (
-              <span className="text-xs" style={{ color: '#666' }}>
+              <span className="text-xs transition-colors duration-300" style={{ color: theme.textMuted }}>
                 Last update: {lastUpdate.toLocaleTimeString()}
               </span>
             )}
@@ -367,15 +402,15 @@ export default function WazeDashboard() {
         {/* How to Use Dropdown */}
         <Collapsible open={showHowToUse} onOpenChange={setShowHowToUse}>
           <CollapsibleContent className="mt-4">
-            <Card className="bg-gray-900 border-gray-700">
+            <Card className="transition-colors duration-300" style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}>
               <CardContent className="p-4">
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-gray-300">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm transition-colors duration-300" style={{ color: isDarkMode ? '#d1d5db' : '#4b5563' }}>
                   <div>
                     <h3 className="font-semibold text-primary mb-2 flex items-center gap-2">
                       <MapPin className="h-4 w-4" />
                       Navigate the Map
                     </h3>
-                    <ul className="space-y-1 text-gray-400">
+                    <ul className="space-y-1" style={{ color: theme.textSecondary }}>
                       <li>• Pan and zoom to your area of interest</li>
                       <li>• Click "Refresh" to fetch alerts for the visible area</li>
                       <li>• Alerts auto-update every 3 minutes</li>
@@ -387,7 +422,7 @@ export default function WazeDashboard() {
                       <User className="h-4 w-4" />
                       Track Users
                     </h3>
-                    <ul className="space-y-1 text-gray-400">
+                    <ul className="space-y-1" style={{ color: theme.textSecondary }}>
                       <li>• Enter a username in the sidebar and click "Track"</li>
                       <li>• Red markers show tracked user's locations</li>
                       <li>• Dashed lines connect their movement path</li>
@@ -399,7 +434,7 @@ export default function WazeDashboard() {
                       <AlertTriangle className="h-4 w-4" />
                       Understanding Alerts
                     </h3>
-                    <ul className="space-y-1 text-gray-400">
+                    <ul className="space-y-1" style={{ color: theme.textSecondary }}>
                       <li>• ⚠️ HAZARD: Road hazards reported by users</li>
                       <li>• 🚗 JAM: Traffic congestion reports</li>
                       <li>• 👮 POLICE: Police presence reports</li>
@@ -408,7 +443,7 @@ export default function WazeDashboard() {
                     </ul>
                   </div>
                 </div>
-                <div className="mt-4 pt-4 border-t border-gray-700 text-xs text-gray-500">
+                <div className="mt-4 pt-4 border-t text-xs transition-colors duration-300" style={{ borderColor: theme.border, color: theme.textMuted }}>
                   <strong>Note:</strong> This dashboard fetches publicly available data from Waze's GeoRSS feed. 
                   Select a region (Global, USA, Israel) from the dropdown to change the data source. 
                   All data is anonymous and publicly available through Waze's API.
@@ -424,13 +459,14 @@ export default function WazeDashboard() {
         {/* Map Section (2/3) */}
         <div className="w-2/3 h-full relative">
           <MapContainer
+            key={isDarkMode ? 'dark' : 'light'}
             center={[40.15, -75.22]}
             zoom={12}
             className="h-full w-full"
-            style={{ background: '#1a1a1a' }}
+            style={{ background: theme.bg }}
           >
             <TileLayer
-              url="https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png"
+              url={theme.mapTile}
               attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
             />
             <MapBoundsHandler onBoundsChange={handleBoundsChange} />
@@ -492,23 +528,23 @@ export default function WazeDashboard() {
 
           {/* Stats Overlay */}
           <div className="absolute bottom-4 left-4 flex gap-2">
-            <div className="px-3 py-2 rounded-lg" style={{ backgroundColor: 'rgba(26, 26, 26, 0.9)', border: '1px solid #333' }}>
+            <div className="px-3 py-2 rounded-lg transition-colors duration-300" style={{ backgroundColor: theme.statsOverlay, border: `1px solid ${theme.border}` }}>
               <span className="text-primary font-bold">{alerts.length}</span>
-              <span className="text-white ml-1 text-sm">alerts</span>
+              <span className="ml-1 text-sm transition-colors duration-300" style={{ color: theme.text }}>alerts</span>
             </div>
-            <div className="px-3 py-2 rounded-lg" style={{ backgroundColor: 'rgba(26, 26, 26, 0.9)', border: '1px solid #333' }}>
+            <div className="px-3 py-2 rounded-lg transition-colors duration-300" style={{ backgroundColor: theme.statsOverlay, border: `1px solid ${theme.border}` }}>
               <span className="text-primary font-bold">{uniqueUsernames.length}</span>
-              <span className="text-white ml-1 text-sm">unique users</span>
+              <span className="ml-1 text-sm transition-colors duration-300" style={{ color: theme.text }}>unique users</span>
             </div>
           </div>
         </div>
 
         {/* Sidebar (1/3) */}
-        <div className="w-1/3 h-full overflow-hidden flex flex-col border-l" style={{ borderColor: '#333', backgroundColor: '#1a1a1a' }}>
+        <div className="w-1/3 h-full overflow-hidden flex flex-col border-l transition-colors duration-300" style={{ borderColor: theme.border, backgroundColor: theme.bg }}>
           {/* User Tracking */}
-          <Card className="m-4 mb-2" style={{ backgroundColor: '#242424', borderColor: '#333' }}>
+          <Card className="m-4 mb-2 transition-colors duration-300" style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}>
             <CardHeader className="py-3">
-              <CardTitle className="text-white text-sm flex items-center gap-2">
+              <CardTitle className="text-sm flex items-center gap-2 transition-colors duration-300" style={{ color: theme.text }}>
                 <User className="h-4 w-4 text-primary" />
                 Track User Movement
               </CardTitle>
@@ -520,7 +556,7 @@ export default function WazeDashboard() {
                   value={username}
                   onChange={(e) => setUsername(e.target.value)}
                   onKeyDown={(e) => e.key === 'Enter' && handleTrackUser()}
-                  className="bg-transparent border-gray-600 text-white placeholder:text-gray-500"
+                  className={`${theme.inputBg} ${theme.inputBorder} ${theme.inputText} transition-colors duration-300`}
                   list="usernames"
                 />
                 <datalist id="usernames">
@@ -536,31 +572,31 @@ export default function WazeDashboard() {
                 </Button>
               </div>
               {trackedUser && (
-                <div className="mt-3 p-2 rounded flex items-center justify-between" style={{ backgroundColor: '#333' }}>
+                <div className="mt-3 p-2 rounded flex items-center justify-between transition-colors duration-300" style={{ backgroundColor: isDarkMode ? '#333' : '#e2e8f0' }}>
                   <div className="flex items-center gap-2">
                     <div className="w-3 h-3 rounded-full bg-red-500 animate-pulse" />
-                    <span className="text-white text-sm">Tracking: {trackedUser}</span>
-                    <span className="text-gray-400 text-xs">({trackedPath.length} points)</span>
+                    <span className="text-sm transition-colors duration-300" style={{ color: theme.text }}>Tracking: {trackedUser}</span>
+                    <span className="text-xs transition-colors duration-300" style={{ color: theme.textSecondary }}>({trackedPath.length} points)</span>
                   </div>
                   <div className="flex items-center gap-1">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white h-7 px-2">
+                        <Button variant="ghost" size="sm" className={`h-7 px-2 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}>
                           <Download className="h-3.5 w-3.5" />
                         </Button>
                       </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-                        <DropdownMenuItem onClick={handleExportTrackedCSV} className="text-white hover:bg-gray-800 cursor-pointer">
+                      <DropdownMenuContent align="end" className={`${theme.selectBg} ${theme.selectBorder} z-50`}>
+                        <DropdownMenuItem onClick={handleExportTrackedCSV} className={`${theme.selectText} ${theme.selectHover} cursor-pointer`}>
                           <FileSpreadsheet className="h-4 w-4 mr-2" />
                           Export as CSV
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={handleExportTrackedJSON} className="text-white hover:bg-gray-800 cursor-pointer">
+                        <DropdownMenuItem onClick={handleExportTrackedJSON} className={`${theme.selectText} ${theme.selectHover} cursor-pointer`}>
                           <FileJson className="h-4 w-4 mr-2" />
                           Export as JSON
                         </DropdownMenuItem>
                       </DropdownMenuContent>
                     </DropdownMenu>
-                    <Button variant="ghost" size="sm" onClick={clearTracking} className="text-gray-400 hover:text-white h-7 px-2">
+                    <Button variant="ghost" size="sm" onClick={clearTracking} className={`h-7 px-2 ${isDarkMode ? 'text-gray-400 hover:text-white' : 'text-gray-600 hover:text-gray-900'}`}>
                       Clear
                     </Button>
                   </div>
@@ -570,26 +606,26 @@ export default function WazeDashboard() {
           </Card>
 
           {/* Recent Alerts Table */}
-          <Card className="mx-4 flex-1 overflow-hidden flex flex-col" style={{ backgroundColor: '#242424', borderColor: '#333' }}>
+          <Card className="mx-4 flex-1 overflow-hidden flex flex-col transition-colors duration-300" style={{ backgroundColor: theme.cardBg, borderColor: theme.border }}>
             <CardHeader className="py-3">
               <div className="flex items-center justify-between">
-                <CardTitle className="text-white text-sm flex items-center gap-2">
+                <CardTitle className="text-sm flex items-center gap-2 transition-colors duration-300" style={{ color: theme.text }}>
                   <AlertTriangle className="h-4 w-4 text-primary" />
                   Recent Alerts (Last 50)
                 </CardTitle>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="h-7 border-gray-600 text-gray-300 hover:bg-gray-800">
+                    <Button variant="outline" size="sm" className={`h-7 ${theme.buttonOutline}`}>
                       <Download className="h-3.5 w-3.5 mr-1.5" />
                       Export All
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
-                    <DropdownMenuItem onClick={handleExportAllCSV} className="text-white hover:bg-gray-800 cursor-pointer">
+                  <DropdownMenuContent align="end" className={`${theme.selectBg} ${theme.selectBorder} z-50`}>
+                    <DropdownMenuItem onClick={handleExportAllCSV} className={`${theme.selectText} ${theme.selectHover} cursor-pointer`}>
                       <FileSpreadsheet className="h-4 w-4 mr-2" />
                       Export as CSV
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={handleExportAllJSON} className="text-white hover:bg-gray-800 cursor-pointer">
+                    <DropdownMenuItem onClick={handleExportAllJSON} className={`${theme.selectText} ${theme.selectHover} cursor-pointer`}>
                       <FileJson className="h-4 w-4 mr-2" />
                       Export as JSON
                     </DropdownMenuItem>
@@ -600,41 +636,41 @@ export default function WazeDashboard() {
             <CardContent className="flex-1 overflow-hidden p-0">
               <div className="overflow-auto h-full">
                 <Table>
-                  <TableHeader className="sticky top-0" style={{ backgroundColor: '#1a1a1a' }}>
-                    <TableRow style={{ borderColor: '#333' }}>
-                      <TableHead className="text-gray-400 text-xs">Username</TableHead>
-                      <TableHead className="text-gray-400 text-xs">Type</TableHead>
-                      <TableHead className="text-gray-400 text-xs">Time</TableHead>
-                      <TableHead className="text-gray-400 text-xs">Location</TableHead>
+                  <TableHeader className="sticky top-0 transition-colors duration-300" style={{ backgroundColor: theme.tableBg }}>
+                    <TableRow style={{ borderColor: theme.border }}>
+                      <TableHead className="text-xs transition-colors duration-300" style={{ color: theme.textSecondary }}>Username</TableHead>
+                      <TableHead className="text-xs transition-colors duration-300" style={{ color: theme.textSecondary }}>Type</TableHead>
+                      <TableHead className="text-xs transition-colors duration-300" style={{ color: theme.textSecondary }}>Time</TableHead>
+                      <TableHead className="text-xs transition-colors duration-300" style={{ color: theme.textSecondary }}>Location</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
                     {alerts.slice(0, 50).map((alert) => (
                       <TableRow
                         key={alert.id}
-                        className="cursor-pointer hover:bg-gray-800"
-                        style={{ borderColor: '#333' }}
+                        className={`cursor-pointer ${theme.hoverBg} transition-colors duration-300`}
+                        style={{ borderColor: theme.border }}
                         onClick={() => {
                           setUsername(alert.username);
                         }}
                       >
-                        <TableCell className="text-white text-xs font-medium py-2">
+                        <TableCell className="text-xs font-medium py-2 transition-colors duration-300" style={{ color: theme.text }}>
                           {alert.username}
                         </TableCell>
                         <TableCell className="text-xs py-2 text-primary">
                           {formatAlertType(alert.type, alert.subtype)}
                         </TableCell>
-                        <TableCell className="text-gray-400 text-xs py-2">
+                        <TableCell className="text-xs py-2 transition-colors duration-300" style={{ color: theme.textSecondary }}>
                           {alert.time.toLocaleTimeString()}
                         </TableCell>
-                        <TableCell className="text-gray-400 text-xs py-2 font-mono">
+                        <TableCell className="text-xs py-2 font-mono transition-colors duration-300" style={{ color: theme.textSecondary }}>
                           {alert.lat.toFixed(3)}, {alert.lon.toFixed(3)}
                         </TableCell>
                       </TableRow>
                     ))}
                     {alerts.length === 0 && (
                       <TableRow>
-                        <TableCell colSpan={4} className="text-center text-gray-500 py-8">
+                        <TableCell colSpan={4} className="text-center py-8 transition-colors duration-300" style={{ color: theme.textMuted }}>
                           {loading ? (
                             <div className="flex items-center justify-center gap-2">
                               <Loader2 className="h-4 w-4 animate-spin" />
@@ -653,7 +689,7 @@ export default function WazeDashboard() {
           </Card>
 
           {/* Footer Info */}
-          <div className="p-4 text-xs" style={{ color: '#555' }}>
+          <div className="p-4 text-xs transition-colors duration-300" style={{ color: theme.textMuted }}>
             <p>Auto-updates every 3 minutes. Data from Waze public GeoRSS feed.</p>
             <p className="mt-1">Pan/zoom the map to change coverage area.</p>
           </div>
