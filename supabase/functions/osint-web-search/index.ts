@@ -857,13 +857,14 @@ function buildDorkQueries(
     // ========== KEYWORD-ONLY SEARCHES (for company/organization mentions) ==========
     // These catch results where the target's company/org is mentioned but their name
     // might not appear in Google's snippet (e.g., pages about events they attended)
+    // PRIORITY 4: Execute LAST after name+keyword queries to prevent keyword-only pollution
     for (const keyword of keywordList.slice(0, 3)) {
-      // Keyword alone (company/organization search)
+      // Keyword alone (company/organization search) - LOW PRIORITY
       queries.push({
         query: `"${keyword}"`,
         type: 'keyword_only',
-        priority: 1,
-        category: 'keywords',
+        priority: 4, // Changed from 1 to 4 - execute last
+        category: 'keyword_mentions', // Separate category for UI filtering
         description: `Keyword-only: "${keyword}"`,
       });
       
@@ -872,8 +873,8 @@ function buildDorkQueries(
         queries.push({
           query: `"${keyword}" "${firstName}"`,
           type: 'keyword_firstname_direct',
-          priority: 1,
-          category: 'keywords',
+          priority: 3, // Changed from 1 to 3
+          category: 'keyword_mentions',
           description: `Keyword "${keyword}" + First Name "${firstName}"`,
         });
       }
@@ -883,8 +884,8 @@ function buildDorkQueries(
         queries.push({
           query: `"${keyword}" "${lastName}"`,
           type: 'keyword_lastname_direct',
-          priority: 1,
-          category: 'keywords',
+          priority: 3, // Changed from 1 to 3
+          category: 'keyword_mentions',
           description: `Keyword "${keyword}" + Last Name "${lastName}"`,
         });
       }

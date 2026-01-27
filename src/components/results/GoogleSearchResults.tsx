@@ -40,6 +40,7 @@ interface WebResultItem {
   displayLink: string;
   confidenceScore?: number;
   isExactMatch?: boolean;
+  isKeywordOnlyMatch?: boolean; // True when no name match, only keyword match
   hasLocation?: boolean;
   matchedLocation?: string;
   hasKeywords?: boolean;
@@ -83,6 +84,8 @@ const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   news: { label: 'News/Media', color: '#06b6d4' },
   people_finders: { label: 'People Finders', color: '#a855f7' },
   custom_site: { label: 'Custom Sites', color: '#84cc16' },
+  keyword_mentions: { label: 'Keyword Mentions', color: '#64748b' },
+  keywords: { label: 'Keywords', color: '#a855f7' },
 };
 
 interface GoogleSearchResultsProps {
@@ -107,6 +110,7 @@ const GoogleSearchResults = ({
   const { toast } = useToast();
   const [filter, setFilter] = useState("");
   const [showPossible, setShowPossible] = useState(true);
+  const [showKeywordMentions, setShowKeywordMentions] = useState(false);
   const [showQueries, setShowQueries] = useState(false);
   const [showChart, setShowChart] = useState(true);
   const [verifiedLinks, setVerifiedLinks] = useState<Set<string>>(new Set());
@@ -193,10 +197,22 @@ const GoogleSearchResults = ({
     });
   };
 
+  // Separate keyword-only results from possible results
+  const keywordOnlyResults = useMemo(() => 
+    possibleResults.filter(item => item.isKeywordOnlyMatch === true),
+    [possibleResults]
+  );
+  
+  const nonKeywordPossibleResults = useMemo(() => 
+    possibleResults.filter(item => item.isKeywordOnlyMatch !== true),
+    [possibleResults]
+  );
+
   const filteredConfirmed = filterByCorroboration(filterResults(confirmedResults));
-  const filteredPossible = filterResults(possibleResults);
-  const totalResults = confirmedResults.length + possibleResults.length;
-  const filteredTotal = filteredConfirmed.length + filteredPossible.length;
+  const filteredPossible = filterResults(nonKeywordPossibleResults);
+  const filteredKeywordOnly = filterResults(keywordOnlyResults);
+  const totalResults = confirmedResults.length + nonKeywordPossibleResults.length + keywordOnlyResults.length;
+  const filteredTotal = filteredConfirmed.length + filteredPossible.length + filteredKeywordOnly.length;
 
   // Combine all visible results for keyboard navigation
   const allVisibleResults = [
@@ -618,8 +634,13 @@ const GoogleSearchResults = ({
             {confirmedResults.length} confirmed
           </Badge>
           <Badge variant="outline" className="text-muted-foreground">
-            {possibleResults.length} possible
+            {nonKeywordPossibleResults.length} possible
           </Badge>
+          {keywordOnlyResults.length > 0 && (
+            <Badge variant="outline" className="text-slate-500 border-slate-300">
+              {keywordOnlyResults.length} keyword-only
+            </Badge>
+          )}
           <span className="text-xs text-muted-foreground hidden sm:inline">
             ↑↓ navigate • Enter to visit
           </span>
@@ -1065,6 +1086,36 @@ const GoogleSearchResults = ({
           {showPossible && (
             <div className="space-y-3 pl-4 opacity-90">
               {filteredPossible.map((item, idx) => renderResultItem(item, idx, false, filteredConfirmed.length + idx))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Keyword Mentions - Separate section for keyword-only results */}
+      {filteredKeywordOnly.length > 0 && (
+        <div className="space-y-3">
+          <button
+            onClick={() => setShowKeywordMentions(!showKeywordMentions)}
+            className="flex items-center gap-2 w-full text-left hover:text-primary transition-colors"
+          >
+            <Hash className="h-5 w-5 text-slate-500" />
+            <h4 className="font-medium text-slate-600 dark:text-slate-400">
+              Keyword Mentions ({filteredKeywordOnly.length})
+            </h4>
+            <span className="text-xs text-muted-foreground ml-1">— No name match, keyword only</span>
+            {showKeywordMentions ? (
+              <ChevronUp className="h-4 w-4 ml-auto text-muted-foreground" />
+            ) : (
+              <ChevronDown className="h-4 w-4 ml-auto text-muted-foreground" />
+            )}
+          </button>
+          
+          {showKeywordMentions && (
+            <div className="space-y-3 pl-4 opacity-75">
+              <p className="text-xs text-muted-foreground italic mb-2">
+                These results mention your keywords but don't contain the target's name. They may reference the organization, company, or topic without directly naming the individual.
+              </p>
+              {filteredKeywordOnly.map((item, idx) => renderResultItem(item, idx, false, filteredConfirmed.length + filteredPossible.length + idx))}
             </div>
           )}
         </div>
