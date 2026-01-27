@@ -7,7 +7,8 @@ import { Button } from '@/components/ui/button';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Loader2, MapPin, User, Clock, Navigation, AlertTriangle, RefreshCw } from 'lucide-react';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { Loader2, MapPin, User, Clock, Navigation, AlertTriangle, RefreshCw, HelpCircle, ChevronDown } from 'lucide-react';
 import { toast } from 'sonner';
 
 // Fix for default marker icons in react-leaflet
@@ -30,16 +31,16 @@ interface WazeAlert {
   street?: string;
 }
 
-// Custom orange marker icon
+// Custom blue marker icon (matches publish button)
 const alertIcon = L.divIcon({
   className: 'custom-alert-marker',
   html: `<div style="
-    background-color: #f97316;
+    background-color: #8B5CF6;
     width: 12px;
     height: 12px;
     border-radius: 50%;
     border: 2px solid #fff;
-    box-shadow: 0 0 8px rgba(249, 115, 22, 0.6);
+    box-shadow: 0 0 8px rgba(139, 92, 246, 0.6);
   "></div>`,
   iconSize: [12, 12],
   iconAnchor: [6, 6],
@@ -100,6 +101,7 @@ export default function WazeDashboard() {
   const [trackedPath, setTrackedPath] = useState<[number, number][]>([]);
   const [fitBounds, setFitBounds] = useState<L.LatLngBounds | null>(null);
   const [lastUpdate, setLastUpdate] = useState<Date | null>(null);
+  const [showHowToUse, setShowHowToUse] = useState(false);
   const boundsRef = useRef<L.LatLngBounds | null>(null);
   const alertsRef = useRef<Map<string, WazeAlert>>(new Map());
 
@@ -262,7 +264,7 @@ export default function WazeDashboard() {
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-              <Navigation className="h-7 w-7 text-orange-500" />
+              <Navigation className="h-7 w-7 text-primary" />
               Waze Surveillance Dashboard
             </h1>
             <p className="text-sm mt-1" style={{ color: '#888' }}>
@@ -280,10 +282,19 @@ export default function WazeDashboard() {
                 <SelectItem value="il" className="text-white hover:bg-gray-800">Israel</SelectItem>
               </SelectContent>
             </Select>
+            <Collapsible open={showHowToUse} onOpenChange={setShowHowToUse}>
+              <CollapsibleTrigger asChild>
+                <Button variant="outline" className="border-gray-600 text-white hover:bg-gray-800">
+                  <HelpCircle className="h-4 w-4 mr-2" />
+                  How to Use
+                  <ChevronDown className={`h-4 w-4 ml-2 transition-transform ${showHowToUse ? 'rotate-180' : ''}`} />
+                </Button>
+              </CollapsibleTrigger>
+            </Collapsible>
             <Button
               onClick={fetchAlerts}
               disabled={loading}
-              className="bg-orange-600 hover:bg-orange-700 text-white"
+              className="bg-primary hover:bg-primary/90 text-white"
             >
               {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
               <span className="ml-2">Refresh</span>
@@ -295,6 +306,60 @@ export default function WazeDashboard() {
             )}
           </div>
         </div>
+        
+        {/* How to Use Dropdown */}
+        <Collapsible open={showHowToUse} onOpenChange={setShowHowToUse}>
+          <CollapsibleContent className="mt-4">
+            <Card className="bg-gray-900 border-gray-700">
+              <CardContent className="p-4">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 text-sm text-gray-300">
+                  <div>
+                    <h3 className="font-semibold text-primary mb-2 flex items-center gap-2">
+                      <MapPin className="h-4 w-4" />
+                      Navigate the Map
+                    </h3>
+                    <ul className="space-y-1 text-gray-400">
+                      <li>• Pan and zoom to your area of interest</li>
+                      <li>• Click "Refresh" to fetch alerts for the visible area</li>
+                      <li>• Alerts auto-update every 3 minutes</li>
+                      <li>• Click any marker for detailed info</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-primary mb-2 flex items-center gap-2">
+                      <User className="h-4 w-4" />
+                      Track Users
+                    </h3>
+                    <ul className="space-y-1 text-gray-400">
+                      <li>• Enter a username in the sidebar and click "Track"</li>
+                      <li>• Red markers show tracked user's locations</li>
+                      <li>• Dashed lines connect their movement path</li>
+                      <li>• Click any table row to auto-fill the username</li>
+                    </ul>
+                  </div>
+                  <div>
+                    <h3 className="font-semibold text-primary mb-2 flex items-center gap-2">
+                      <AlertTriangle className="h-4 w-4" />
+                      Understanding Alerts
+                    </h3>
+                    <ul className="space-y-1 text-gray-400">
+                      <li>• ⚠️ HAZARD: Road hazards reported by users</li>
+                      <li>• 🚗 JAM: Traffic congestion reports</li>
+                      <li>• 👮 POLICE: Police presence reports</li>
+                      <li>• 💥 ACCIDENT: Accident reports</li>
+                      <li>• 🚧 ROAD_CLOSED: Road closures</li>
+                    </ul>
+                  </div>
+                </div>
+                <div className="mt-4 pt-4 border-t border-gray-700 text-xs text-gray-500">
+                  <strong>Note:</strong> This dashboard fetches publicly available data from Waze's GeoRSS feed. 
+                  Select a region (Global, USA, Israel) from the dropdown to change the data source. 
+                  All data is anonymous and publicly available through Waze's API.
+                </div>
+              </CardContent>
+            </Card>
+          </CollapsibleContent>
+        </Collapsible>
       </header>
 
       {/* Main Content */}
@@ -341,7 +406,7 @@ export default function WazeDashboard() {
                     )}
                     <Button
                       size="sm"
-                      className="mt-2 w-full bg-orange-500 hover:bg-orange-600 text-white"
+                      className="mt-2 w-full bg-primary hover:bg-primary/90 text-white"
                       onClick={() => {
                         setUsername(alert.username);
                         handleTrackUser();
@@ -371,11 +436,11 @@ export default function WazeDashboard() {
           {/* Stats Overlay */}
           <div className="absolute bottom-4 left-4 flex gap-2">
             <div className="px-3 py-2 rounded-lg" style={{ backgroundColor: 'rgba(26, 26, 26, 0.9)', border: '1px solid #333' }}>
-              <span className="text-orange-500 font-bold">{alerts.length}</span>
+              <span className="text-primary font-bold">{alerts.length}</span>
               <span className="text-white ml-1 text-sm">alerts</span>
             </div>
             <div className="px-3 py-2 rounded-lg" style={{ backgroundColor: 'rgba(26, 26, 26, 0.9)', border: '1px solid #333' }}>
-              <span className="text-orange-500 font-bold">{uniqueUsernames.length}</span>
+              <span className="text-primary font-bold">{uniqueUsernames.length}</span>
               <span className="text-white ml-1 text-sm">unique users</span>
             </div>
           </div>
@@ -387,7 +452,7 @@ export default function WazeDashboard() {
           <Card className="m-4 mb-2" style={{ backgroundColor: '#242424', borderColor: '#333' }}>
             <CardHeader className="py-3">
               <CardTitle className="text-white text-sm flex items-center gap-2">
-                <User className="h-4 w-4 text-orange-500" />
+                <User className="h-4 w-4 text-primary" />
                 Track User Movement
               </CardTitle>
             </CardHeader>
@@ -408,7 +473,7 @@ export default function WazeDashboard() {
                 </datalist>
                 <Button
                   onClick={handleTrackUser}
-                  className="bg-orange-600 hover:bg-orange-700 text-white"
+                  className="bg-primary hover:bg-primary/90 text-white"
                 >
                   Track
                 </Button>
@@ -432,7 +497,7 @@ export default function WazeDashboard() {
           <Card className="mx-4 flex-1 overflow-hidden flex flex-col" style={{ backgroundColor: '#242424', borderColor: '#333' }}>
             <CardHeader className="py-3">
               <CardTitle className="text-white text-sm flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-orange-500" />
+                <AlertTriangle className="h-4 w-4 text-primary" />
                 Recent Alerts (Last 50)
               </CardTitle>
             </CardHeader>
@@ -460,7 +525,7 @@ export default function WazeDashboard() {
                         <TableCell className="text-white text-xs font-medium py-2">
                           {alert.username}
                         </TableCell>
-                        <TableCell className="text-xs py-2" style={{ color: '#f97316' }}>
+                        <TableCell className="text-xs py-2 text-primary">
                           {formatAlertType(alert.type, alert.subtype)}
                         </TableCell>
                         <TableCell className="text-gray-400 text-xs py-2">
