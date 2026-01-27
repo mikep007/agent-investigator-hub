@@ -8,8 +8,21 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, MapPin, User, Clock, Navigation, AlertTriangle, RefreshCw, HelpCircle, ChevronDown } from 'lucide-react';
+import { Loader2, MapPin, User, Clock, Navigation, AlertTriangle, RefreshCw, HelpCircle, ChevronDown, Download, FileSpreadsheet, FileJson } from 'lucide-react';
 import { toast } from 'sonner';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  exportTrackedUserToCSV,
+  exportTrackedUserToJSON,
+  exportAllAlertsToCSV,
+  exportAllAlertsToJSON,
+} from '@/utils/wazeExport';
 
 // Fix for default marker icons in react-leaflet
 delete (L.Icon.Default.prototype as any)._getIconUrl;
@@ -242,6 +255,50 @@ export default function WazeDashboard() {
     setFitBounds(null);
     setUsername('');
   }, []);
+
+  const handleExportTrackedCSV = useCallback(() => {
+    if (!trackedUser) {
+      toast.error('No user being tracked');
+      return;
+    }
+    try {
+      exportTrackedUserToCSV(trackedUser, alerts);
+      toast.success(`Exported ${trackedPath.length} movement points to CSV`);
+    } catch (error) {
+      toast.error('No data to export');
+    }
+  }, [trackedUser, alerts, trackedPath.length]);
+
+  const handleExportTrackedJSON = useCallback(() => {
+    if (!trackedUser) {
+      toast.error('No user being tracked');
+      return;
+    }
+    try {
+      exportTrackedUserToJSON(trackedUser, alerts);
+      toast.success(`Exported ${trackedPath.length} movement points to JSON`);
+    } catch (error) {
+      toast.error('No data to export');
+    }
+  }, [trackedUser, alerts, trackedPath.length]);
+
+  const handleExportAllCSV = useCallback(() => {
+    try {
+      exportAllAlertsToCSV(alerts);
+      toast.success(`Exported ${alerts.length} alerts to CSV`);
+    } catch (error) {
+      toast.error('No data to export');
+    }
+  }, [alerts]);
+
+  const handleExportAllJSON = useCallback(() => {
+    try {
+      exportAllAlertsToJSON(alerts);
+      toast.success(`Exported ${alerts.length} alerts to JSON`);
+    } catch (error) {
+      toast.error('No data to export');
+    }
+  }, [alerts]);
 
   const formatAlertType = (type: string, subtype: string) => {
     const displayType = subtype || type;
@@ -485,9 +542,28 @@ export default function WazeDashboard() {
                     <span className="text-white text-sm">Tracking: {trackedUser}</span>
                     <span className="text-gray-400 text-xs">({trackedPath.length} points)</span>
                   </div>
-                  <Button variant="ghost" size="sm" onClick={clearTracking} className="text-gray-400 hover:text-white">
-                    Clear
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="sm" className="text-gray-400 hover:text-white h-7 px-2">
+                          <Download className="h-3.5 w-3.5" />
+                        </Button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                        <DropdownMenuItem onClick={handleExportTrackedCSV} className="text-white hover:bg-gray-800 cursor-pointer">
+                          <FileSpreadsheet className="h-4 w-4 mr-2" />
+                          Export as CSV
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={handleExportTrackedJSON} className="text-white hover:bg-gray-800 cursor-pointer">
+                          <FileJson className="h-4 w-4 mr-2" />
+                          Export as JSON
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                    <Button variant="ghost" size="sm" onClick={clearTracking} className="text-gray-400 hover:text-white h-7 px-2">
+                      Clear
+                    </Button>
+                  </div>
                 </div>
               )}
             </CardContent>
@@ -496,10 +572,30 @@ export default function WazeDashboard() {
           {/* Recent Alerts Table */}
           <Card className="mx-4 flex-1 overflow-hidden flex flex-col" style={{ backgroundColor: '#242424', borderColor: '#333' }}>
             <CardHeader className="py-3">
-              <CardTitle className="text-white text-sm flex items-center gap-2">
-                <AlertTriangle className="h-4 w-4 text-primary" />
-                Recent Alerts (Last 50)
-              </CardTitle>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white text-sm flex items-center gap-2">
+                  <AlertTriangle className="h-4 w-4 text-primary" />
+                  Recent Alerts (Last 50)
+                </CardTitle>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="h-7 border-gray-600 text-gray-300 hover:bg-gray-800">
+                      <Download className="h-3.5 w-3.5 mr-1.5" />
+                      Export All
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="bg-gray-900 border-gray-700">
+                    <DropdownMenuItem onClick={handleExportAllCSV} className="text-white hover:bg-gray-800 cursor-pointer">
+                      <FileSpreadsheet className="h-4 w-4 mr-2" />
+                      Export as CSV
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={handleExportAllJSON} className="text-white hover:bg-gray-800 cursor-pointer">
+                      <FileJson className="h-4 w-4 mr-2" />
+                      Export as JSON
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </CardHeader>
             <CardContent className="flex-1 overflow-hidden p-0">
               <div className="overflow-auto h-full">
