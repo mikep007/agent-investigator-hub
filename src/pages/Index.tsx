@@ -4,7 +4,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Brain, Network, LogOut, FileText, Activity, CheckCircle2, Search, GitCompare, FolderOpen, Share2, Clock, Save, ArrowRight, X, Fingerprint } from "lucide-react";
+import { Brain, Network, LogOut, FileText, Activity, CheckCircle2, Search, GitCompare, FolderOpen, Share2, Clock, Save, ArrowRight, X, Fingerprint, Navigation } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import {
@@ -410,6 +410,15 @@ const Index = () => {
                     </Button>
                   </TooltipTrigger>
                   <TooltipContent>Monitor subjects for data breaches</TooltipContent>
+                </Tooltip>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button variant="outline" size="sm" onClick={() => navigate('/waze')}>
+                      <Navigation className="w-4 h-4 mr-2" />
+                      Waze Tracker
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>Real-time Waze surveillance dashboard</TooltipContent>
                 </Tooltip>
                 <Tooltip>
                   <TooltipTrigger asChild>
