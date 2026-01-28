@@ -12,7 +12,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle, Info, Building2, ClipboardPaste, X, Plus, Users } from "lucide-react";
+import { Search, Activity, User, Mail, Phone, MapPin, Tag, CheckCircle2, XCircle, Info, Building2, ClipboardPaste, X, Plus, Users, Brain } from "lucide-react";
+import BooleanQuerySearch from "./BooleanQuerySearch";
 import { useToast } from "@/hooks/use-toast";
 import { SearchHelpModal } from "./SearchHelpModal";
 import AddressAutocomplete from "./AddressAutocomplete";
@@ -39,7 +40,7 @@ const US_STATES = [
   { code: "WI", name: "Wisconsin" }, { code: "WY", name: "Wyoming" }, { code: "DC", name: "Washington D.C." },
 ];
 
-type SearchMode = 'comprehensive' | 'location_only';
+type SearchMode = 'comprehensive' | 'location_only' | 'boolean_query';
 
 interface SearchData {
   fullName?: string;
@@ -414,13 +415,15 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
             <div className="flex items-center justify-between mb-2">
               <h2 className="text-xl font-bold flex items-center gap-2">
                 <Search className="w-5 h-5 text-primary" />
-                {searchMode === 'location_only' ? 'Location Search' : 'Comprehensive Person Investigation'}
+                {searchMode === 'location_only' ? 'Location Search' : searchMode === 'boolean_query' ? 'AI Boolean Query Search' : 'Comprehensive Person Investigation'}
               </h2>
               <SearchHelpModal />
             </div>
             <p className="text-sm text-muted-foreground">
               {searchMode === 'location_only' 
                 ? 'Search by city and state when you only know the location.'
+                : searchMode === 'boolean_query'
+                ? 'Use boolean operators (AND, OR, NOT) with AI-powered entity resolution and insights.'
                 : 'Enter at least one search parameter. More data points = higher accuracy and confidence scores.'}
             </p>
           </div>
@@ -442,6 +445,12 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
               <SelectContent className="bg-background border border-border z-50">
                 <SelectItem value="comprehensive">Full Investigation (Person Search)</SelectItem>
                 <SelectItem value="location_only">Location Only (City & State)</SelectItem>
+                <SelectItem value="boolean_query">
+                  <div className="flex items-center gap-2">
+                    <Brain className="w-4 h-4 text-primary" />
+                    AI Boolean Query (Advanced)
+                  </div>
+                </SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -516,6 +525,31 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
                 />
               </div>
             </div>
+          )}
+
+          {/* Boolean Query Mode */}
+          {searchMode === 'boolean_query' && (
+            <BooleanQuerySearch
+              onExecuteSearch={(params) => {
+                // Store the parsed query for insights generation
+                const enrichedParams = {
+                  fullName: params.fullName || '',
+                  address: params.address || '',
+                  email: params.email || '',
+                  phone: params.phone || '',
+                  username: params.username || '',
+                  keywords: params.keywords || '',
+                  city: '',
+                  state: '',
+                  knownRelatives: '',
+                  // Include parsed query metadata for AI insights
+                  _parsedQuery: params.parsedQuery,
+                  _excludeTerms: params.excludeTerms,
+                };
+                onStartInvestigation(enrichedParams);
+              }}
+              loading={loading}
+            />
           )}
 
           {/* Comprehensive Mode Fields */}
@@ -849,28 +883,33 @@ const ComprehensiveSearchForm = ({ onStartInvestigation, loading, pivotData, onP
           </div>
           )}
 
-          <Button
-            onClick={validateAndSubmit}
-            disabled={loading}
-            className="w-full cyber-glow"
-            size="lg"
-          >
-            {loading ? (
-              <>
-                <Activity className="w-4 h-4 mr-2 animate-spin" />
-                {searchMode === 'location_only' ? 'Searching Location...' : 'Investigating...'}
-              </>
-            ) : (
-              <>
-                <Search className="w-4 h-4 mr-2" />
-                {searchMode === 'location_only' ? 'Search Location' : 'Start Comprehensive Investigation'}
-              </>
-            )}
-          </Button>
+          {/* Only show button for non-boolean modes (boolean mode has its own button) */}
+          {searchMode !== 'boolean_query' && (
+            <>
+              <Button
+                onClick={validateAndSubmit}
+                disabled={loading}
+                className="w-full cyber-glow"
+                size="lg"
+              >
+                {loading ? (
+                  <>
+                    <Activity className="w-4 h-4 mr-2 animate-spin" />
+                    {searchMode === 'location_only' ? 'Searching Location...' : 'Investigating...'}
+                  </>
+                ) : (
+                  <>
+                    <Search className="w-4 h-4 mr-2" />
+                    {searchMode === 'location_only' ? 'Search Location' : 'Start Comprehensive Investigation'}
+                  </>
+                )}
+              </Button>
 
-          <div className="text-xs text-muted-foreground text-center">
-            <span className="text-destructive">*</span> Required field • All other fields optional but recommended for better accuracy
-          </div>
+              <div className="text-xs text-muted-foreground text-center">
+                <span className="text-destructive">*</span> Required field • All other fields optional but recommended for better accuracy
+              </div>
+            </>
+          )}
         </div>
       </TooltipProvider>
     </Card>

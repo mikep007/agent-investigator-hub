@@ -116,3 +116,9 @@ verify_jwt = true
 
 [functions.osint-pa-voter-lookup]
 verify_jwt = true
+
+[functions.osint-boolean-query-parser]
+verify_jwt = true
+
+[functions.osint-ai-insights]
+verify_jwt = true
