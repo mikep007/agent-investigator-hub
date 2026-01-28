@@ -6,6 +6,13 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+interface GeneratedQuery {
+  query: string;
+  priority: number;
+  totalValue: number;
+  template: string;
+}
+
 interface SearchData {
   fullName?: string;
   address?: string;
@@ -14,6 +21,12 @@ interface SearchData {
   username?: string;
   keywords?: string;
   knownRelatives?: string;
+  city?: string;
+  state?: string;
+  // Boolean query data
+  _parsedQuery?: any;
+  _excludeTerms?: string[];
+  _generatedQueries?: GeneratedQuery[];
 }
 
 Deno.serve(async (req) => {
@@ -70,28 +83,61 @@ Deno.serve(async (req) => {
     const searchPromises: Promise<any>[] = [];
     const searchTypes: string[] = [];
 
+    // Check for generated queries from boolean parser (hybrid mode)
+    const generatedQueries: GeneratedQuery[] = searchData._generatedQueries || [];
+    const hasGeneratedQueries = generatedQueries.length > 0;
+    
+    if (hasGeneratedQueries) {
+      console.log(`Using ${generatedQueries.length} AI-generated prioritized queries`);
+    }
+
     // Parse keywords for matching
     const keywords = searchData.keywords 
       ? searchData.keywords.split(',').map(k => k.trim().toLowerCase()).filter(k => k.length > 0)
       : [];
 
-    // Always run web search if we have full name or keywords
-    if (searchData.fullName || keywords.length > 0) {
-      const webSearchQuery = searchData.fullName
-        ? (keywords.length > 0 
-            ? `${searchData.fullName} ${keywords.join(' ')}`
-            : searchData.fullName)
-        : keywords.join(' ');
+    // If we have generated queries from boolean parser, use top priority ones for web search
+    if (hasGeneratedQueries) {
+      // Select top 10 highest value queries for parallel execution
+      const topQueries = generatedQueries
+        .sort((a, b) => b.totalValue - a.totalValue)
+        .slice(0, 10);
       
-      searchPromises.push(
-        supabaseClient.functions.invoke('osint-web-search', {
-          body: { 
-            target: webSearchQuery,
-            searchData: searchData // Pass full context for Google Dork enhancement
-          }
-        })
-      );
-      searchTypes.push('web');
+      console.log(`Executing top ${topQueries.length} prioritized queries`);
+      
+      // Execute each generated query as a separate web search
+      for (const gq of topQueries) {
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-web-search', {
+            body: { 
+              target: gq.query,
+              searchData: searchData,
+              priority: gq.priority,
+              templateSource: gq.template,
+            }
+          })
+        );
+        searchTypes.push(`web_generated_p${gq.priority}`);
+      }
+    } else {
+      // Fall back to standard web search if no generated queries
+      if (searchData.fullName || keywords.length > 0) {
+        const webSearchQuery = searchData.fullName
+          ? (keywords.length > 0 
+              ? `${searchData.fullName} ${keywords.join(' ')}`
+              : searchData.fullName)
+          : keywords.join(' ');
+        
+        searchPromises.push(
+          supabaseClient.functions.invoke('osint-web-search', {
+            body: { 
+              target: webSearchQuery,
+              searchData: searchData // Pass full context for Google Dork enhancement
+            }
+          })
+        );
+        searchTypes.push('web');
+      }
     }
 
     // People search for structured data (phones, emails, addresses, relatives)
