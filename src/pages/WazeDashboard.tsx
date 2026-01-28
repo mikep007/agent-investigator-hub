@@ -221,49 +221,85 @@ export default function WazeDashboard() {
     });
 
     const wazeUrl = `https://www.waze.com/${server}-rtserver/web/TGeoRSS?${params.toString()}`;
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(wazeUrl)}`;
+    
+    // List of CORS proxies to try (in order of preference)
+    const corsProxies = [
+      (url: string) => `https://corsproxy.io/?${encodeURIComponent(url)}`,
+      (url: string) => `https://api.codetabs.com/v1/proxy?quest=${encodeURIComponent(url)}`,
+      (url: string) => `https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`,
+      (url: string) => `https://thingproxy.freeboard.io/fetch/${url}`,
+    ];
 
-    try {
-      console.log('[Waze] Fetching from proxy:', proxyUrl);
-      const response = await fetch(proxyUrl);
-      if (!response.ok) {
-        console.error('[Waze] Response not OK:', response.status, response.statusText);
-        throw new Error(`Failed to fetch alerts: ${response.status}`);
-      }
-      
-      const text = await response.text();
-      console.log('[Waze] Response length:', text.length, 'chars');
-      
-      const newAlerts = parseWazeXml(text);
-      console.log('[Waze] Parsed alerts:', newAlerts.length);
+    let lastError: Error | null = null;
+    let successfulProxy = '';
 
-      // Deduplicate and merge with existing alerts
-      newAlerts.forEach(alert => {
-        if (!alertsRef.current.has(alert.id)) {
-          alertsRef.current.set(alert.id, alert);
+    for (let i = 0; i < corsProxies.length; i++) {
+      const proxyUrl = corsProxies[i](wazeUrl);
+      console.log(`[Waze] Trying proxy ${i + 1}/${corsProxies.length}:`, proxyUrl);
+      
+      try {
+        const response = await fetch(proxyUrl, {
+          headers: {
+            'Accept': 'application/xml, text/xml, */*',
+          },
+        });
+        
+        if (!response.ok) {
+          console.warn(`[Waze] Proxy ${i + 1} returned status:`, response.status);
+          lastError = new Error(`Proxy returned ${response.status}`);
+          continue;
         }
-      });
+        
+        const text = await response.text();
+        console.log(`[Waze] Proxy ${i + 1} response length:`, text.length, 'chars');
+        
+        // Check if the response is actually XML and not an error page
+        if (text.includes('<!DOCTYPE html>') || text.includes('<html>') || text.includes('404 Not Found')) {
+          console.warn(`[Waze] Proxy ${i + 1} returned HTML error page instead of XML`);
+          lastError = new Error('Received HTML instead of XML');
+          continue;
+        }
+        
+        const newAlerts = parseWazeXml(text);
+        console.log(`[Waze] Proxy ${i + 1} parsed alerts:`, newAlerts.length);
+        successfulProxy = proxyUrl.split('?')[0].split('/').slice(0, 3).join('/');
 
-      // Keep only last 500 alerts to prevent memory issues
-      const allAlerts = Array.from(alertsRef.current.values())
-        .sort((a, b) => b.time.getTime() - a.time.getTime())
-        .slice(0, 500);
+        // Deduplicate and merge with existing alerts
+        newAlerts.forEach(alert => {
+          if (!alertsRef.current.has(alert.id)) {
+            alertsRef.current.set(alert.id, alert);
+          }
+        });
 
-      alertsRef.current = new Map(allAlerts.map(a => [a.id, a]));
-      setAlerts(allAlerts);
-      setLastUpdate(new Date());
-      
-      if (newAlerts.length > 0) {
-        toast.success(`Fetched ${newAlerts.length} new alerts`);
-      } else {
-        toast.info('No alerts found in this area. Try zooming out or panning to a populated area.');
+        // Keep only last 500 alerts to prevent memory issues
+        const allAlerts = Array.from(alertsRef.current.values())
+          .sort((a, b) => b.time.getTime() - a.time.getTime())
+          .slice(0, 500);
+
+        alertsRef.current = new Map(allAlerts.map(a => [a.id, a]));
+        setAlerts(allAlerts);
+        setLastUpdate(new Date());
+        
+        if (newAlerts.length > 0) {
+          toast.success(`Fetched ${newAlerts.length} alerts via ${successfulProxy}`);
+        } else {
+          toast.info('No alerts in this area. Try zooming out or panning to a major city.');
+        }
+        
+        setLoading(false);
+        return; // Success! Exit the function
+        
+      } catch (error) {
+        console.warn(`[Waze] Proxy ${i + 1} failed:`, error);
+        lastError = error instanceof Error ? error : new Error(String(error));
+        continue; // Try next proxy
       }
-    } catch (error) {
-      console.error('[Waze] Error fetching alerts:', error);
-      toast.error('Failed to fetch Waze alerts. Try refreshing or check console for details.');
-    } finally {
-      setLoading(false);
     }
+
+    // All proxies failed
+    console.error('[Waze] All proxies failed. Last error:', lastError);
+    toast.error('All CORS proxies failed. Waze may be blocking requests or the endpoint has changed.');
+    setLoading(false);
   }, [server, parseWazeXml]);
 
   // Auto-update every 3 minutes
