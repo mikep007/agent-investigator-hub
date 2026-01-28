@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap, useMapEvents } from 'react-leaflet';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { Loader2, MapPin, User, Clock, Navigation, AlertTriangle, RefreshCw, HelpCircle, ChevronDown, Download, FileSpreadsheet, FileJson, Sun, Moon, Flame, CircleDot } from 'lucide-react';
+import { Loader2, MapPin, User, Clock, Navigation, AlertTriangle, RefreshCw, HelpCircle, ChevronDown, Download, FileSpreadsheet, FileJson, Sun, Moon, Flame, CircleDot, Filter } from 'lucide-react';
 import { toast } from 'sonner';
 import {
   DropdownMenu,
@@ -155,6 +155,7 @@ export default function WazeDashboard() {
   const [showHowToUse, setShowHowToUse] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(true);
   const [viewMode, setViewMode] = useState<'markers' | 'heatmap'>('markers');
+  const [timeFilter, setTimeFilter] = useState<'all' | '1h' | '6h' | '24h'>('all');
   const boundsRef = useRef<L.LatLngBounds | null>(null);
   const alertsRef = useRef<Map<string, WazeAlert>>(new Map());
 
@@ -351,11 +352,25 @@ export default function WazeDashboard() {
       .replace(/ROAD_CLOSED/g, '🚧');
   };
 
-  // Get unique usernames for autocomplete
-  const uniqueUsernames = [...new Set(alerts.filter(a => a.username !== 'Anonymous').map(a => a.username))];
+  // Filter alerts by time range
+  const filteredAlerts = useMemo(() => {
+    if (timeFilter === 'all') return alerts;
+    
+    const now = Date.now();
+    const filterMs = {
+      '1h': 60 * 60 * 1000,
+      '6h': 6 * 60 * 60 * 1000,
+      '24h': 24 * 60 * 60 * 1000,
+    }[timeFilter];
+    
+    return alerts.filter(alert => now - alert.time.getTime() < filterMs);
+  }, [alerts, timeFilter]);
 
-  // Calculate heatmap points from alerts
-  const heatmapPoints: [number, number, number][] = alerts.map(alert => [
+  // Get unique usernames for autocomplete (from filtered alerts)
+  const uniqueUsernames: string[] = [...new Set(filteredAlerts.filter(a => a.username !== 'Anonymous').map(a => a.username))];
+
+  // Calculate heatmap points from filtered alerts
+  const heatmapPoints: [number, number, number][] = filteredAlerts.map(alert => [
     alert.lat,
     alert.lon,
     0.5 // intensity value
@@ -524,7 +539,7 @@ export default function WazeDashboard() {
             )}
 
             {/* Alert Markers - only show in markers mode or for tracked user */}
-            {viewMode === 'markers' && alerts.map((alert) => (
+            {viewMode === 'markers' && filteredAlerts.map((alert) => (
               <Marker
                 key={alert.id}
                 position={[alert.lat, alert.lon]}
@@ -564,7 +579,7 @@ export default function WazeDashboard() {
             ))}
 
             {/* Tracked User Markers - always show when tracking in heatmap mode */}
-            {viewMode === 'heatmap' && trackedUser && alerts
+            {viewMode === 'heatmap' && trackedUser && filteredAlerts
               .filter(a => a.username.toLowerCase() === trackedUser.toLowerCase())
               .map((alert) => (
                 <Marker
@@ -606,8 +621,13 @@ export default function WazeDashboard() {
           {/* Stats Overlay */}
           <div className="absolute bottom-4 left-4 flex gap-2">
             <div className="px-3 py-2 rounded-lg transition-colors duration-300" style={{ backgroundColor: theme.statsOverlay, border: `1px solid ${theme.border}` }}>
-              <span className="text-primary font-bold">{alerts.length}</span>
+              <span className="text-primary font-bold">{filteredAlerts.length}</span>
               <span className="ml-1 text-sm transition-colors duration-300" style={{ color: theme.text }}>alerts</span>
+              {timeFilter !== 'all' && (
+                <span className="ml-1 text-xs transition-colors duration-300" style={{ color: theme.textMuted }}>
+                  (of {alerts.length})
+                </span>
+              )}
             </div>
             <div className="px-3 py-2 rounded-lg transition-colors duration-300" style={{ backgroundColor: theme.statsOverlay, border: `1px solid ${theme.border}` }}>
               <span className="text-primary font-bold">{uniqueUsernames.length}</span>
@@ -615,8 +635,9 @@ export default function WazeDashboard() {
             </div>
           </div>
 
-          {/* View Mode Toggle */}
-          <div className="absolute top-4 right-4">
+          {/* Map Controls */}
+          <div className="absolute top-4 right-4 flex flex-col gap-2">
+            {/* View Mode Toggle */}
             <div className="rounded-lg p-1 transition-colors duration-300" style={{ backgroundColor: theme.statsOverlay, border: `1px solid ${theme.border}` }}>
               <ToggleGroup type="single" value={viewMode} onValueChange={(value) => value && setViewMode(value as 'markers' | 'heatmap')}>
                 <ToggleGroupItem 
@@ -644,6 +665,24 @@ export default function WazeDashboard() {
                   Heatmap
                 </ToggleGroupItem>
               </ToggleGroup>
+            </div>
+
+            {/* Time Filter */}
+            <div className="rounded-lg p-1 transition-colors duration-300" style={{ backgroundColor: theme.statsOverlay, border: `1px solid ${theme.border}` }}>
+              <div className="flex items-center gap-1 px-2 py-1">
+                <Clock className="h-3.5 w-3.5 transition-colors" style={{ color: theme.textSecondary }} />
+                <Select value={timeFilter} onValueChange={(v) => setTimeFilter(v as 'all' | '1h' | '6h' | '24h')}>
+                  <SelectTrigger className={`h-7 w-24 text-xs border-0 ${theme.inputBg} transition-colors`} style={{ color: theme.text }}>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className={`${theme.selectBg} ${theme.selectBorder} z-50`}>
+                    <SelectItem value="all" className={`text-xs ${theme.selectText} ${theme.selectHover}`}>All Time</SelectItem>
+                    <SelectItem value="1h" className={`text-xs ${theme.selectText} ${theme.selectHover}`}>Last Hour</SelectItem>
+                    <SelectItem value="6h" className={`text-xs ${theme.selectText} ${theme.selectHover}`}>Last 6 Hours</SelectItem>
+                    <SelectItem value="24h" className={`text-xs ${theme.selectText} ${theme.selectHover}`}>Last 24 Hours</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
         </div>
@@ -720,7 +759,11 @@ export default function WazeDashboard() {
               <div className="flex items-center justify-between">
                 <CardTitle className="text-sm flex items-center gap-2 transition-colors duration-300" style={{ color: theme.text }}>
                   <AlertTriangle className="h-4 w-4 text-primary" />
-                  Recent Alerts (Last 50)
+                  Recent Alerts
+                  <span className="text-xs font-normal transition-colors duration-300" style={{ color: theme.textSecondary }}>
+                    ({filteredAlerts.length > 50 ? '50 of ' + filteredAlerts.length : filteredAlerts.length}
+                    {timeFilter !== 'all' && ` • ${timeFilter === '1h' ? 'Last Hour' : timeFilter === '6h' ? 'Last 6 Hours' : 'Last 24 Hours'}`})
+                  </span>
                 </CardTitle>
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
@@ -754,7 +797,7 @@ export default function WazeDashboard() {
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {alerts.slice(0, 50).map((alert) => (
+                    {filteredAlerts.slice(0, 50).map((alert) => (
                       <TableRow
                         key={alert.id}
                         className={`cursor-pointer ${theme.hoverBg} transition-colors duration-300`}
@@ -777,7 +820,7 @@ export default function WazeDashboard() {
                         </TableCell>
                       </TableRow>
                     ))}
-                    {alerts.length === 0 && (
+                    {filteredAlerts.length === 0 && (
                       <TableRow>
                         <TableCell colSpan={4} className="text-center py-8 transition-colors duration-300" style={{ color: theme.textMuted }}>
                           {loading ? (
@@ -785,6 +828,8 @@ export default function WazeDashboard() {
                               <Loader2 className="h-4 w-4 animate-spin" />
                               Loading alerts...
                             </div>
+                          ) : alerts.length > 0 && filteredAlerts.length === 0 ? (
+                            `No alerts in the selected time range. Try "All Time" or refresh.`
                           ) : (
                             'No alerts yet. Pan the map and click Refresh.'
                           )}
