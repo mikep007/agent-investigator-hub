@@ -30,21 +30,19 @@ const RelatedPersonsCard = ({
   onPivot
 }: RelatedPersonsCardProps) => {
   
-  // Extract confirmed relatives ONLY from verified OSINT data sources
-  // NOT from web search results which may be unreliable
+  // Extract confirmed relatives from verified OSINT data sources
+  // Web-discovered relatives from obituaries are shown separately for review
   const extractConfirmedRelatives = (): PersonCategory[] => {
     const confirmed: PersonCategory[] = [];
     
     findings.forEach(finding => {
-      // ONLY accept relatives from People_search findings (actual people databases)
-      // These come from sources like FamilyTreeNow, Whitepages, etc. that have structured data
+      // Accept relatives from People_search findings (actual people databases)
       if (finding.agent_type === 'People_search' && finding.data?.results) {
         finding.data.results.forEach((result: any) => {
           if (result.relatives && Array.isArray(result.relatives)) {
             result.relatives.forEach((rel: any) => {
               const name = typeof rel === 'string' ? rel : rel.name;
               const relationship = typeof rel === 'object' ? rel.relationship : undefined;
-              // Only add if we have a valid name and it's not already in the list
               if (name && 
                   name.trim().length > 2 && 
                   !confirmed.find(c => c.name.toLowerCase() === name.toLowerCase())) {
@@ -60,7 +58,7 @@ const RelatedPersonsCard = ({
         });
       }
 
-      // Accept relatives from FamilyTreeNow enrichment (graph-person, enrich-familytreenow)
+      // Accept relatives from FamilyTreeNow enrichment
       if (finding.agent_type === 'FamilyTreeNow' && finding.data?.relatives) {
         finding.data.relatives.forEach((rel: any) => {
           const name = rel.person?.name 
@@ -80,13 +78,12 @@ const RelatedPersonsCard = ({
         });
       }
 
-      // Extract from Power Automate Global Findings - possible names/aliases
+      // Extract from Power Automate Global Findings
       if (finding.agent_type === 'Power_automate') {
         const powerData = finding.data?.data || finding.data;
         const persons = powerData?.persons || [];
         
         persons.forEach((person: any) => {
-          // Extract possible names as associates (aliases, not confirmed relatives)
           if (person.aliases && Array.isArray(person.aliases)) {
             person.aliases.forEach((alias: string) => {
               if (alias && 
@@ -103,15 +100,66 @@ const RelatedPersonsCard = ({
           }
         });
       }
-
-      // NOTE: We intentionally do NOT treat web-derived "discoveredRelatives" as confirmed.
-      // Web snippets (obituaries, directories, scraped pages) frequently list same-surname names
-      // that are not actually related to the target person, so including them here causes
-      // "unknown relatives" to show up as Confirmed.
-      // If we want to surface these later, they should be shown in a separate "Needs review" section.
     });
 
     return confirmed;
+  };
+
+  // Extract relatives discovered from web search (obituaries, memorials, etc.)
+  // These require manual review before treating as confirmed
+  const extractWebDiscoveredRelatives = (): PersonCategory[] => {
+    const discovered: PersonCategory[] = [];
+    const seenNames = new Set<string>();
+    
+    findings.forEach(finding => {
+      // Web search findings contain discoveredRelatives from obituaries
+      if (finding.agent_type === 'Web' && finding.data?.discoveredRelatives) {
+        const relatives = finding.data.discoveredRelatives;
+        if (Array.isArray(relatives)) {
+          relatives.forEach((rel: any) => {
+            const name = typeof rel === 'string' ? rel : rel.name;
+            const relationship = typeof rel === 'object' ? rel.relationship : undefined;
+            const nameLower = name?.toLowerCase()?.trim();
+            
+            if (name && 
+                name.trim().length > 2 && 
+                !seenNames.has(nameLower)) {
+              seenNames.add(nameLower);
+              discovered.push({
+                name: name.trim(),
+                source: 'keyword' as const, // Using keyword style for visual distinction
+                relationship: relationship || 'From obituary/memorial',
+                confidence: 0.6
+              });
+            }
+          });
+        }
+      }
+      
+      // Also check individual web results that found relatives
+      if (finding.agent_type === 'Web' && finding.data?.confirmedItems) {
+        finding.data.confirmedItems.forEach((item: any) => {
+          if (item.foundRelatives && Array.isArray(item.foundRelatives)) {
+            item.foundRelatives.forEach((rel: string) => {
+              const nameLower = rel?.toLowerCase()?.trim();
+              if (rel && 
+                  rel.trim().length > 2 && 
+                  !seenNames.has(nameLower)) {
+                seenNames.add(nameLower);
+                discovered.push({
+                  name: rel.trim(),
+                  source: 'keyword' as const,
+                  relationship: `Found in: ${item.displayLink || 'web result'}`,
+                  confidence: item.confidenceScore || 0.5
+                });
+              }
+            });
+          }
+        });
+      }
+    });
+
+    return discovered;
   };
 
   // Process input keywords as associates
@@ -139,10 +187,18 @@ const RelatedPersonsCard = ({
   };
 
   const confirmedRelatives = extractConfirmedRelatives();
+  const webDiscoveredRelatives = extractWebDiscoveredRelatives();
   const keywordAssociates = processKeywordAssociates();
   const aiSuggested = processAISuggestions();
+  
+  // Dedupe web-discovered against confirmed and keywords
+  const confirmedNames = new Set(confirmedRelatives.map(r => r.name.toLowerCase()));
+  const keywordNames = new Set(keywordAssociates.map(r => r.name.toLowerCase()));
+  const filteredWebDiscovered = webDiscoveredRelatives.filter(
+    r => !confirmedNames.has(r.name.toLowerCase()) && !keywordNames.has(r.name.toLowerCase())
+  );
 
-  const totalCount = confirmedRelatives.length + keywordAssociates.length + aiSuggested.length;
+  const totalCount = confirmedRelatives.length + filteredWebDiscovered.length + keywordAssociates.length + aiSuggested.length;
 
   if (totalCount === 0) {
     return (
@@ -180,7 +236,21 @@ const RelatedPersonsCard = ({
                 </div>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Found in data sources like people search databases</p>
+                <p>Found in people search databases</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+          
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <div className="flex items-center gap-1 cursor-help">
+                  <Users className="h-3 w-3 text-orange-600" />
+                  <span>Obituaries</span>
+                </div>
+              </TooltipTrigger>
+              <TooltipContent>
+                <p>Names from obituaries/memorial pages (verify relationship)</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -263,6 +333,74 @@ const RelatedPersonsCard = ({
                           <p className="text-primary flex items-center gap-1 mt-1">
                             <Search className="h-3 w-3" />
                             Click search icon to investigate
+                          </p>
+                        </div>
+                      </TooltipContent>
+                    </Tooltip>
+                  </TooltipProvider>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Web-Discovered Relatives - Orange section (from obituaries, memorials) */}
+        {filteredWebDiscovered.length > 0 && (
+          <div className="space-y-2">
+            <div className="flex items-center gap-2">
+              <Users className="h-4 w-4 text-orange-600" />
+              <span className="text-sm font-medium text-orange-700">
+                From Obituaries/Memorials ({filteredWebDiscovered.length})
+              </span>
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <HelpCircle className="h-3 w-3 text-muted-foreground cursor-help" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    <p className="max-w-xs text-xs">Names extracted from obituaries and memorial pages. These are likely relatives but should be verified.</p>
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+            </div>
+            <div className="rounded-lg border border-orange-200 bg-orange-50/50 p-3">
+              <div className="flex flex-wrap gap-2">
+                {filteredWebDiscovered.map((person, idx) => (
+                  <TooltipProvider key={idx}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div className="flex items-center gap-1">
+                          <Badge 
+                            variant="outline" 
+                            className="bg-white border-orange-300 text-orange-800 hover:bg-orange-100 cursor-pointer transition-colors"
+                          >
+                            <Users className="h-3 w-3 mr-1 text-orange-600" />
+                            {person.name}
+                          </Badge>
+                          {onPivot && (
+                            <Button
+                              size="sm"
+                              variant="ghost"
+                              className="h-6 w-6 p-0 hover:bg-orange-100"
+                              onClick={() => onPivot('name', person.name)}
+                            >
+                              <Search className="h-3 w-3 text-orange-600" />
+                            </Button>
+                          )}
+                        </div>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <div className="text-xs space-y-1">
+                          <p className="font-semibold">{person.name}</p>
+                          {person.relationship && (
+                            <p className="text-muted-foreground">{person.relationship}</p>
+                          )}
+                          <p className="text-orange-600">
+                            Needs verification
+                          </p>
+                          <p className="text-primary flex items-center gap-1 mt-1">
+                            <Search className="h-3 w-3" />
+                            Click to investigate
                           </p>
                         </div>
                       </TooltipContent>
@@ -397,9 +535,10 @@ const RelatedPersonsCard = ({
           <div className="text-xs text-muted-foreground space-y-1">
             <p className="font-medium">💡 OSINT Analyst Tips:</p>
             <ul className="list-disc list-inside space-y-0.5 ml-1">
-              <li><span className="text-green-600 font-medium">Confirmed</span>: High-confidence matches from data sources</li>
-              <li><span className="text-blue-600 font-medium">Keywords</span>: Search terms you provided (verify manually)</li>
-              <li><span className="text-purple-600 font-medium">AI-Suggested</span>: Possible connections detected by pattern analysis</li>
+              <li><span className="text-green-600 font-medium">Confirmed</span>: High-confidence matches from people databases</li>
+              <li><span className="text-orange-600 font-medium">Obituaries</span>: Names from memorial pages (verify relationship)</li>
+              <li><span className="text-blue-600 font-medium">Keywords</span>: Search terms you provided</li>
+              <li><span className="text-purple-600 font-medium">AI-Suggested</span>: Patterns detected by analysis</li>
             </ul>
           </div>
         </div>
