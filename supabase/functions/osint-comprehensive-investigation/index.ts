@@ -893,10 +893,30 @@ Deno.serve(async (req) => {
       hasData?: boolean;
     }> = [];
 
+    // Aggregate all web search results for cross-call deduplication
+    const allWebConfirmedItems: any[] = [];
+    const allWebPossibleItems: any[] = [];
+    const allWebDiscoveredRelatives: Set<string> = new Set();
+    const seenWebUrls = new Set<string>();
+    const webQueryStats: any[] = [];
+    
+    // Normalize URL for deduplication
+    const normalizeUrl = (url: string): string => {
+      try {
+        const parsed = new URL(url);
+        let host = parsed.hostname.replace(/^www\./, '');
+        let path = parsed.pathname.replace(/\/$/, '') || '/';
+        return `${host}${path}`.toLowerCase();
+      } catch {
+        return url.toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '').split('?')[0].split('#')[0];
+      }
+    };
+
     // Store findings with correlation data
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
       const agentType = searchTypes[i];
+      const isWebSearch = agentType === 'web' || agentType.startsWith('web_') || agentType.includes('_web');
 
       if (result.status === 'fulfilled') {
         const { data, error } = result.value as { data: any; error: any };
@@ -909,23 +929,6 @@ Deno.serve(async (req) => {
             status: 'error',
             error: errorMessage,
           });
-          
-          // Still create a finding with the error so the UI can display it
-          if (agentType === 'web' || agentType.includes('web_')) {
-            await supabaseClient.from('findings').insert({
-              investigation_id: investigation.id,
-              agent_type: 'Web',
-              source: `OSINT-${agentType}`,
-              data: {
-                error: errorMessage,
-                items: [],
-                confirmedItems: [],
-                possibleItems: [],
-              },
-              confidence_score: null,
-              verification_status: 'needs_review',
-            });
-          }
           continue;
         }
 
@@ -933,6 +936,45 @@ Deno.serve(async (req) => {
           console.warn(`No data returned from ${agentType} function.`);
           searchDebug.push({ type: agentType, status: 'no_data', hasData: false });
           continue;
+        }
+
+        // Handle web search results specially - aggregate and dedupe across calls
+        if (isWebSearch) {
+          searchDebug.push({ type: agentType, status: 'ok', hasData: true });
+          
+          // Aggregate confirmed items with deduplication
+          if (data.confirmedItems && Array.isArray(data.confirmedItems)) {
+            for (const item of data.confirmedItems) {
+              const normalizedUrl = normalizeUrl(item.link || '');
+              if (!seenWebUrls.has(normalizedUrl)) {
+                seenWebUrls.add(normalizedUrl);
+                allWebConfirmedItems.push({ ...item, sourceQuery: agentType });
+              }
+            }
+          }
+          
+          // Aggregate possible items with deduplication
+          if (data.possibleItems && Array.isArray(data.possibleItems)) {
+            for (const item of data.possibleItems) {
+              const normalizedUrl = normalizeUrl(item.link || '');
+              if (!seenWebUrls.has(normalizedUrl)) {
+                seenWebUrls.add(normalizedUrl);
+                allWebPossibleItems.push({ ...item, sourceQuery: agentType });
+              }
+            }
+          }
+          
+          // Aggregate discovered relatives
+          if (data.discoveredRelatives && Array.isArray(data.discoveredRelatives)) {
+            data.discoveredRelatives.forEach((rel: string) => allWebDiscoveredRelatives.add(rel));
+          }
+          
+          // Aggregate query stats
+          if (data.queriesUsed && Array.isArray(data.queriesUsed)) {
+            webQueryStats.push(...data.queriesUsed);
+          }
+          
+          continue; // Don't store individual web findings yet - we'll merge them below
         }
 
         const findingData = data;
@@ -1035,6 +1077,49 @@ Deno.serve(async (req) => {
             verification_status: 'needs_review',
           });
         }
+      }
+    }
+
+    // Store merged web search results as a single finding with deduplicated items
+    if (allWebConfirmedItems.length > 0 || allWebPossibleItems.length > 0) {
+      // Sort by confidence score
+      allWebConfirmedItems.sort((a, b) => (b.confidenceScore || 0) - (a.confidenceScore || 0));
+      allWebPossibleItems.sort((a, b) => (b.confidenceScore || 0) - (a.confidenceScore || 0));
+      
+      const mergedWebData = {
+        searchInformation: {
+          totalResults: String(allWebConfirmedItems.length + allWebPossibleItems.length),
+          deduplicatedFrom: seenWebUrls.size,
+        },
+        confirmedItems: allWebConfirmedItems,
+        possibleItems: allWebPossibleItems,
+        items: [...allWebConfirmedItems, ...allWebPossibleItems],
+        discoveredRelatives: allWebDiscoveredRelatives.size > 0 ? Array.from(allWebDiscoveredRelatives) : undefined,
+        queriesUsed: webQueryStats,
+        searchContext: {
+          fullName: searchData.fullName || null,
+          hasEmail: !!searchData.email,
+          hasPhone: !!searchData.phone,
+          hasUsername: !!searchData.username,
+          hasAddress: !!searchData.address,
+          hasKeywords: keywords.length > 0,
+          keywords: keywords,
+        },
+      };
+      
+      const { error: webInsertError } = await supabaseClient.from('findings').insert({
+        investigation_id: investigation.id,
+        agent_type: 'Web',
+        source: 'OSINT-web-merged',
+        data: mergedWebData,
+        confidence_score: allWebConfirmedItems.length > 0 ? 75 : 50,
+        verification_status: 'needs_review',
+      });
+      
+      if (webInsertError) {
+        console.error('Error inserting merged web findings:', webInsertError);
+      } else {
+        console.log(`Stored merged web findings: ${allWebConfirmedItems.length} confirmed, ${allWebPossibleItems.length} possible (deduplicated from ${seenWebUrls.size} URLs)`);
       }
     }
 
