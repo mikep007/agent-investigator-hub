@@ -36,6 +36,7 @@ import SaveToCaseDialog from "@/components/cases/SaveToCaseDialog";
 import InvestigationBreadcrumb from "@/components/InvestigationBreadcrumb";
 import EnrichInvestigation from "@/components/EnrichInvestigation";
 import { usePowerAutomatePolling } from "@/hooks/usePowerAutomatePolling";
+import AIInsightsPanel from "@/components/AIInsightsPanel";
 
 interface InvestigationHistoryItem {
   id: string;
@@ -91,6 +92,7 @@ const Index = () => {
   const [investigationHistory, setInvestigationHistory] = useState<InvestigationHistoryItem[]>(persistedState?.investigationHistory ?? []);
   const [originalSearchData, setOriginalSearchData] = useState<SearchData | null>(persistedState?.originalSearchData ?? null);
   const [findings, setFindings] = useState<any[]>(persistedState?.findings ?? []);
+  const [parsedBooleanQuery, setParsedBooleanQuery] = useState<any>(null);
   const navigate = useNavigate();
   const { toast } = useToast();
 
@@ -196,12 +198,22 @@ const Index = () => {
     email: string;
     phone: string;
     username: string;
+    _parsedQuery?: any;
+    _excludeTerms?: string[];
   }) => {
     setLoading(true);
     const name = searchData.fullName || searchData.username || searchData.email || "Target";
     setTargetName(name);
     setOriginalSearchData(searchData);
     setFindings([]); // Reset findings for new investigation
+    
+    // Store parsed boolean query if present (for AI insights)
+    if (searchData._parsedQuery) {
+      setParsedBooleanQuery(searchData._parsedQuery);
+    } else {
+      setParsedBooleanQuery(null);
+    }
+    
     try {
       const { data, error } = await supabase.functions.invoke('osint-comprehensive-investigation', {
         body: searchData
@@ -491,6 +503,17 @@ const Index = () => {
                 findings={findings}
                 originalSearchData={originalSearchData}
                 onRerun={handleEnrichedRerun}
+              />
+            </div>
+          )}
+
+          {/* AI Insights Panel - Shows for boolean query searches */}
+          {activeInvestigation && parsedBooleanQuery && findings.length > 0 && (
+            <div className="mb-6">
+              <AIInsightsPanel
+                results={findings.flatMap(f => f.data?.items || [])}
+                parsedQuery={parsedBooleanQuery}
+                autoGenerate={false}
               />
             </div>
           )}
