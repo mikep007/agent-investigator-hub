@@ -379,43 +379,82 @@ function processAddressResult(addressData: any, addressString: string): any {
 }
 
 function calculateRelativeMatchScore(person: any, subject: SubjectInput): number {
-  let score = 0.5;
+  let score = 0.4; // Lower base, earn confidence through evidence
+  let hasSharedAddress = false;
 
-  // Same state bonus
+  // Same state bonus (minor)
   const personLocation = (person.location || '').toLowerCase();
   if (subject.state && personLocation.includes(subject.state.toLowerCase())) {
-    score += 0.2;
+    score += 0.1;
   }
 
-  // Shared address bonus
-  if (subject.anchor_addresses) {
+  // SHARED ADDRESS BONUS - HIGHEST WEIGHT
+  // Spouses/partners often have different last names but share an address
+  // This is STRONG evidence of a household relationship
+  if (subject.anchor_addresses && subject.anchor_addresses.length > 0) {
     for (const anchorAddr of subject.anchor_addresses) {
-      const anchorParts = anchorAddr.toLowerCase();
+      const anchorNormalized = normalizeAddressForMatch(anchorAddr);
       for (const personAddr of (person.addresses || [])) {
-        if (anchorParts.includes(personAddr.toLowerCase().split(',')[0])) {
-          score += 0.2;
+        const personNormalized = normalizeAddressForMatch(personAddr);
+        // Check if street address matches (before first comma or first few words)
+        if (anchorNormalized && personNormalized && 
+            (anchorNormalized.includes(personNormalized) || personNormalized.includes(anchorNormalized))) {
+          score += 0.40; // HIGH boost - shared address is strong evidence
+          hasSharedAddress = true;
+          console.log(`[MATCH] Shared address detected: "${personAddr}" matches anchor "${anchorAddr}"`);
           break;
         }
       }
+      if (hasSharedAddress) break;
     }
   }
 
-  // Same last name bonus (likely family)
+  // Same last name bonus (child, sibling, parent)
   const personNameParts = (person.name || '').split(' ');
   const personLast = personNameParts[personNameParts.length - 1]?.toLowerCase();
-  if (personLast === subject.name.last?.toLowerCase()) {
-    score += 0.1;
+  const subjectLast = subject.name.last?.toLowerCase();
+  
+  if (personLast === subjectLast) {
+    score += 0.15; // Same surname = likely blood relative
+  } else if (hasSharedAddress) {
+    // Different surname BUT shared address = likely spouse/partner
+    score += 0.10; // Additional boost for spouse pattern
+    console.log(`[MATCH] Potential spouse detected: ${person.name} (different surname, shared address)`);
   }
 
   return Math.min(score, 0.95);
 }
 
-function inferRelationshipFromName(subjectName: any, relativeNameParts: string[]): string {
+// Normalize address for comparison (extract street portion)
+function normalizeAddressForMatch(addr: string): string {
+  if (!addr) return '';
+  // Take everything before the first comma, lowercase, remove extra spaces
+  const street = addr.split(',')[0].toLowerCase().trim();
+  // Remove common abbreviations to normalize
+  return street
+    .replace(/\bstreet\b/gi, 'st')
+    .replace(/\bavenue\b/gi, 'ave')
+    .replace(/\bdrive\b/gi, 'dr')
+    .replace(/\broad\b/gi, 'rd')
+    .replace(/\blane\b/gi, 'ln')
+    .replace(/\bcourt\b/gi, 'ct')
+    .replace(/\bapartment\b/gi, 'apt')
+    .replace(/\bsuite\b/gi, 'ste')
+    .replace(/[^\w\s]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function inferRelationshipFromName(subjectName: any, relativeNameParts: string[], hasSharedAddress: boolean = false): string {
   const relativeLast = relativeNameParts[relativeNameParts.length - 1]?.toLowerCase();
   const subjectLast = subjectName.last?.toLowerCase();
 
   if (relativeLast === subjectLast) {
     return 'family_same_surname';
+  }
+  // Different surname but shares address = likely spouse/partner
+  if (hasSharedAddress) {
+    return 'spouse_or_partner';
   }
   return 'family_different_surname';
 }
