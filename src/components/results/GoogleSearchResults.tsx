@@ -116,6 +116,7 @@ const GoogleSearchResults = ({
   const { toast } = useToast();
   const [filter, setFilter] = useState("");
   const [showPossible, setShowPossible] = useState(true);
+  const [showUncorroborated, setShowUncorroborated] = useState(false);
   const [showKeywordMentions, setShowKeywordMentions] = useState(false);
   const [showQueries, setShowQueries] = useState(false);
   const [showChart, setShowChart] = useState(true);
@@ -209,22 +210,52 @@ const GoogleSearchResults = ({
     });
   };
 
+  // Helper to check if a result has any corroborating factor
+  const hasCorroboratingFactor = (item: WebResultItem): boolean => {
+    return !!(
+      item.isExactMatch ||
+      item.hasPhone ||
+      item.hasEmail ||
+      item.hasUsername ||
+      item.hasLocation ||
+      item.hasKnownRelative ||
+      item.hasRelativeMatch ||
+      item.hasAddress ||
+      (item.hasKeywords && item.keywordMatches?.length) ||
+      item.matchType ||
+      item.isFromFamilyQuery ||
+      (item.corroboratingFactors && item.corroboratingFactors > 0)
+    );
+  };
+
   // Separate keyword-only results from possible results
   const keywordOnlyResults = useMemo(() => 
     possibleResults.filter(item => item.isKeywordOnlyMatch === true),
     [possibleResults]
   );
   
-  const nonKeywordPossibleResults = useMemo(() => 
-    possibleResults.filter(item => item.isKeywordOnlyMatch !== true),
+  // Non-keyword possible results WITH corroborating factors (actual possible matches)
+  const corroboratedPossibleResults = useMemo(() => 
+    possibleResults.filter(item => 
+      item.isKeywordOnlyMatch !== true && hasCorroboratingFactor(item)
+    ),
+    [possibleResults]
+  );
+  
+  // Uncorroborated results - no name, no keywords, no factors (noise)
+  const uncorroboratedResults = useMemo(() => 
+    possibleResults.filter(item => 
+      item.isKeywordOnlyMatch !== true && !hasCorroboratingFactor(item)
+    ),
     [possibleResults]
   );
 
   const filteredConfirmed = filterByCorroboration(filterResults(confirmedResults));
-  const filteredPossible = filterResults(nonKeywordPossibleResults);
+  const filteredPossible = filterResults(corroboratedPossibleResults);
+  const filteredUncorroborated = filterResults(uncorroboratedResults);
   const filteredKeywordOnly = filterResults(keywordOnlyResults);
-  const totalResults = confirmedResults.length + nonKeywordPossibleResults.length + keywordOnlyResults.length;
-  const filteredTotal = filteredConfirmed.length + filteredPossible.length + filteredKeywordOnly.length;
+  const totalResults = confirmedResults.length + corroboratedPossibleResults.length + uncorroboratedResults.length + keywordOnlyResults.length;
+  const filteredTotal = filteredConfirmed.length + filteredPossible.length + filteredUncorroborated.length + filteredKeywordOnly.length;
 
   // Combine all visible results for keyboard navigation
   const allVisibleResults = [
@@ -701,8 +732,13 @@ const GoogleSearchResults = ({
             {confirmedResults.length} confirmed
           </Badge>
           <Badge variant="outline" className="text-muted-foreground">
-            {nonKeywordPossibleResults.length} possible
+            {corroboratedPossibleResults.length} possible
           </Badge>
+          {uncorroboratedResults.length > 0 && (
+            <Badge variant="outline" className="text-slate-400 border-slate-300/50">
+              {uncorroboratedResults.length} uncorroborated
+            </Badge>
+          )}
           {keywordOnlyResults.length > 0 && (
             <Badge variant="outline" className="text-slate-500 border-slate-300">
               {keywordOnlyResults.length} keyword-only
@@ -1153,6 +1189,36 @@ const GoogleSearchResults = ({
           {showPossible && (
             <div className="space-y-3 pl-4 opacity-90">
               {filteredPossible.map((item, idx) => renderResultItem(item, idx, false, filteredConfirmed.length + idx))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Uncorroborated Results - No matching data, hidden by default */}
+      {filteredUncorroborated.length > 0 && (
+        <div className="space-y-3">
+          <button
+            onClick={() => setShowUncorroborated(!showUncorroborated)}
+            className="flex items-center gap-2 w-full text-left hover:text-muted-foreground/80 transition-colors"
+          >
+            <Globe className="h-5 w-5 text-slate-400" />
+            <h4 className="font-medium text-slate-500 dark:text-slate-500">
+              Uncorroborated Results ({filteredUncorroborated.length})
+            </h4>
+            <span className="text-xs text-muted-foreground/60 ml-1">— No matching criteria found</span>
+            {showUncorroborated ? (
+              <ChevronUp className="h-4 w-4 ml-auto text-muted-foreground/50" />
+            ) : (
+              <ChevronDown className="h-4 w-4 ml-auto text-muted-foreground/50" />
+            )}
+          </button>
+          
+          {showUncorroborated && (
+            <div className="space-y-3 pl-4 opacity-60">
+              <p className="text-xs text-muted-foreground/70 italic mb-2">
+                These results appeared in search but have no corroborating data matching your target (no name, phone, email, location, or keyword matches). They may be unrelated.
+              </p>
+              {filteredUncorroborated.map((item, idx) => renderResultItem(item, idx, false, filteredConfirmed.length + filteredPossible.length + idx))}
             </div>
           )}
         </div>
