@@ -24,7 +24,10 @@ import {
   BarChart3,
   User,
   Users,
-  Heart
+  Heart,
+  Home,
+  Gem,
+  Baby
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "../ConfidenceScoreBadge";
@@ -54,6 +57,9 @@ interface WebResultItem {
   hasKnownRelative?: boolean;
   hasRelativeMatch?: boolean;
   matchedRelative?: string;
+  hasAddress?: boolean;
+  matchedAddress?: string;
+  matchType?: 'spouse' | 'blood_relative' | 'address_match' | null;
   corroboratingFactors?: number;
   sourceType?: string;
   queryDescription?: string;
@@ -151,6 +157,9 @@ const GoogleSearchResults = ({
       keywords: 0,
       nameMatch: 0,
       familyConnection: 0,
+      address: 0,
+      spouse: 0,
+      bloodRelative: 0,
     };
 
     confirmedResults.forEach(item => {
@@ -162,6 +171,9 @@ const GoogleSearchResults = ({
       if (item.hasKeywords && item.keywordMatches?.length) stats.keywords++;
       if (item.isExactMatch) stats.nameMatch++;
       if (item.isFromFamilyQuery) stats.familyConnection++;
+      if (item.hasAddress) stats.address++;
+      if (item.matchType === 'spouse') stats.spouse++;
+      if (item.matchType === 'blood_relative') stats.bloodRelative++;
     });
 
     return stats;
@@ -447,7 +459,62 @@ const GoogleSearchResults = ({
                 </TooltipContent>
               </Tooltip>
             )}
-            {(item.hasKnownRelative || item.hasRelativeMatch) && (
+            {/* Match Type Badges - Spouse, Blood Relative, Address Match */}
+            {item.matchType === 'spouse' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-gradient-to-r from-pink-500/20 to-rose-500/20 text-rose-600 dark:text-rose-400 text-xs gap-1 cursor-help border border-rose-400/30 font-semibold">
+                    <Gem className="h-3 w-3" />
+                    Spouse/Partner
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="font-medium">Spouse or Partner Match</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {item.matchedRelative 
+                      ? `${item.matchedRelative} - different surname, likely spouse/partner`
+                      : 'Different surname but shares address or explicitly provided as relative'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {item.matchType === 'blood_relative' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-gradient-to-r from-purple-500/20 to-violet-500/20 text-purple-600 dark:text-purple-400 text-xs gap-1 cursor-help border border-purple-400/30 font-semibold">
+                    <Baby className="h-3 w-3" />
+                    Blood Relative
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="font-medium">Blood Relative Match</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {item.matchedRelative 
+                      ? `${item.matchedRelative} - shares surname, likely blood relative`
+                      : 'Shares surname with target - child, sibling, or parent'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {item.hasAddress && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-gradient-to-r from-teal-500/20 to-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs gap-1 cursor-help border border-emerald-400/30 font-semibold">
+                    <Home className="h-3 w-3" />
+                    Same Address
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="font-medium">Address Match</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {item.matchedAddress 
+                      ? `Address: ${item.matchedAddress}`
+                      : 'Target address found in this result'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            )}
+            {(item.hasKnownRelative || item.hasRelativeMatch) && !item.matchType && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Badge variant="secondary" className="bg-pink-500/10 text-pink-600 dark:text-pink-400 text-xs gap-1 cursor-help">
