@@ -279,18 +279,29 @@ function extractPotentialRelatives(text: string, primaryName: string): string[] 
   return [...new Set(relatives)].slice(0, 10);
 }
 
-// Check if a keyword matches a potential relative pattern (same last name)
-function isKeywordPotentialRelative(keyword: string, primaryName: string): boolean {
+// Check if a keyword matches a potential relative pattern
+// This includes same last name OR explicitly provided relatives (like spouses with different surnames)
+function isKeywordPotentialRelative(keyword: string, primaryName: string, providedRelatives?: string[]): boolean {
   const primaryParts = primaryName.split(/\s+/).filter(p => p.length > 1);
   const primaryLastName = primaryParts.length > 1 ? primaryParts[primaryParts.length - 1].toLowerCase() : '';
   
-  if (!primaryLastName || primaryLastName.length < 2) return false;
-  
-  // Check if keyword contains the same last name
-  const keywordLower = keyword.toLowerCase();
+  const keywordLower = keyword.toLowerCase().trim();
   const keywordParts = keywordLower.split(/\s+/).filter(p => p.length > 1);
   
-  // If keyword has 2+ words and shares the last name, likely a relative
+  // Check if keyword is an explicitly provided relative (handles spouses with different surnames)
+  if (providedRelatives && providedRelatives.length > 0) {
+    for (const rel of providedRelatives) {
+      const relLower = (typeof rel === 'string' ? rel : (rel as any).name || '').toLowerCase().trim();
+      if (relLower && (keywordLower === relLower || keywordLower.includes(relLower) || relLower.includes(keywordLower))) {
+        console.log(`[RELATIVE] Keyword "${keyword}" matches provided relative "${relLower}"`);
+        return true;
+      }
+    }
+  }
+  
+  if (!primaryLastName || primaryLastName.length < 2) return false;
+  
+  // If keyword has 2+ words and shares the last name, likely a blood relative
   if (keywordParts.length >= 2) {
     const keywordLastName = keywordParts[keywordParts.length - 1];
     if (keywordLastName === primaryLastName) {
@@ -306,7 +317,26 @@ function isKeywordPotentialRelative(keyword: string, primaryName: string): boole
   return false;
 }
 
-// Build Google Dork queries for comprehensive OSINT with keywords combined with all data points
+// Normalize address for search matching (extract key components)
+function normalizeAddressForSearch(addr: string): string {
+  if (!addr) return '';
+  // Take street portion, normalize abbreviations
+  const parts = addr.split(',');
+  const street = (parts[0] || '').toLowerCase().trim();
+  return street
+    .replace(/\bstreet\b/gi, 'st')
+    .replace(/\bavenue\b/gi, 'ave')
+    .replace(/\bdrive\b/gi, 'dr')
+    .replace(/\broad\b/gi, 'rd')
+    .replace(/\blane\b/gi, 'ln')
+    .replace(/\bcourt\b/gi, 'ct')
+    .replace(/\bapartment\b/gi, 'apt')
+    .replace(/\bsuite\b/gi, 'ste')
+    .replace(/[#.,]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function buildDorkQueries(
   name: string,
   location?: string,
@@ -1562,12 +1592,14 @@ Deno.serve(async (req) => {
     // Track potential relatives found across all results
     const allFoundRelatives: Set<string> = new Set();
     
-    // Check which keywords might be potential relative names (share last name with target)
+    // Check which keywords might be potential relative names (share last name with target OR explicitly provided as relatives)
+    // This now handles spouses with different surnames (like "Yana Shapiro" for target "Michael Petrie")
     const relativeKeywords: string[] = [];
+    const providedRelatives = relatives || [];
     for (const keyword of keywordList) {
-      if (isKeywordPotentialRelative(keyword, searchName)) {
+      if (isKeywordPotentialRelative(keyword, searchName, providedRelatives)) {
         relativeKeywords.push(keyword);
-        console.log(`Keyword "${keyword}" identified as potential relative (shares surname with "${searchName}")`);
+        console.log(`Keyword "${keyword}" identified as potential relative/spouse for "${searchName}"`);
       }
     }
     
@@ -1775,12 +1807,13 @@ Deno.serve(async (req) => {
           console.log(`  [+] Location match for ${item.link}`);
         }
         
-        // Relative keyword match - STRONG corroboration (+20%)
-        // If a keyword (like "Moira Petrie") appears and shares the same surname as the target
+        // Relative/spouse keyword match - STRONG corroboration (+25%)
+        // Now handles both same-surname relatives (like "Moira Petrie") AND 
+        // different-surname spouses (like "Yana Shapiro") when they're in the relatives list
         if (hasRelativeKeywordMatch) {
-          confidenceScore += 0.20;
+          confidenceScore += 0.25; // Increased from 0.20 - relatives are HIGH value
           corroboratingFactors++;
-          console.log(`  [+] Relative keyword match for ${item.link}`);
+          console.log(`  [+] Relative/spouse keyword match for ${item.link}`);
         }
         
         // Other keyword matches - STRONG corroboration (+20% for keywords, they're user-specified)
@@ -1809,6 +1842,8 @@ Deno.serve(async (req) => {
         }
         
         // Relatives from input match (check if any known relatives appear in the result)
+        // This is CRITICAL for spouse detection - spouses often appear together in records
+        // even when they have different surnames
         let relativesPresent = false;
         let matchedRelative = '';
         const inputRelatives = relatives || [];
@@ -1817,10 +1852,28 @@ Deno.serve(async (req) => {
           if (relName && textToCheck.toLowerCase().includes(relName.toLowerCase())) {
             relativesPresent = true;
             matchedRelative = relName;
-            confidenceScore += 0.20;
+            // Give extra weight to relatives - they're explicitly provided by the user
+            confidenceScore += 0.25; // Increased from 0.20
             corroboratingFactors++;
-            console.log(`  [+] Known relative match for ${item.link}: ${relName}`);
+            console.log(`  [+] Known relative/spouse match for ${item.link}: ${relName}`);
             break; // Only count once
+          }
+        }
+        
+        // Address match - VERY STRONG corroboration (+30%)
+        // If the target's address appears in the result, this is highly reliable
+        // Spouses/family living at the same address should score high
+        let addressPresent = false;
+        let matchedAddress = '';
+        if (searchData?.address) {
+          const normalizedInputAddr = normalizeAddressForSearch(searchData.address);
+          const textLower = textToCheck.toLowerCase();
+          if (normalizedInputAddr && textLower.includes(normalizedInputAddr)) {
+            addressPresent = true;
+            matchedAddress = searchData.address;
+            confidenceScore += 0.30;
+            corroboratingFactors++;
+            console.log(`  [+] Address match for ${item.link}: ${searchData.address}`);
           }
         }
         
