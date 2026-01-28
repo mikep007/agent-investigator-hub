@@ -1913,6 +1913,38 @@ Deno.serve(async (req) => {
                                    result.queryCategory === 'family' ||
                                    (result.queryDescription?.toLowerCase().includes('relative') ?? false);
         
+        // Determine match type for UI badges
+        // Blood relative = shares same surname, Spouse = different surname but shares address/relative list
+        const targetLastName = searchName.split(/\s+/).pop()?.toLowerCase() || '';
+        let matchType: 'spouse' | 'blood_relative' | 'address_match' | null = null;
+        
+        if (relativesPresent && matchedRelative) {
+          const relativeLastName = matchedRelative.split(/\s+/).pop()?.toLowerCase() || '';
+          if (relativeLastName !== targetLastName) {
+            // Different surname = likely spouse/partner
+            matchType = 'spouse';
+          } else {
+            // Same surname = blood relative (child, sibling, parent)
+            matchType = 'blood_relative';
+          }
+        } else if (hasRelativeKeywordMatch) {
+          // Check if the matched keyword is a spouse (different surname) or blood relative
+          const matchedKeyword = keywordMatches.find(k => relativeKeywords.includes(k.toLowerCase()));
+          if (matchedKeyword) {
+            const keywordLastName = matchedKeyword.split(/\s+/).pop()?.toLowerCase() || '';
+            if (keywordLastName !== targetLastName) {
+              matchType = 'spouse';
+            } else {
+              matchType = 'blood_relative';
+            }
+          }
+        }
+        
+        // If address matched but no relative match, mark as address match
+        if (addressPresent && !matchType) {
+          matchType = 'address_match';
+        }
+        
         const processedItem = {
           title: item.title || '',
           link: item.link || '',
@@ -1935,6 +1967,9 @@ Deno.serve(async (req) => {
           matchedUsername: matchedUsername || undefined,
           hasKnownRelative: relativesPresent,
           matchedRelative: matchedRelative || undefined,
+          hasAddress: addressPresent,
+          matchedAddress: matchedAddress || undefined,
+          matchType, // 'spouse', 'blood_relative', 'address_match', or null
           corroboratingFactors,
           sourceType: result.queryType,
           queryDescription: result.queryDescription,
