@@ -238,9 +238,9 @@ function isValidFirstName(word: string): boolean {
 }
 
 // Extract potential relative names from text (especially obituaries)
-// STRICT VERSION: Only extracts clean "FirstName LastName" patterns with validation
-function extractPotentialRelatives(text: string, primaryName: string): string[] {
-  const relatives: string[] = [];
+// Enhanced to detect relationship context and maiden name patterns
+function extractPotentialRelatives(text: string, primaryName: string): { name: string; relationship?: string }[] {
+  const relatives: { name: string; relationship?: string }[] = [];
   const primaryNameLower = primaryName.toLowerCase();
   
   // Get last name from primary name for surname matching
@@ -248,35 +248,129 @@ function extractPotentialRelatives(text: string, primaryName: string): string[] 
   const primaryLastName = primaryParts.length > 1 ? primaryParts[primaryParts.length - 1].toLowerCase() : '';
   const primaryFirstName = primaryParts[0]?.toLowerCase() || '';
   
-  // ONLY look for people with the same last name as the target
-  // This is the most reliable way to find actual relatives in obituaries
+  // Relationship keywords for context detection
+  const relationshipPatterns: { pattern: RegExp; relationship: string }[] = [
+    { pattern: /\b(son|sons)\b/i, relationship: 'son' },
+    { pattern: /\b(daughter|daughters)\b/i, relationship: 'daughter' },
+    { pattern: /\b(wife|spouse)\b/i, relationship: 'spouse' },
+    { pattern: /\b(husband)\b/i, relationship: 'spouse' },
+    { pattern: /\b(brother|brothers)\b/i, relationship: 'brother' },
+    { pattern: /\b(sister|sisters)\b/i, relationship: 'sister' },
+    { pattern: /\b(mother|mom)\b/i, relationship: 'mother' },
+    { pattern: /\b(father|dad)\b/i, relationship: 'father' },
+    { pattern: /\b(grandfather|grandpa)\b/i, relationship: 'grandfather' },
+    { pattern: /\b(grandmother|grandma)\b/i, relationship: 'grandmother' },
+    { pattern: /\b(ex-wife|former wife|ex wife)\b/i, relationship: 'ex-spouse' },
+    { pattern: /\b(ex-husband|former husband|ex husband)\b/i, relationship: 'ex-spouse' },
+  ];
+  
+  // 1. Same-surname relatives (blood relatives): "Moira Petrie", "Edward Petrie", "David Petrie", "Anne Petrie"
   if (primaryLastName && primaryLastName.length > 2) {
-    // Escape special regex characters in last name
     const escapedLastName = primaryLastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     
     // Pattern: First name + Same Last Name (e.g., "Moira Petrie" when searching "Michael Petrie")
-    // More strict: require the first name to be 3+ characters and start with capital
     const sameSurnamePattern = new RegExp(`\\b([A-Z][a-z]{2,15})\\s+${escapedLastName}\\b`, 'gi');
     let match;
     while ((match = sameSurnamePattern.exec(text)) !== null) {
       const firstName = match[1];
-      // Validate this looks like a real first name
       if (firstName && isValidFirstName(firstName) && firstName.toLowerCase() !== primaryFirstName) {
-        // Reconstruct with proper case
         const fullName = `${firstName.charAt(0).toUpperCase()}${firstName.slice(1).toLowerCase()} ${primaryParts[primaryParts.length - 1]}`;
-        if (!relatives.some(r => r.toLowerCase() === fullName.toLowerCase()) && 
+        
+        // Try to detect relationship from surrounding context (within 50 chars)
+        const contextStart = Math.max(0, match.index - 50);
+        const contextEnd = Math.min(text.length, match.index + match[0].length + 50);
+        const context = text.substring(contextStart, contextEnd).toLowerCase();
+        
+        let relationship: string | undefined;
+        for (const rp of relationshipPatterns) {
+          if (rp.pattern.test(context)) {
+            relationship = rp.relationship;
+            break;
+          }
+        }
+        
+        if (!relatives.some(r => r.name.toLowerCase() === fullName.toLowerCase()) && 
             fullName.toLowerCase() !== primaryNameLower) {
-          relatives.push(fullName);
+          relatives.push({ name: fullName, relationship });
         }
       }
     }
   }
   
-  // DON'T extract from generic patterns like "survived by" - these produce too much garbage
-  // The same-surname approach is much more reliable for actual family connections
+  // 2. Maiden name / Former spouse pattern: "Heather Petrie Tomes" or "Heather Tomes (née Petrie)"
+  // Pattern: [FirstName] [MaidenName=PrimaryLastName] [MarriedName] OR "née Petrie"
+  if (primaryLastName && primaryLastName.length > 2) {
+    const escapedLastName = primaryLastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    
+    // Pattern 1: "FirstName Petrie OtherLastName" (maiden name in middle)
+    const maidenNamePattern = new RegExp(`\\b([A-Z][a-z]{2,15})\\s+${escapedLastName}\\s+([A-Z][a-z]{2,15})\\b`, 'gi');
+    let maidenMatch;
+    while ((maidenMatch = maidenNamePattern.exec(text)) !== null) {
+      const firstName = maidenMatch[1];
+      const marriedLastName = maidenMatch[2];
+      if (firstName && marriedLastName && isValidFirstName(firstName) && isValidFirstName(marriedLastName)) {
+        // This looks like "Heather Petrie Tomes" - former spouse
+        const fullName = `${firstName} ${primaryParts[primaryParts.length - 1]} ${marriedLastName}`;
+        if (!relatives.some(r => r.name.toLowerCase() === fullName.toLowerCase()) &&
+            fullName.toLowerCase() !== primaryNameLower) {
+          relatives.push({ name: fullName, relationship: 'ex-spouse' });
+          console.log(`[RELATIVE] Found maiden name pattern: ${fullName}`);
+        }
+      }
+    }
+    
+    // Pattern 2: "née Petrie" or "(born Petrie)" indicating maiden name
+    const neePattern = new RegExp(`\\b([A-Z][a-z]{2,15})\\s+([A-Z][a-z]{2,15})\\s*[\\(,]?\\s*(?:née|born|maiden name)\\s+${escapedLastName}`, 'gi');
+    let neeMatch;
+    while ((neeMatch = neePattern.exec(text)) !== null) {
+      const firstName = neeMatch[1];
+      const currentLastName = neeMatch[2];
+      if (firstName && currentLastName && isValidFirstName(firstName)) {
+        const fullName = `${firstName} ${currentLastName}`;
+        if (!relatives.some(r => r.name.toLowerCase() === fullName.toLowerCase())) {
+          relatives.push({ name: fullName, relationship: 'spouse' });
+          console.log(`[RELATIVE] Found née pattern: ${fullName} (née ${primaryLastName})`);
+        }
+      }
+    }
+  }
   
-  // Dedupe and return (limit to 10)
-  return [...new Set(relatives)].slice(0, 10);
+  // 3. Obituary-specific patterns: "survived by his wife Yana", "his daughter Moira"
+  // Look for relationship words followed by names
+  const obituaryPatterns = [
+    /\b(?:his|her)\s+(wife|husband|spouse)\s+([A-Z][a-z]{2,15}(?:\s+[A-Z][a-z]{2,15})?)/gi,
+    /\b(?:his|her)\s+(son|daughter|brother|sister|mother|father)\s+([A-Z][a-z]{2,15}(?:\s+[A-Z][a-z]{2,15})?)/gi,
+    /\bsurvived\s+by\s+(?:his|her)\s+(wife|husband|spouse|son|daughter|brother|sister)\s+([A-Z][a-z]{2,15}(?:\s+[A-Z][a-z]{2,15})?)/gi,
+  ];
+  
+  for (const pattern of obituaryPatterns) {
+    let obituaryMatch;
+    while ((obituaryMatch = pattern.exec(text)) !== null) {
+      const relationship = obituaryMatch[1].toLowerCase();
+      const name = obituaryMatch[2];
+      if (name && name.length > 2) {
+        // Map generic terms to specific relationships
+        let mappedRelationship = relationship;
+        if (relationship === 'wife' || relationship === 'husband' || relationship === 'spouse') {
+          mappedRelationship = 'spouse';
+        }
+        
+        if (!relatives.some(r => r.name.toLowerCase() === name.toLowerCase())) {
+          relatives.push({ name, relationship: mappedRelationship });
+          console.log(`[RELATIVE] Obituary pattern: ${name} (${mappedRelationship})`);
+        }
+      }
+    }
+  }
+  
+  // Dedupe and return (limit to 15)
+  const seen = new Set<string>();
+  return relatives.filter(r => {
+    const key = r.name.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  }).slice(0, 15);
 }
 
 // Check if a keyword matches a potential relative pattern
@@ -1023,14 +1117,19 @@ function buildDorkQueries(
 
   // ========== KEYWORD + RELATIVES/ASSOCIATES COMBINATIONS ==========
   if (relatives && relatives.length > 0) {
-    for (const relative of relatives.slice(0, 3)) {
+    for (const relative of relatives.slice(0, 5)) { // Increased from 3 to 5 for better coverage
       const cleanRelative = stripOuterQuotes(relative);
       if (cleanRelative.length > 2) {
+        // Parse relative name components
+        const relativeParts = cleanRelative.split(/\s+/);
+        const relativeFirstName = relativeParts[0] || '';
+        const relativeLastName = relativeParts[relativeParts.length - 1] || '';
+        
         // Relative + primary name - PRIORITY 1 for family connections
         queries.push({
           query: `"${cleanRelative}" ${quotedPrimary}`,
           type: 'relative_name',
-          priority: 1, // Upgraded - relatives are high value
+          priority: 1,
           category: 'family',
           description: `Relative/Associate "${cleanRelative}" + Name`,
         });
@@ -1063,6 +1162,42 @@ function buildDorkQueries(
             description: `Relative "${cleanRelative}" + Last name + Obituary`,
           });
         }
+        
+        // Former spouse with maiden name pattern: "Heather Petrie Tomes" 
+        // Search for former spouses who may have the surname in their married name
+        if (relativeLastName !== lastName?.toLowerCase() && relativeParts.length >= 2) {
+          // Search for the relative alone (may be former spouse with new name)
+          queries.push({
+            query: `"${cleanRelative}" "obituary" OR "survived by"`,
+            type: 'relative_solo_obituary',
+            priority: 1,
+            category: 'family',
+            description: `Relative "${cleanRelative}" obituary mention`,
+          });
+          
+          // Search for relative with our last name (catches "Heather Petrie Tomes")
+          if (lastName) {
+            queries.push({
+              query: `"${relativeFirstName}" "${lastName}" "${relativeLastName}"`,
+              type: 'relative_maiden_name',
+              priority: 1,
+              category: 'family',
+              description: `Former spouse pattern: ${relativeFirstName} ${lastName} ${relativeLastName}`,
+            });
+          }
+        }
+        
+        // Deceased relative search - look for obituaries of the relative themselves
+        // This is especially important for parents who have passed away
+        if (relativeParts.length >= 2) {
+          queries.push({
+            query: `"${cleanRelative}" "obituary" "survived by" "${lastName || firstName}"`,
+            type: 'relative_their_obituary',
+            priority: 1,
+            category: 'family',
+            description: `${cleanRelative}'s obituary mentioning ${lastName || firstName}`,
+          });
+        }
 
         // Relative + keywords
         for (const keyword of keywordList.slice(0, 2)) {
@@ -1074,6 +1209,31 @@ function buildDorkQueries(
             description: `Keyword "${keyword}" + Relative "${cleanRelative}"`,
           });
         }
+      }
+    }
+    
+    // Special query: Last name family obituary search 
+    // Catches "the Petrie family" or obituaries listing multiple family members
+    if (lastName) {
+      queries.push({
+        query: `"${lastName} family" "obituary" OR "memorial"`,
+        type: 'family_name_obituary',
+        priority: 1,
+        category: 'family',
+        description: `${lastName} family obituary/memorial search`,
+      });
+      
+      // Search for multiple relatives together (strengthens family connections)
+      if (relatives.length >= 2) {
+        const rel1 = stripOuterQuotes(relatives[0]);
+        const rel2 = stripOuterQuotes(relatives[1]);
+        queries.push({
+          query: `"${rel1}" "${rel2}" "${lastName}"`,
+          type: 'multiple_relatives',
+          priority: 1,
+          category: 'family',
+          description: `Multiple relatives: ${rel1} + ${rel2}`,
+        });
       }
     }
   }
@@ -1631,11 +1791,14 @@ Deno.serve(async (req) => {
           item.snippet?.toLowerCase().includes('survived by');
         
         let foundRelatives: string[] = [];
+        let foundRelativesWithContext: { name: string; relationship?: string }[] = [];
         if (isObituaryOrPeopleSearch) {
-          foundRelatives = extractPotentialRelatives(textToCheck, searchName);
+          foundRelativesWithContext = extractPotentialRelatives(textToCheck, searchName);
+          // Extract just names for backward compatibility
+          foundRelatives = foundRelativesWithContext.map(r => r.name);
           foundRelatives.forEach(r => allFoundRelatives.add(r));
           if (foundRelatives.length > 0) {
-            console.log(`Found potential relatives in "${item.link}":`, foundRelatives);
+            console.log(`Found potential relatives in "${item.link}":`, foundRelativesWithContext);
           }
         }
         
@@ -1844,19 +2007,67 @@ Deno.serve(async (req) => {
         // Relatives from input match (check if any known relatives appear in the result)
         // This is CRITICAL for spouse detection - spouses often appear together in records
         // even when they have different surnames
+        // Enhanced to handle partial matches like "Heather Tomes" matching "Heather Petrie Tomes"
         let relativesPresent = false;
         let matchedRelative = '';
         const inputRelatives = relatives || [];
+        const textLower = textToCheck.toLowerCase();
+        
         for (const rel of inputRelatives) {
           const relName = typeof rel === 'string' ? rel : rel.name;
-          if (relName && textToCheck.toLowerCase().includes(relName.toLowerCase())) {
+          if (!relName) continue;
+          
+          const relNameLower = relName.toLowerCase().trim();
+          const relNameParts = relNameLower.split(/\s+/).filter((p: string) => p.length > 1);
+          
+          // Direct match: full name appears in text
+          if (textLower.includes(relNameLower)) {
             relativesPresent = true;
             matchedRelative = relName;
-            // Give extra weight to relatives - they're explicitly provided by the user
-            confidenceScore += 0.25; // Increased from 0.20
+            confidenceScore += 0.25;
             corroboratingFactors++;
-            console.log(`  [+] Known relative/spouse match for ${item.link}: ${relName}`);
-            break; // Only count once
+            console.log(`  [+] Known relative/spouse EXACT match for ${item.link}: ${relName}`);
+            break;
+          }
+          
+          // Partial match for former spouses: "Heather Petrie Tomes" should match "Heather Tomes"
+          // Check if first + last name of relative appear close together in text
+          if (relNameParts.length >= 2) {
+            const firstName = relNameParts[0];
+            const lastName = relNameParts[relNameParts.length - 1];
+            
+            // Look for first name + last name within 30 chars
+            const firstNameIndex = textLower.indexOf(firstName);
+            if (firstNameIndex >= 0) {
+              const lastNameIndex = textLower.indexOf(lastName, firstNameIndex);
+              if (lastNameIndex >= 0 && lastNameIndex - firstNameIndex < 40) {
+                relativesPresent = true;
+                matchedRelative = relName;
+                confidenceScore += 0.20; // Slightly less than exact match
+                corroboratingFactors++;
+                console.log(`  [+] Known relative/spouse PARTIAL match for ${item.link}: ${relName} (found ${firstName}...${lastName})`);
+                break;
+              }
+            }
+            
+            // Also check for maiden name pattern: "FirstName OurLastName MarriedName"
+            // e.g., "Heather Petrie Tomes" in text when relative is "Heather Tomes"
+            const targetLastName = searchName.split(/\s+/).pop()?.toLowerCase() || '';
+            if (targetLastName && firstName && lastName !== targetLastName) {
+              // Look for: firstName + targetLastName + lastName pattern
+              const maidenPattern = new RegExp(
+                `\\b${firstName}\\b[\\s\\w]{0,20}\\b${targetLastName}\\b[\\s\\w]{0,20}\\b${lastName}\\b`,
+                'i'
+              );
+              if (maidenPattern.test(textToCheck)) {
+                relativesPresent = true;
+                matchedRelative = `${firstName} ${targetLastName} ${lastName}`;
+                confidenceScore += 0.30; // Strong match - maiden name pattern
+                corroboratingFactors++;
+                console.log(`  [+] MAIDEN NAME pattern match for ${item.link}: ${matchedRelative}`);
+                break;
+              }
+            }
           }
         }
         
