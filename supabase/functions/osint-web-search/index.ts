@@ -1907,11 +1907,17 @@ Deno.serve(async (req) => {
         
         console.log(`  Final score for ${item.link}: ${confidenceScore.toFixed(2)} (${corroboratingFactors} corroborating factors)`);
         
-        // Detect if this result came from a family/relative-focused query
+        // Detect if this result came from a family/relative-focused query AND actually contains family data
+        // IMPORTANT: Only flag as "family connection" if there's actual evidence of family relationship
+        // Not just because the query type was family-focused
         const familyQueryTypes = ['relative_name', 'relative_obituary', 'relative_funeral', 'relative_lastname_obituary', 'keyword_relative'];
-        const isFromFamilyQuery = familyQueryTypes.includes(result.queryType) || 
+        const queryIsFamilyFocused = familyQueryTypes.includes(result.queryType) || 
                                    result.queryCategory === 'family' ||
                                    (result.queryDescription?.toLowerCase().includes('relative') ?? false);
+        
+        // Only mark as family connection if BOTH: query was family-focused AND we found actual family evidence
+        const hasActualFamilyEvidence = relativesPresent || hasRelativeKeywordMatch || foundRelatives.length > 0;
+        const isFromFamilyQuery = queryIsFamilyFocused && hasActualFamilyEvidence;
         
         // Determine match type for UI badges
         // Blood relative = shares same surname, Spouse = different surname but shares address/relative list
