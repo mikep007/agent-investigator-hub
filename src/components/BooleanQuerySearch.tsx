@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { ScrollArea } from "@/components/ui/scroll-area";
 import { 
   Brain, 
   Sparkles, 
@@ -14,7 +15,9 @@ import {
   ArrowRight,
   Code,
   FileText,
-  Lightbulb
+  Lightbulb,
+  Zap,
+  ListOrdered
 } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -26,22 +29,37 @@ interface ParsedCondition {
   type: 'must' | 'should' | 'must_not';
 }
 
+interface GeneratedQuery {
+  query: string;
+  priority: number;
+  totalValue: number;
+  template: string;
+}
+
 interface QueryStructure {
   conditions: ParsedCondition[];
   rawQuery: string;
   naturalLanguageSummary: string;
   searchParams: {
     fullName?: string;
+    firstName?: string;
+    lastName?: string;
+    middleName?: string;
     location?: string;
+    city?: string;
+    state?: string;
+    zip?: string;
     email?: string;
     phone?: string;
     username?: string;
     employer?: string;
+    age?: number;
     keywords?: string[];
     excludeTerms?: string[];
   };
   suggestedDataSources: string[];
   queryComplexity: 'simple' | 'moderate' | 'complex';
+  generatedQueries?: GeneratedQuery[];
 }
 
 interface BooleanQuerySearchProps {
@@ -299,6 +317,61 @@ const BooleanQuerySearch = ({ onExecuteSearch, onQueryParsed, loading = false }:
                     </Badge>
                   ))}
                 </div>
+              </div>
+            )}
+
+            {/* Generated Prioritized Queries */}
+            {parsedQuery.generatedQueries && parsedQuery.generatedQueries.length > 0 && (
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2 text-sm font-medium">
+                    <ListOrdered className="h-4 w-4" />
+                    Generated Queries ({parsedQuery.generatedQueries.length})
+                  </div>
+                  <Badge variant="secondary" className="text-xs">
+                    <Zap className="h-3 w-3 mr-1" />
+                    Priority Ranked
+                  </Badge>
+                </div>
+                <ScrollArea className="h-[200px] rounded-lg border">
+                  <div className="p-2 space-y-1">
+                    {parsedQuery.generatedQueries.slice(0, 20).map((gq, idx) => (
+                      <div 
+                        key={idx}
+                        className="flex items-center justify-between p-2 rounded-md bg-muted/30 hover:bg-muted/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-2 flex-1 min-w-0">
+                          <span className="text-xs font-medium text-muted-foreground w-5">
+                            {idx + 1}.
+                          </span>
+                          <code className="text-xs truncate flex-1">
+                            {gq.query}
+                          </code>
+                        </div>
+                        <div className="flex items-center gap-1 ml-2 flex-shrink-0">
+                          <Badge variant="outline" className="text-xs">
+                            P{gq.priority}
+                          </Badge>
+                          <Badge 
+                            variant="secondary" 
+                            className={`text-xs ${
+                              gq.totalValue > 5000 
+                                ? 'bg-green-500/20 text-green-700 dark:text-green-400' 
+                                : gq.totalValue > 2000 
+                                  ? 'bg-yellow-500/20 text-yellow-700 dark:text-yellow-400'
+                                  : 'bg-muted'
+                            }`}
+                          >
+                            {gq.totalValue.toLocaleString()}
+                          </Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </ScrollArea>
+                <p className="text-xs text-muted-foreground">
+                  Higher value = more specific match. Priority determines execution order.
+                </p>
               </div>
             )}
 
