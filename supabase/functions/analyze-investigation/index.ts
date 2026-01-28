@@ -13,6 +13,34 @@ serve(async (req) => {
   }
 
   try {
+    // Verify authentication first
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.error("Missing or invalid Authorization header");
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Create client with user's auth context for ownership verification
+    const supabaseClient = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const { data: { user }, error: authError } = await supabaseClient.auth.getUser();
+    if (authError || !user) {
+      console.error("Failed to verify user:", authError?.message);
+      return new Response(
+        JSON.stringify({ error: "Unauthorized" }),
+        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    console.log(`Authenticated user: ${user.id}`);
+
     const { investigationId } = await req.json();
 
     if (!investigationId) {
@@ -22,7 +50,22 @@ serve(async (req) => {
       );
     }
 
-    // Initialize Supabase client
+    // Verify ownership using RLS-enforced query (uses ANON_KEY with user's auth)
+    const { data: ownershipCheck, error: ownershipError } = await supabaseClient
+      .from('investigations')
+      .select('id')
+      .eq('id', investigationId)
+      .single();
+
+    if (ownershipError || !ownershipCheck) {
+      console.error('Investigation not found or access denied:', ownershipError?.message);
+      return new Response(
+        JSON.stringify({ error: "Investigation not found or access denied" }),
+        { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+      );
+    }
+
+    // Now use service role for full data access (ownership verified)
     const supabaseUrl = Deno.env.get('SUPABASE_URL')!;
     const supabaseKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
     const supabase = createClient(supabaseUrl, supabaseKey);
