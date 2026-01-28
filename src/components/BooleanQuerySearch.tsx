@@ -134,21 +134,45 @@ const BooleanQuerySearch = ({ onExecuteSearch, onQueryParsed, loading = false }:
   const executeSearch = () => {
     if (!parsedQuery) return;
 
+    // Build full name from parts if not directly provided
+    let fullName = parsedQuery.searchParams.fullName || '';
+    if (!fullName && (parsedQuery.searchParams.firstName || parsedQuery.searchParams.lastName)) {
+      fullName = [
+        parsedQuery.searchParams.firstName,
+        parsedQuery.searchParams.middleName,
+        parsedQuery.searchParams.lastName,
+      ].filter(Boolean).join(' ');
+    }
+
+    // Build address from city/state if location not provided
+    let address = parsedQuery.searchParams.location || '';
+    if (!address && (parsedQuery.searchParams.city || parsedQuery.searchParams.state)) {
+      address = [
+        parsedQuery.searchParams.city,
+        parsedQuery.searchParams.state,
+        parsedQuery.searchParams.zip,
+      ].filter(Boolean).join(', ');
+    }
+
     // Convert parsed query to search params format
     const searchParams = {
-      fullName: parsedQuery.searchParams.fullName || '',
-      address: parsedQuery.searchParams.location || '',
+      fullName,
+      address,
       email: parsedQuery.searchParams.email || '',
       phone: parsedQuery.searchParams.phone || '',
       username: parsedQuery.searchParams.username || '',
+      city: parsedQuery.searchParams.city || '',
+      state: parsedQuery.searchParams.state || '',
       keywords: [
         ...(parsedQuery.searchParams.keywords || []),
         parsedQuery.searchParams.employer ? `employer:${parsedQuery.searchParams.employer}` : '',
       ].filter(Boolean).join(' '),
       // Store exclude terms for filtering
-      excludeTerms: parsedQuery.searchParams.excludeTerms,
+      _excludeTerms: parsedQuery.searchParams.excludeTerms || [],
       // Store full parsed query for insights generation
-      parsedQuery: parsedQuery,
+      _parsedQuery: parsedQuery,
+      // Pass generated queries for hybrid search execution
+      _generatedQueries: parsedQuery.generatedQueries || [],
     };
 
     onExecuteSearch(searchParams);
