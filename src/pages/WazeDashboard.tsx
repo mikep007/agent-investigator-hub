@@ -194,10 +194,20 @@ export default function WazeDashboard() {
   }, []);
 
   const fetchAlerts = useCallback(async () => {
-    if (!boundsRef.current) return;
+    if (!boundsRef.current) {
+      console.log('[Waze] No bounds set yet, skipping fetch');
+      return;
+    }
 
     setLoading(true);
     const bounds = boundsRef.current;
+    
+    console.log('[Waze] Fetching alerts for server:', server, 'bounds:', {
+      west: bounds.getWest(),
+      east: bounds.getEast(),
+      south: bounds.getSouth(),
+      north: bounds.getNorth()
+    });
     
     const params = new URLSearchParams({
       left: bounds.getWest().toString(),
@@ -210,16 +220,22 @@ export default function WazeDashboard() {
       types: 'alerts',
     });
 
-    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(
-      `https://www.waze.com/${server}-rtserver/web/TGeoRSS?${params.toString()}`
-    )}`;
+    const wazeUrl = `https://www.waze.com/${server}-rtserver/web/TGeoRSS?${params.toString()}`;
+    const proxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(wazeUrl)}`;
 
     try {
+      console.log('[Waze] Fetching from proxy:', proxyUrl);
       const response = await fetch(proxyUrl);
-      if (!response.ok) throw new Error('Failed to fetch alerts');
+      if (!response.ok) {
+        console.error('[Waze] Response not OK:', response.status, response.statusText);
+        throw new Error(`Failed to fetch alerts: ${response.status}`);
+      }
       
       const text = await response.text();
+      console.log('[Waze] Response length:', text.length, 'chars');
+      
       const newAlerts = parseWazeXml(text);
+      console.log('[Waze] Parsed alerts:', newAlerts.length);
 
       // Deduplicate and merge with existing alerts
       newAlerts.forEach(alert => {
@@ -239,10 +255,12 @@ export default function WazeDashboard() {
       
       if (newAlerts.length > 0) {
         toast.success(`Fetched ${newAlerts.length} new alerts`);
+      } else {
+        toast.info('No alerts found in this area. Try zooming out or panning to a populated area.');
       }
     } catch (error) {
-      console.error('Error fetching alerts:', error);
-      toast.error('Failed to fetch Waze alerts. CORS restrictions may apply.');
+      console.error('[Waze] Error fetching alerts:', error);
+      toast.error('Failed to fetch Waze alerts. Try refreshing or check console for details.');
     } finally {
       setLoading(false);
     }
@@ -254,9 +272,34 @@ export default function WazeDashboard() {
     return () => clearInterval(interval);
   }, [fetchAlerts]);
 
+  // Fetch when server changes
+  useEffect(() => {
+    // Clear existing alerts when server changes
+    alertsRef.current = new Map();
+    setAlerts([]);
+    // Fetch with slight delay to ensure bounds are set
+    const timeout = setTimeout(() => {
+      if (boundsRef.current) {
+        fetchAlerts();
+      }
+    }, 500);
+    return () => clearTimeout(timeout);
+  }, [server]);
+
+  // Track if initial fetch has been done
+  const initialFetchDone = useRef(false);
+
   const handleBoundsChange = useCallback((bounds: L.LatLngBounds) => {
     boundsRef.current = bounds;
-  }, []);
+    // Trigger initial fetch when bounds are first set
+    if (!initialFetchDone.current) {
+      initialFetchDone.current = true;
+      // Small delay to ensure everything is ready
+      setTimeout(() => {
+        fetchAlerts();
+      }, 100);
+    }
+  }, [fetchAlerts]);
 
   const handleTrackUser = useCallback(() => {
     if (!username.trim()) {
