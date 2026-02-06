@@ -363,14 +363,113 @@ function extractPotentialRelatives(text: string, primaryName: string): { name: s
     }
   }
   
-  // Dedupe and return (limit to 15)
+  // 4. Comma-separated list patterns from obituaries
+  // Matches: "survived by her children David Petrie, Michael Petrie, Christine Petrie, Eddie Petrie and Kathie Keeth"
+  // Also: "his grandchildren Moira Petrie, Charlotte Petrie, Rebecca Petrie, Jordan Petrie, David Petrie, Delaney Petrie and Brian Keeth"
+  // Also: "her siblings John Smith, Jane Doe and Mary Jones"
+  const listRelationshipMap: Record<string, string> = {
+    'children': 'child', 'child': 'child', 'kids': 'child',
+    'sons': 'son', 'daughters': 'daughter',
+    'grandchildren': 'grandchild', 'grandkids': 'grandchild',
+    'great-grandchildren': 'great-grandchild', 'great grandchildren': 'great-grandchild',
+    'siblings': 'sibling', 'brothers': 'brother', 'sisters': 'sister',
+    'nieces': 'niece', 'nephews': 'nephew',
+    'cousins': 'cousin',
+    'step-children': 'step-child', 'stepchildren': 'step-child',
+  };
+  
+  const listRelKeywords = Object.keys(listRelationshipMap).join('|');
+  // Pattern: "survived by his/her [relationship_word] [Name1], [Name2], [Name3] and [Name4]"
+  // Also handles: "his/her [relationship_word] [Name1], [Name2] and [Name3]"
+  // Also handles without "survived by": "her children include David Petrie, ..."
+  const commaListPattern = new RegExp(
+    `(?:survived\\s+by\\s+)?(?:his|her)\\s+(?:beloved\\s+|loving\\s+|dear\\s+)?` +
+    `(${listRelKeywords})\\s+` +
+    `((?:[A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,2})` +  // First name (1-3 words)
+    `(?:\\s*,\\s*[A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,2})*` +  // More comma-separated names
+    `(?:\\s+and\\s+[A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,2})?)`,  // "and" final name
+    'gi'
+  );
+  
+  let commaListMatch;
+  while ((commaListMatch = commaListPattern.exec(text)) !== null) {
+    const relType = commaListMatch[1].toLowerCase();
+    const namesBlock = commaListMatch[2];
+    const relationship = listRelationshipMap[relType] || relType;
+    
+    console.log(`[RELATIVE] Found comma-list for "${relType}": "${namesBlock}"`);
+    
+    // Split on commas and "and" to get individual names
+    const namesList = namesBlock
+      .split(/\s*,\s*|\s+and\s+/i)
+      .map(n => n.trim())
+      .filter(n => n.length > 2 && /^[A-Z]/.test(n));
+    
+    for (const name of namesList) {
+      // Validate each word in the name
+      const nameParts = name.split(/\s+/);
+      const firstWord = nameParts[0];
+      if (!firstWord || !isValidFirstName(firstWord)) continue;
+      
+      // Skip if it's the primary person
+      if (name.toLowerCase() === primaryNameLower) continue;
+      
+      if (!relatives.some(r => r.name.toLowerCase() === name.toLowerCase())) {
+        relatives.push({ name, relationship });
+        console.log(`[RELATIVE] Comma-list extracted: ${name} (${relationship})`);
+      }
+    }
+  }
+  
+  // 5. Simpler comma-list without explicit relationship word
+  // Catches patterns like: "Anne is survived by David Petrie, Michael Petrie, Christine Petrie and Kathie Keeth"
+  // where there's no "children" keyword but names share the primary last name
+  if (primaryLastName && primaryLastName.length > 2) {
+    const escapedLastName = primaryLastName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const capitalizedLastName = primaryParts[primaryParts.length - 1]; // Original casing
+    
+    // Look for "survived by" followed by a comma-separated list containing the primary last name
+    const survivedByListPattern = new RegExp(
+      `survived\\s+by\\s+` +
+      `((?:[A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,2})` +
+      `(?:\\s*,\\s*[A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,2})*` +
+      `(?:\\s+and\\s+[A-Z][a-z]+(?:\\s+[A-Z][a-z]+){0,2})?)`,
+      'gi'
+    );
+    
+    let survivedMatch;
+    while ((survivedMatch = survivedByListPattern.exec(text)) !== null) {
+      const namesBlock = survivedMatch[1];
+      // Only process if at least one name in the block shares the primary last name
+      if (!new RegExp(`\\b${escapedLastName}\\b`, 'i').test(namesBlock)) continue;
+      
+      const namesList = namesBlock
+        .split(/\s*,\s*|\s+and\s+/i)
+        .map(n => n.trim())
+        .filter(n => n.length > 2 && /^[A-Z]/.test(n));
+      
+      for (const name of namesList) {
+        const nameParts = name.split(/\s+/);
+        const firstWord = nameParts[0];
+        if (!firstWord || !isValidFirstName(firstWord)) continue;
+        if (name.toLowerCase() === primaryNameLower) continue;
+        
+        if (!relatives.some(r => r.name.toLowerCase() === name.toLowerCase())) {
+          relatives.push({ name, relationship: 'family' });
+          console.log(`[RELATIVE] Survived-by list extracted: ${name}`);
+        }
+      }
+    }
+  }
+  
+  // Dedupe and return (limit to 25 — increased from 15 for large families)
   const seen = new Set<string>();
   return relatives.filter(r => {
     const key = r.name.toLowerCase();
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
-  }).slice(0, 15);
+  }).slice(0, 25);
 }
 
 // Check if a keyword matches a potential relative pattern
@@ -860,13 +959,81 @@ function buildDorkQueries(
     description: 'Court records and legal filings',
   });
 
-  // Obituaries and family connections
+  // Obituaries and family connections (general)
   queries.push({
-    query: `${quotedPrimary} "obituary" OR "survived by" OR "legacy.com" OR "tribute"`,
+    query: `${quotedPrimary} "obituary" OR "survived by" OR "tribute"`,
     type: 'obituary_search',
     priority: 2,
     category: 'family',
     description: 'Obituaries and family records',
+  });
+
+  // ========== TARGETED OBITUARY / FUNERAL HOME SITE SEARCHES ==========
+  // These sites have structured obituary data ideal for relative extraction
+
+  // Legacy.com - largest obituary aggregator
+  queries.push({
+    query: `${quotedPrimary} site:legacy.com`,
+    type: 'obituary_legacy',
+    priority: 1,
+    category: 'family',
+    description: 'Legacy.com obituary search',
+  });
+
+  // Dignity Memorial - major funeral home network
+  queries.push({
+    query: `${quotedPrimary} site:dignitymemorial.com`,
+    type: 'obituary_dignity',
+    priority: 1,
+    category: 'family',
+    description: 'Dignity Memorial obituary search',
+  });
+
+  // Echovita - obituary aggregator
+  queries.push({
+    query: `${quotedPrimary} site:echovita.com`,
+    type: 'obituary_echovita',
+    priority: 1,
+    category: 'family',
+    description: 'Echovita obituary search',
+  });
+
+  // Tribute Archive - funeral home obituaries
+  queries.push({
+    query: `${quotedPrimary} site:tributearchive.com`,
+    type: 'obituary_tribute',
+    priority: 1,
+    category: 'family',
+    description: 'Tribute Archive obituary search',
+  });
+
+  // Find A Grave - cemetery/memorial records
+  queries.push({
+    query: `${quotedPrimary} site:findagrave.com "family" OR "spouse" OR "parent"`,
+    type: 'obituary_findagrave',
+    priority: 2,
+    category: 'family',
+    description: 'Find A Grave memorial records',
+  });
+
+  // Broad funeral home search - catches local funeral homes like jamesobradley.com
+  if (city && state) {
+    queries.push({
+      query: `${quotedPrimary} "${city}" "obituary" OR "funeral" OR "memorial" OR "survived by"`,
+      type: 'obituary_local_funeral',
+      priority: 1,
+      category: 'family',
+      description: 'Local funeral home obituary search',
+    });
+  }
+
+  // Obituary + relative connection search (finds family trees)
+  queries.push({
+    query: `${quotedPrimary} "survived by" "children" OR "grandchildren" OR "wife" OR "husband"`,
+    type: 'obituary_survived_by',
+    priority: 1,
+    category: 'family',
+    description: 'Obituary family tree extraction',
   });
 
   // ========== CUSTOM SITE-SPECIFIC SEARCHES (from keywords) ==========
