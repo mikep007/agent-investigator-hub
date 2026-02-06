@@ -147,6 +147,10 @@ function buildEmailSearches(client: any, searchData: SearchData): SearchBatch {
   promises.push(client.functions.invoke('osint-leakcheck', { body: { target: email, type: 'email' } }));
   types.push('leakcheck');
 
+  // Gravatar profile lookup
+  promises.push(client.functions.invoke('osint-gravatar-lookup', { body: { target: email } }));
+  types.push('gravatar');
+
   // Extract username from email local-part
   const emailLocalPart = email.split('@')[0];
   if (emailLocalPart && emailLocalPart.length > 0) {
@@ -191,6 +195,10 @@ function buildUsernameSearches(client: any, searchData: SearchData): SearchBatch
   promises.push(client.functions.invoke('osint-instaloader', { body: { target: username, includePosts: true, postsLimit: 12 } }));
   types.push('instaloader');
 
+  // Telegram username lookup
+  promises.push(client.functions.invoke('osint-telegram-lookup', { body: { target: username, identifierType: 'username' } }));
+  types.push('telegram');
+
   console.log(`[UsernameAgent] Queued ${promises.length} searches for "${username}"`);
   return { promises, types };
 }
@@ -227,6 +235,14 @@ function buildPhoneSearches(client: any, searchData: SearchData): SearchBatch {
 
   promises.push(client.functions.invoke('osint-leakcheck', { body: { target: phone, type: 'phone' } }));
   types.push('leakcheck_phone');
+
+  // WhatsApp registration check
+  promises.push(client.functions.invoke('osint-whatsapp-check', { body: { target: phone } }));
+  types.push('whatsapp');
+
+  // Telegram phone lookup
+  promises.push(client.functions.invoke('osint-telegram-lookup', { body: { target: phone, identifierType: 'phone' } }));
+  types.push('telegram_phone');
 
   console.log(`[PhoneAgent] Queued ${promises.length} searches for phone`);
   return { promises, types };
@@ -483,6 +499,28 @@ function buildPowerAutomateSearch(client: any, searchData: SearchData): SearchBa
   return { promises, types };
 }
 
+function buildReputationChecks(client: any, searchData: SearchData): SearchBatch {
+  const promises: Promise<any>[] = [];
+  const types: string[] = [];
+
+  // Run reputation/scam check on each available identifier
+  if (searchData.email) {
+    promises.push(client.functions.invoke('osint-reputation-check', { body: { target: searchData.email, identifierType: 'email' } }));
+    types.push('reputation_email');
+  }
+  if (searchData.phone) {
+    promises.push(client.functions.invoke('osint-reputation-check', { body: { target: searchData.phone, identifierType: 'phone' } }));
+    types.push('reputation_phone');
+  }
+  if (searchData.username) {
+    promises.push(client.functions.invoke('osint-reputation-check', { body: { target: searchData.username, identifierType: 'username' } }));
+    types.push('reputation_username');
+  }
+
+  if (promises.length > 0) console.log(`[ReputationAgent] Queued ${promises.length} reputation checks`);
+  return { promises, types };
+}
+
 // ========== ORCHESTRATOR ==========
 
 Deno.serve(async (req) => {
@@ -538,6 +576,7 @@ Deno.serve(async (req) => {
       buildRecordSearches(supabaseClient, searchData),
       buildRelativeSearches(supabaseClient, searchData),
       hasAtLeastOneParam ? buildPowerAutomateSearch(supabaseClient, searchData) : { promises: [], types: [] },
+      buildReputationChecks(supabaseClient, searchData),
     ];
 
     // Merge all batches

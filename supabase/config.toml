@@ -122,3 +122,15 @@ verify_jwt = true
 
 [functions.osint-ai-insights]
 verify_jwt = true
+
+[functions.osint-whatsapp-check]
+verify_jwt = true
+
+[functions.osint-telegram-lookup]
+verify_jwt = true
+
+[functions.osint-gravatar-lookup]
+verify_jwt = true
+
+[functions.osint-reputation-check]
+verify_jwt = true

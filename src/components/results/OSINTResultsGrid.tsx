@@ -191,7 +191,6 @@ const OSINTResultsGrid = ({
             person.socialProfiles.forEach((sp: any) => {
               if (sp.url && !seenUrls.has(sp.url)) {
                 seenUrls.add(sp.url);
-                // Try to detect platform from URL
                 let platform = 'Unknown';
                 const urlLower = sp.url.toLowerCase();
                 if (urlLower.includes('facebook.com')) platform = 'Facebook';
@@ -218,6 +217,64 @@ const OSINTResultsGrid = ({
             });
           }
         });
+      }
+
+      // Telegram results
+      if (finding.agent_type === 'Telegram' || finding.agent_type === 'Telegram_phone') {
+        if (data.found && data.data?.public_profile) {
+          const url = data.data.profile_url || `https://t.me/${data.data.username}`;
+          if (!seenUrls.has(url)) {
+            seenUrls.add(url);
+            extracted.push({
+              platform: 'Telegram',
+              url,
+              findingId,
+              username: data.data.username,
+              fullName: data.data.display_name,
+              profileImage: data.data.profile_pic_url,
+              verified: false,
+              isPublic: true,
+            });
+          }
+        }
+      }
+
+      // WhatsApp results
+      if (finding.agent_type === 'Whatsapp') {
+        if (data.found && data.data?.registered) {
+          const url = data.data.wa_me_url || `https://wa.me/${data.data.phone}`;
+          if (!seenUrls.has(url)) {
+            seenUrls.add(url);
+            extracted.push({
+              platform: 'WhatsApp',
+              url,
+              findingId,
+              username: data.data.phone,
+              verified: false,
+              isPublic: true,
+            });
+          }
+        }
+      }
+
+      // Gravatar results
+      if (finding.agent_type === 'Gravatar') {
+        if (data.found && data.data?.avatar_url) {
+          const url = data.data.profile_url || data.data.avatar_url;
+          if (!seenUrls.has(url)) {
+            seenUrls.add(url);
+            extracted.push({
+              platform: 'Gravatar',
+              url,
+              findingId,
+              username: data.data.preferred_username || data.email,
+              fullName: data.data.display_name,
+              profileImage: data.data.avatar_url,
+              verified: false,
+              isPublic: true,
+            });
+          }
+        }
       }
     });
 
