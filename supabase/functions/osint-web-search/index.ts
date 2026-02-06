@@ -1426,12 +1426,20 @@ Deno.serve(async (req) => {
         let foundRelatives: string[] = [];
         let foundRelativesWithContext: { name: string; relationship?: string }[] = [];
         if (isObituaryOrPeopleSearch) {
-          foundRelativesWithContext = extractPotentialRelatives(textToCheck, searchName);
-          // Extract just names for backward compatibility
-          foundRelatives = foundRelativesWithContext.map(r => r.name);
-          foundRelatives.forEach(r => allFoundRelatives.add(r));
-          if (foundRelatives.length > 0) {
-            console.log(`Found potential relatives in "${item.link}":`, foundRelativesWithContext);
+          // CRITICAL: Only extract relatives from obituaries that actually mention
+          // the search target. Without this check, unrelated obituaries that appear
+          // in results (e.g., same funeral home, keyword match) would pollute the
+          // "From Obituaries/Memorials" section with strangers' family members.
+          const targetMentioned = nameMatch.exact || nameMatch.partial;
+          if (targetMentioned) {
+            foundRelativesWithContext = extractPotentialRelatives(textToCheck, searchName);
+            foundRelatives = foundRelativesWithContext.map(r => r.name);
+            foundRelatives.forEach(r => allFoundRelatives.add(r));
+            if (foundRelatives.length > 0) {
+              console.log(`Found potential relatives in "${item.link}":`, foundRelativesWithContext);
+            }
+          } else {
+            console.log(`Skipping relative extraction from "${item.link}" - target name not found in snippet`);
           }
         }
         
