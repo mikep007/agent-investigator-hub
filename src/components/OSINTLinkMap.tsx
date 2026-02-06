@@ -261,7 +261,7 @@ const OSINTLinkMap = ({ investigationId, targetName, active, onPivot }: OSINTLin
       }
 
       // Process Social
-      if (finding.agent_type === "Social" && data.profiles) {
+      if ((finding.agent_type === "Social" || finding.agent_type === "Social_email" || finding.agent_type === "Social_username") && data.profiles) {
         data.profiles.forEach((profile: any) => {
           if (profile.exists) {
             categories.social.nodes.push({

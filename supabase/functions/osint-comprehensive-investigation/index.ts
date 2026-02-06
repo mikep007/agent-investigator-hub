@@ -137,7 +137,7 @@ function buildEmailSearches(client: any, searchData: SearchData): SearchBatch {
 
   // Social search for email mentions
   promises.push(client.functions.invoke('osint-social-search', { body: { target: email } }));
-  types.push('social');
+  types.push('social_email');
 
   // OSINT Industries API
   promises.push(client.functions.invoke('osint-industries', { body: { target: email } }));
@@ -184,7 +184,7 @@ function buildUsernameSearches(client: any, searchData: SearchData): SearchBatch
   types.push('sherlock');
 
   promises.push(client.functions.invoke('osint-social-search', { body: { target: username } }));
-  types.push('social');
+  types.push('social_username');
 
   promises.push(client.functions.invoke('osint-leakcheck', { body: { target: username, type: 'username' } }));
   types.push('leakcheck_username');
@@ -613,11 +613,36 @@ Deno.serve(async (req) => {
         if (error) {
           console.error(`Error from ${agentType}:`, error);
           searchDebug.push({ type: agentType, status: 'error', error: typeof error === 'string' ? error : (error.message || JSON.stringify(error)) });
+          // Special case: Power Automate errors should still create a pending finding
+          // so the polling hook can detect and retry
+          if (agentType === 'power_automate') {
+            console.log('[PowerAutomate] Error received, storing error finding for diagnostics');
+            await supabaseClient.from('findings').insert({
+              investigation_id: investigation.id,
+              agent_type: 'Power_automate',
+              source: 'OSINT-power_automate',
+              data: { error: typeof error === 'string' ? error : (error.message || JSON.stringify(error)), pending: false, status: 'error' },
+              confidence_score: null,
+              verification_status: 'needs_review',
+            });
+          }
           continue;
         }
 
         if (!data) {
           searchDebug.push({ type: agentType, status: 'no_data', hasData: false });
+          // Special case: Power Automate with no data should still create a finding
+          if (agentType === 'power_automate') {
+            console.log('[PowerAutomate] No data received, storing empty finding');
+            await supabaseClient.from('findings').insert({
+              investigation_id: investigation.id,
+              agent_type: 'Power_automate',
+              source: 'OSINT-power_automate',
+              data: { pending: false, status: 'error', error: 'No data received from Power Automate' },
+              confidence_score: null,
+              verification_status: 'needs_review',
+            });
+          }
           continue;
         }
 
@@ -742,6 +767,19 @@ Deno.serve(async (req) => {
             agent_type: 'Web',
             source: `OSINT-${agentType}`,
             data: { error: errorMessage, items: [], confirmedItems: [], possibleItems: [] },
+            confidence_score: null,
+            verification_status: 'needs_review',
+          });
+        }
+
+        // Power Automate rejection should still create an error finding
+        if (agentType === 'power_automate') {
+          console.log('[PowerAutomate] Promise rejected, storing error finding');
+          await supabaseClient.from('findings').insert({
+            investigation_id: investigation.id,
+            agent_type: 'Power_automate',
+            source: 'OSINT-power_automate',
+            data: { error: errorMessage, pending: false, status: 'error' },
             confidence_score: null,
             verification_status: 'needs_review',
           });
