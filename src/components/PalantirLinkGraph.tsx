@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { 
   Mail, Phone, AtSign, User, MapPin, Globe, AlertTriangle, Shield,
-  ZoomIn, ZoomOut, Maximize2, Minimize2, Plus, RotateCcw,
+  ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw,
   X, Search, Network, Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -40,7 +40,8 @@ interface GraphNode {
   vy: number;
   locked: boolean;
   radius: number;
-  searching?: boolean; // loading spinner
+  searching?: boolean;
+  birthTime: number; // ms timestamp for bloom animation
   metadata?: {
     source?: string;
     url?: string;
@@ -67,14 +68,14 @@ interface Finding {
 
 // Obsidian-inspired muted palette
 const NODE_COLORS: Record<string, string> = {
-  root: '#c084fc',      // Soft purple (Obsidian accent)
-  email: '#60a5fa',     // Soft blue
-  phone: '#34d399',     // Soft green
-  username: '#a78bfa',  // Lavender
-  platform: '#f472b6',  // Soft pink
-  person: '#fbbf24',    // Warm amber
-  address: '#22d3ee',   // Cyan
-  breach: '#f87171',    // Soft red
+  root: '#c084fc',
+  email: '#60a5fa',
+  phone: '#34d399',
+  username: '#a78bfa',
+  platform: '#f472b6',
+  person: '#fbbf24',
+  address: '#22d3ee',
+  breach: '#f87171',
 };
 
 const NODE_RADIUS: Record<string, number> = {
@@ -95,6 +96,7 @@ const LINK_REST = 160;
 const CENTER_PULL = 0.003;
 const DAMPING = 0.88;
 const VELOCITY_THRESHOLD = 0.01;
+const BLOOM_DURATION_MS = 600;
 
 const PalantirLinkGraph = ({ 
   investigationId, 
@@ -106,25 +108,21 @@ const PalantirLinkGraph = ({
   const [links, setLinks] = useState<GraphLink[]>([]);
   const [findings, setFindings] = useState<Finding[]>([]);
   
-  // Canvas
   const [zoom, setZoom] = useState(1);
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
   
-  // Interaction
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
   
-  // Inline search
   const [searchValue, setSearchValue] = useState('');
   const [searchType, setSearchType] = useState<string>('email');
   const [searchingNodeId, setSearchingNodeId] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   
-  // Refs
   const containerRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const animationRef = useRef<number>();
@@ -167,137 +165,140 @@ const PalantirLinkGraph = ({
     return () => { channel.unsubscribe(); };
   }, [active, investigationId]);
 
-  // ──────── Build graph ────────
+  // ──────── Daisy-chain graph builder ────────
+  // Key idea: nodes connect through shared identifiers, not all to root.
+  // Email found on a person → person→email. Platform found via email → email→platform.
   const buildGraph = useCallback(() => {
     const newNodes: GraphNode[] = [];
     const newLinks: GraphLink[] = [];
     const cx = dimensions.width / 2;
     const cy = dimensions.height / 2;
+    const now = Date.now();
     
+    // Track old node birth times to preserve animations
+    const oldBirthTimes = new Map<string, number>();
+    nodesRef.current.forEach(n => oldBirthTimes.set(n.id, n.birthTime));
+    
+    const added = new Set<string>(['root']);
+    // Map selector values to their node IDs for cross-linking
+    const selectorIndex = new Map<string, string>(); // normalized value → nodeId
+
     newNodes.push({
       id: 'root', label: targetName, type: 'root',
       x: cx, y: cy, vx: 0, vy: 0, locked: true,
       radius: NODE_RADIUS.root,
+      birthTime: oldBirthTimes.get('root') || now,
       metadata: { verified: true },
     });
+
+    // Register root name for cross-linking
+    selectorIndex.set(targetName.toLowerCase().trim(), 'root');
     
-    const added = new Set<string>(['root']);
-    
-    const addNode = (id: string, label: string, type: GraphNode['type'], parentId: string, linkLabel?: string, meta?: GraphNode['metadata']) => {
-      if (added.has(id)) return;
+    const addNode = (
+      id: string, label: string, type: GraphNode['type'],
+      parentId: string, linkLabel?: string, meta?: GraphNode['metadata']
+    ) => {
+      if (added.has(id)) {
+        // Node exists — but add a link if not already linked to this parent
+        if (!newLinks.find(l => 
+          (l.source === parentId && l.target === id) || 
+          (l.source === id && l.target === parentId)
+        )) {
+          newLinks.push({ source: parentId, target: id, label: linkLabel, strength: 0.5 });
+        }
+        return;
+      }
       const angle = Math.random() * Math.PI * 2;
-      const r = 200 + Math.random() * 120;
+      const parentNode = newNodes.find(n => n.id === parentId);
+      const px = parentNode?.x || cx;
+      const py = parentNode?.y || cy;
+      const r = 120 + Math.random() * 80;
+      
       newNodes.push({
         id, label, type,
-        x: cx + Math.cos(angle) * r,
-        y: cy + Math.sin(angle) * r,
+        x: px + Math.cos(angle) * r,
+        y: py + Math.sin(angle) * r,
         vx: 0, vy: 0, locked: false,
         radius: NODE_RADIUS[type] || 5,
+        birthTime: oldBirthTimes.get(id) || now,
         metadata: meta,
       });
       newLinks.push({ source: parentId, target: id, label: linkLabel, strength: 0.7 });
       added.add(id);
+      
+      // Index for cross-linking
+      const normalized = label.toLowerCase().trim();
+      if (!selectorIndex.has(normalized)) {
+        selectorIndex.set(normalized, id);
+      }
     };
-    
+
+    // Helper: find best parent for a selector value
+    const findParent = (value: string, fallback: string): string => {
+      const normalized = value.toLowerCase().trim();
+      return selectorIndex.get(normalized) || fallback;
+    };
+
+    // ── Pass 1: Extract person-level data (people search, FamilyTreeNow) ──
+    // These create the person nodes that other data can chain from
     findings.forEach((f) => {
       const data = f.data as any;
       
-      // Emails
-      if (f.source?.includes('@') && !added.has(`email-${f.source}`)) {
-        addNode(`email-${f.source}`, f.source, 'email', 'root', 'email', { source: f.agent_type });
-      }
-      
-      // Holehe platforms
-      if (f.agent_type === 'Holehe' && data.results) {
-        data.results.forEach((r: any) => {
-          if (r.exists && r.platform) {
-            const pid = `plat-hol-${r.platform}`;
-            const emailId = `email-${f.source}`;
-            addNode(pid, r.platform, 'platform', added.has(emailId) ? emailId : 'root', 'registered', { source: 'Holehe', url: r.url, verified: true });
-          }
-        });
-      }
-      
-      // Sherlock
-      if (f.agent_type === 'Sherlock' && (data.profileLinks || data.foundPlatforms || data.platforms)) {
-        const platforms = data.profileLinks || data.foundPlatforms || data.platforms || [];
-        const username = data.username || f.source;
-        if (username) {
-          const uid = `user-${username}`;
-          addNode(uid, username, 'username', 'root', 'uses', { source: 'Sherlock' });
-          platforms.slice(0, 15).forEach((p: any) => {
-            const name = p.platform || p.name || p;
-            addNode(`plat-sh-${name}`, name, 'platform', uid, 'account', { source: 'Sherlock', url: p.url, verified: true });
-          });
-        }
-      }
-      
-      // LeakCheck
-      if ((f.agent_type === 'LeakCheck' || f.source?.includes('LeakCheck')) && data.sources) {
-        data.sources.forEach((b: any, i: number) => {
-          const name = b.name || 'Breach';
-          const emailId = `email-${f.source}`;
-          addNode(`breach-${name}-${i}`, name, 'breach', added.has(emailId) ? emailId : 'root', 'breached', { source: 'LeakCheck' });
-        });
-      }
-      
       // People search relatives
       if (f.agent_type === 'People_search') {
-        if (data.relatives) {
-          data.relatives.slice(0, 8).forEach((rel: any, i: number) => {
-            const name = typeof rel === 'string' ? rel : rel.name || 'Unknown';
-            addNode(`person-${name.replace(/\s+/g, '-')}-${i}`, name, 'person', 'root', 'relative', { source: 'People Search' });
+        // Extract emails found on the target → link to root
+        if (data.emails) {
+          (Array.isArray(data.emails) ? data.emails : []).forEach((email: string) => {
+            const eid = `email-${email.toLowerCase()}`;
+            addNode(eid, email, 'email', 'root', 'email');
+            selectorIndex.set(email.toLowerCase(), eid);
           });
         }
+        // Extract phones
+        if (data.phones) {
+          (Array.isArray(data.phones) ? data.phones : []).forEach((phone: string) => {
+            const pid = `phone-${phone.replace(/\D/g, '')}`;
+            addNode(pid, phone, 'phone', 'root', 'phone');
+            selectorIndex.set(phone.replace(/\D/g, ''), pid);
+          });
+        }
+        // Relatives
+        const extractRelatives = (rels: any[], suffix: string) => {
+          if (!rels) return;
+          rels.slice(0, 8).forEach((rel: any, i: number) => {
+            const name = typeof rel === 'string' ? rel : rel.name || 'Unknown';
+            const rid = `person-${name.replace(/\s+/g, '-').toLowerCase()}-${suffix}`;
+            addNode(rid, name, 'person', 'root', 'relative', { source: 'People Search' });
+          });
+        };
+        extractRelatives(data.relatives, 'ps');
         if (data.results) {
           data.results.forEach((result: any) => {
-            if (result.relatives) {
-              result.relatives.slice(0, 8).forEach((rel: any, i: number) => {
-                const name = typeof rel === 'string' ? rel : rel.name || 'Unknown';
-                addNode(`person-${name.replace(/\s+/g, '-')}-ps-${i}`, name, 'person', 'root', 'relative', { source: 'People Search' });
+            extractRelatives(result.relatives, 'psr');
+            // Chain emails found on result to root
+            if (result.emails) {
+              result.emails.forEach((email: string) => {
+                const eid = `email-${email.toLowerCase()}`;
+                addNode(eid, email, 'email', 'root', 'email');
+                selectorIndex.set(email.toLowerCase(), eid);
+              });
+            }
+            if (result.phones) {
+              result.phones.forEach((phone: string) => {
+                const pid = `phone-${phone.replace(/\D/g, '')}`;
+                addNode(pid, phone, 'phone', 'root', 'phone');
+                selectorIndex.set(phone.replace(/\D/g, ''), pid);
               });
             }
           });
         }
-      }
-      
-      // Addresses
-      if ((f.agent_type === 'People_search' || f.agent_type === 'Address') && (data.addresses || data.address)) {
+        // Addresses
         const addrs = data.addresses || (data.address ? [data.address] : []);
         addrs.slice(0, 3).forEach((addr: any, i: number) => {
           const str = typeof addr === 'string' ? addr : addr.full || addr.street || 'Address';
-          addNode(`addr-${str.substring(0, 20).replace(/\s+/g, '-')}-${i}`, str.length > 30 ? str.substring(0, 28) + '…' : str, 'address', 'root', 'lives at', { source: f.agent_type });
+          const aid = `addr-${str.substring(0, 20).replace(/\s+/g, '-').toLowerCase()}-${i}`;
+          addNode(aid, str.length > 30 ? str.substring(0, 28) + '…' : str, 'address', 'root', 'lives at', { source: f.agent_type });
         });
-      }
-      
-      // Phones
-      if (f.agent_type === 'Phone' && data.valid) {
-        const num = data.number || data.phone || 'Phone';
-        addNode(`phone-${num}`, num, 'phone', 'root', 'owns', { source: 'Phone' });
-      }
-      
-      // Social platforms
-      if ((f.agent_type === 'Social' || f.agent_type === 'social_email' || f.agent_type === 'social_username') && data.results) {
-        data.results.forEach((r: any) => {
-          if (r.platform && (r.exists || r.registered)) {
-            addNode(`plat-soc-${r.platform}`, r.platform, 'platform', 'root', 'registered', { source: 'Social', url: r.url, verified: true });
-          }
-        });
-      }
-      
-      // Gravatar
-      if (f.agent_type === 'Gravatar' && data.found) {
-        addNode(`plat-gravatar`, 'Gravatar', 'platform', 'root', 'profile', { source: 'Gravatar', verified: true });
-      }
-      
-      // WhatsApp
-      if (f.agent_type === 'WhatsApp' && data.registered) {
-        addNode(`plat-whatsapp`, 'WhatsApp', 'platform', 'root', 'registered', { source: 'WhatsApp', verified: true });
-      }
-      
-      // Telegram
-      if (f.agent_type === 'Telegram' && data.found) {
-        addNode(`plat-telegram`, 'Telegram', 'platform', 'root', 'account', { source: 'Telegram', verified: true });
       }
 
       // FamilyTreeNow
@@ -307,20 +308,137 @@ const PalantirLinkGraph = ({
             ? `${rel.person.name.first || ''} ${rel.person.name.last || ''}`.trim()
             : (typeof rel === 'string' ? rel : rel.name);
           if (name && name.trim().length > 2) {
-            addNode(`person-ftn-${name.replace(/\s+/g, '-')}-${i}`, name, 'person', 'root', rel.link?.relationship_type || 'family', { source: 'FamilyTreeNow' });
+            addNode(`person-ftn-${name.replace(/\s+/g, '-').toLowerCase()}-${i}`, name, 'person', 'root', rel.link?.relationship_type || 'family', { source: 'FamilyTreeNow' });
           }
         });
       }
     });
-    
+
+    // ── Pass 2: Email-based findings → chain off email nodes ──
+    findings.forEach((f) => {
+      const data = f.data as any;
+
+      // If the finding's source looks like an email, ensure that email node exists
+      if (f.source?.includes('@')) {
+        const emailId = `email-${f.source.toLowerCase()}`;
+        addNode(emailId, f.source, 'email', 'root', 'email', { source: f.agent_type });
+        selectorIndex.set(f.source.toLowerCase(), emailId);
+      }
+      
+      // Holehe: platforms chain off the email they were found on
+      if (f.agent_type === 'Holehe' && data.results) {
+        const emailId = f.source?.includes('@') ? `email-${f.source.toLowerCase()}` : 'root';
+        data.results.forEach((r: any) => {
+          if (r.exists && r.platform) {
+            const pid = `plat-hol-${r.platform.toLowerCase()}`;
+            addNode(pid, r.platform, 'platform', emailId, 'registered', { source: 'Holehe', url: r.url, verified: true });
+          }
+        });
+      }
+      
+      // LeakCheck breaches chain off the email
+      if ((f.agent_type === 'LeakCheck' || f.source?.includes('LeakCheck')) && data.sources) {
+        const emailId = f.source?.includes('@') ? `email-${f.source.toLowerCase()}` : 'root';
+        data.sources.forEach((b: any, i: number) => {
+          const name = b.name || 'Breach';
+          addNode(`breach-${name.toLowerCase()}-${i}`, name, 'breach', emailId, 'breached', { source: 'LeakCheck' });
+        });
+      }
+
+      // Gravatar → chain off email
+      if (f.agent_type === 'Gravatar' && data.found) {
+        const emailId = f.source?.includes('@') ? `email-${f.source.toLowerCase()}` : 'root';
+        addNode('plat-gravatar', 'Gravatar', 'platform', emailId, 'profile', { source: 'Gravatar', verified: true });
+      }
+    });
+
+    // ── Pass 3: Username/handle-based findings ──
+    findings.forEach((f) => {
+      const data = f.data as any;
+      
+      // Sherlock: username → platforms chain off username
+      if (f.agent_type === 'Sherlock' && (data.profileLinks || data.foundPlatforms || data.platforms)) {
+        const platforms = data.profileLinks || data.foundPlatforms || data.platforms || [];
+        const username = data.username || f.source;
+        if (username) {
+          const uid = `user-${username.toLowerCase()}`;
+          addNode(uid, username, 'username', 'root', 'uses', { source: 'Sherlock' });
+          platforms.slice(0, 15).forEach((p: any) => {
+            const name = typeof p === 'string' ? p : p.platform || p.name || 'Platform';
+            addNode(`plat-sh-${name.toLowerCase()}`, name, 'platform', uid, 'account', { source: 'Sherlock', url: typeof p === 'object' ? p.url : undefined, verified: true });
+          });
+        }
+      }
+
+      // Social platforms
+      if ((f.agent_type === 'Social' || f.agent_type === 'social_email' || f.agent_type === 'social_username') && data.results) {
+        // Try to chain off the relevant email or username
+        let parentId = 'root';
+        if (f.source?.includes('@')) {
+          const eid = `email-${f.source.toLowerCase()}`;
+          if (added.has(eid)) parentId = eid;
+        }
+        data.results.forEach((r: any) => {
+          if (r.platform && (r.exists || r.registered)) {
+            addNode(`plat-soc-${r.platform.toLowerCase()}`, r.platform, 'platform', parentId, 'registered', { source: 'Social', url: r.url, verified: true });
+          }
+        });
+      }
+
+      // Phone
+      if (f.agent_type === 'Phone' && data.valid) {
+        const num = data.number || data.phone || 'Phone';
+        addNode(`phone-${num.replace(/\D/g, '')}`, num, 'phone', 'root', 'owns', { source: 'Phone' });
+      }
+
+      // WhatsApp → chain off phone if possible
+      if (f.agent_type === 'WhatsApp' && data.registered) {
+        const phoneNum = data.phone || data.number || '';
+        const phoneId = phoneNum ? `phone-${phoneNum.replace(/\D/g, '')}` : null;
+        const parent = phoneId && added.has(phoneId) ? phoneId : 'root';
+        addNode('plat-whatsapp', 'WhatsApp', 'platform', parent, 'registered', { source: 'WhatsApp', verified: true });
+      }
+
+      // Telegram
+      if (f.agent_type === 'Telegram' && data.found) {
+        addNode('plat-telegram', 'Telegram', 'platform', 'root', 'account', { source: 'Telegram', verified: true });
+      }
+
+      // Address findings
+      if (f.agent_type === 'Address' && (data.addresses || data.address)) {
+        const addrs = data.addresses || (data.address ? [data.address] : []);
+        addrs.slice(0, 3).forEach((addr: any, i: number) => {
+          const str = typeof addr === 'string' ? addr : addr.full || addr.street || 'Address';
+          addNode(`addr-${str.substring(0, 20).replace(/\s+/g, '-').toLowerCase()}-${i}`, str.length > 30 ? str.substring(0, 28) + '…' : str, 'address', 'root', 'lives at', { source: f.agent_type });
+        });
+      }
+    });
+
+    // ── Pass 4: Cross-link shared selectors ──
+    // If two person nodes share an email or phone, link them
+    // (This happens when daisy-chaining from relative investigations)
+    // For now, platforms with same name from different sources get merged via addNode's dedup
+
     return { nodes: newNodes, links: newLinks };
   }, [findings, targetName, dimensions]);
 
   useEffect(() => {
     const { nodes: n, links: l } = buildGraph();
-    setNodes(n);
+    // Preserve positions of existing nodes
+    const oldPositions = new Map<string, { x: number; y: number }>();
+    nodesRef.current.forEach(node => oldPositions.set(node.id, { x: node.x, y: node.y }));
+    
+    const mergedNodes = n.map(node => {
+      const old = oldPositions.get(node.id);
+      if (old) {
+        return { ...node, x: old.x, y: old.y };
+      }
+      return node;
+    });
+    
+    setNodes(mergedNodes);
     setLinks(l);
-    nodesRef.current = n;
+    nodesRef.current = mergedNodes;
   }, [buildGraph]);
 
   // ──────── Physics ────────
@@ -337,7 +455,6 @@ const PalantirLinkGraph = ({
       if (n.locked) continue;
       let fx = 0, fy = 0;
       
-      // Repulsion
       for (let j = 0; j < ns.length; j++) {
         if (i === j) continue;
         const dx = n.x - ns[j].x;
@@ -348,7 +465,6 @@ const PalantirLinkGraph = ({
         fy += (dy / d) * f;
       }
       
-      // Link springs
       links.forEach(l => {
         if (l.source === n.id || l.target === n.id) {
           const oid = l.source === n.id ? l.target : l.source;
@@ -364,7 +480,6 @@ const PalantirLinkGraph = ({
         }
       });
       
-      // Center pull
       fx += (cx - n.x) * CENTER_PULL;
       fy += (cy - n.y) * CENTER_PULL;
       
@@ -379,7 +494,6 @@ const PalantirLinkGraph = ({
     nodesRef.current = ns;
     setNodes([...ns]);
     
-    // Keep simulating if there's energy
     if (totalKE > VELOCITY_THRESHOLD) {
       animationRef.current = requestAnimationFrame(simulate);
     }
@@ -392,7 +506,6 @@ const PalantirLinkGraph = ({
     return () => { if (animationRef.current) cancelAnimationFrame(animationRef.current); };
   }, [simulate, nodes.length]);
 
-  // Kick simulation when nodes change
   const kickSimulation = useCallback(() => {
     if (animationRef.current) cancelAnimationFrame(animationRef.current);
     animationRef.current = requestAnimationFrame(simulate);
@@ -463,7 +576,6 @@ const PalantirLinkGraph = ({
     const value = searchValue.trim();
     if (!value) return;
     
-    // Add node to graph immediately with loading state
     const nodeId = `${searchType}-search-${Date.now()}`;
     const cx = dimensions.width / 2;
     const cy = dimensions.height / 2;
@@ -482,6 +594,7 @@ const PalantirLinkGraph = ({
       vx: 0, vy: 0, locked: false,
       radius: NODE_RADIUS[searchType] || 6,
       searching: true,
+      birthTime: Date.now(),
       metadata: { source: 'Live Search' },
     };
     
@@ -499,7 +612,6 @@ const PalantirLinkGraph = ({
     setSearchValue('');
     kickSimulation();
     
-    // Trigger the actual pivot/search
     if (onPivot) {
       const pivotType = searchType === 'username' ? 'username' 
         : searchType === 'email' ? 'email' 
@@ -509,7 +621,6 @@ const PalantirLinkGraph = ({
       onPivot({ type: pivotType as PivotData['type'], value });
     }
     
-    // Clear loading state after a delay (results come via realtime)
     setTimeout(() => {
       nodesRef.current = nodesRef.current.map(n =>
         n.id === nodeId ? { ...n, searching: false } : n
@@ -526,7 +637,6 @@ const PalantirLinkGraph = ({
     const node = nodes.find(n => n.id === nodeId);
     if (!node || node.type === 'root' || !onPivot) return;
     
-    // Set loading on the node
     nodesRef.current = nodesRef.current.map(n =>
       n.id === nodeId ? { ...n, searching: true } : n
     );
@@ -556,6 +666,30 @@ const PalantirLinkGraph = ({
     setSelectedNode(nodeId === selectedNode ? null : nodeId);
   }, [selectedNode]);
 
+  // ──────── Bloom animation helper ────────
+  const getBloomProgress = useCallback((birthTime: number): number => {
+    const age = Date.now() - birthTime;
+    if (age >= BLOOM_DURATION_MS) return 1;
+    // Ease-out cubic
+    const t = age / BLOOM_DURATION_MS;
+    return 1 - Math.pow(1 - t, 3);
+  }, []);
+
+  // Force re-render during bloom animations
+  useEffect(() => {
+    const hasAnimating = nodes.some(n => (Date.now() - n.birthTime) < BLOOM_DURATION_MS);
+    if (!hasAnimating) return;
+    
+    let rafId: number;
+    const tick = () => {
+      setNodes(prev => [...prev]); // trigger re-render
+      const stillAnimating = nodesRef.current.some(n => (Date.now() - n.birthTime) < BLOOM_DURATION_MS);
+      if (stillAnimating) rafId = requestAnimationFrame(tick);
+    };
+    rafId = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(rafId);
+  }, [nodes.length]);
+
   // ──────── Render ────────
   if (!active) {
     return (
@@ -582,7 +716,7 @@ const PalantirLinkGraph = ({
         height: isFullscreen ? '100vh' : 650,
       }}
     >
-      {/* ── Floating Search Bar (Obsidian-style) ── */}
+      {/* ── Floating Search Bar ── */}
       <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30">
         <div className={cn(
           "flex items-center gap-2 rounded-full border border-gray-700/60 bg-[#161b22]/90 backdrop-blur-xl px-3 py-1.5 shadow-2xl transition-all",
@@ -639,25 +773,23 @@ const PalantirLinkGraph = ({
               </Button>
             </>
           ) : (
-            <>
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-7 gap-1.5 text-gray-400 hover:text-white hover:bg-white/5 text-xs px-3"
-                onClick={() => {
-                  setShowSearch(true);
-                  setTimeout(() => searchInputRef.current?.focus(), 100);
-                }}
-              >
-                <Search className="h-3.5 w-3.5" />
-                Search entity…
-              </Button>
-            </>
+            <Button
+              size="sm"
+              variant="ghost"
+              className="h-7 gap-1.5 text-gray-400 hover:text-white hover:bg-white/5 text-xs px-3"
+              onClick={() => {
+                setShowSearch(true);
+                setTimeout(() => searchInputRef.current?.focus(), 100);
+              }}
+            >
+              <Search className="h-3.5 w-3.5" />
+              Search entity…
+            </Button>
           )}
         </div>
       </div>
 
-      {/* ── Controls (minimal) ── */}
+      {/* ── Controls ── */}
       <div className="absolute top-3 right-3 z-20 flex items-center gap-1">
         <Badge variant="outline" className="text-[10px] font-mono border-gray-700/50 text-gray-500 bg-transparent h-6">
           {nodes.length} nodes
@@ -689,6 +821,7 @@ const PalantirLinkGraph = ({
       {selectedNode && (() => {
         const node = nodes.find(n => n.id === selectedNode);
         if (!node) return null;
+        const connectedCount = links.filter(l => l.source === node.id || l.target === node.id).length;
         return (
           <div className="absolute bottom-3 right-3 z-20 w-56 p-3 rounded-lg bg-[#161b22]/95 backdrop-blur border border-gray-800 shadow-xl">
             <div className="flex items-center gap-2 mb-2">
@@ -699,7 +832,8 @@ const PalantirLinkGraph = ({
                 <X className="h-3 w-3" />
               </Button>
             </div>
-            <p className="text-[10px] text-gray-500 capitalize mb-2">{node.type}{node.metadata?.source ? ` • ${node.metadata.source}` : ''}</p>
+            <p className="text-[10px] text-gray-500 capitalize mb-1">{node.type}{node.metadata?.source ? ` • ${node.metadata.source}` : ''}</p>
+            <p className="text-[10px] text-gray-600 mb-2">{connectedCount} connection{connectedCount !== 1 ? 's' : ''}</p>
             {node.type !== 'root' && onPivot && (
               <Button size="sm" className="w-full h-7 text-xs bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-600/30"
                 onClick={() => handleNodeDoubleClick(node.id)}>
@@ -723,7 +857,6 @@ const PalantirLinkGraph = ({
         onMouseLeave={handleMouseUp}
         onWheel={handleWheel}
       >
-        {/* Dot grid background */}
         <defs>
           <pattern id="dot-grid" width="30" height="30" patternUnits="userSpaceOnUse">
             <circle cx="15" cy="15" r="0.5" fill="#21262d" />
@@ -748,15 +881,32 @@ const PalantirLinkGraph = ({
 
             const isActive = hoveredNode === link.source || hoveredNode === link.target ||
                              selectedNode === link.source || selectedNode === link.target;
+            
+            // Bloom: fade link in with the newer node
+            const newerBirth = Math.max(s.birthTime, t.birthTime);
+            const linkBloom = getBloomProgress(newerBirth);
 
             return (
-              <line
-                key={`${link.source}-${link.target}`}
-                x1={s.x} y1={s.y} x2={t.x} y2={t.y}
-                stroke={isActive ? '#c084fc' : '#21262d'}
-                strokeWidth={isActive ? 1.5 : 0.5}
-                strokeOpacity={isActive ? 0.6 : 0.3}
-              />
+              <g key={`${link.source}-${link.target}`}>
+                <line
+                  x1={s.x} y1={s.y} x2={t.x} y2={t.y}
+                  stroke={isActive ? '#c084fc' : '#21262d'}
+                  strokeWidth={isActive ? 1.5 : 0.5}
+                  strokeOpacity={(isActive ? 0.6 : 0.3) * linkBloom}
+                />
+                {/* Edge label on hover */}
+                {isActive && link.label && linkBloom >= 1 && (
+                  <text
+                    x={(s.x + t.x) / 2}
+                    y={(s.y + t.y) / 2 - 4}
+                    textAnchor="middle"
+                    style={{ fontSize: '7px', fill: '#484f58', fontWeight: 500 }}
+                    className="pointer-events-none select-none"
+                  >
+                    {link.label}
+                  </text>
+                )}
+              </g>
             );
           })}
 
@@ -765,8 +915,10 @@ const PalantirLinkGraph = ({
             const isHovered = hoveredNode === node.id;
             const isSelected = selectedNode === node.id;
             const color = NODE_COLORS[node.type] || '#c084fc';
-            const r = node.radius;
-            const showLabel = isHovered || isSelected || node.type === 'root' || zoom > 1.2;
+            const bloom = getBloomProgress(node.birthTime);
+            const r = node.radius * bloom; // scale in
+            const opacity = bloom; // fade in
+            const showLabel = (isHovered || isSelected || node.type === 'root' || zoom > 1.2) && bloom > 0.5;
 
             return (
               <g
@@ -778,20 +930,30 @@ const PalantirLinkGraph = ({
                 onClick={() => handleNodeClick(node.id)}
                 onDoubleClick={() => handleNodeDoubleClick(node.id)}
                 className="cursor-pointer"
+                style={{ opacity }}
               >
+                {/* Bloom burst ring */}
+                {bloom < 1 && (
+                  <circle
+                    r={node.radius * 4 * (1 - bloom)}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth={0.5}
+                    opacity={0.3 * (1 - bloom)}
+                  />
+                )}
+
                 {/* Glow */}
-                {(isHovered || isSelected) && (
+                {(isHovered || isSelected) && bloom >= 1 && (
                   <circle r={r * 3} fill={color} opacity={0.08} />
                 )}
                 
                 {/* Pulse ring for searching */}
                 {node.searching && (
-                  <>
-                    <circle r={r * 2.5} fill="none" stroke={color} strokeWidth="0.5" opacity="0.4">
-                      <animate attributeName="r" from={`${r * 1.5}`} to={`${r * 4}`} dur="1.2s" repeatCount="indefinite" />
-                      <animate attributeName="opacity" from="0.5" to="0" dur="1.2s" repeatCount="indefinite" />
-                    </circle>
-                  </>
+                  <circle r={r * 2.5} fill="none" stroke={color} strokeWidth="0.5" opacity="0.4">
+                    <animate attributeName="r" from={`${r * 1.5}`} to={`${r * 4}`} dur="1.2s" repeatCount="indefinite" />
+                    <animate attributeName="opacity" from="0.5" to="0" dur="1.2s" repeatCount="indefinite" />
+                  </circle>
                 )}
 
                 {/* Selection ring */}
