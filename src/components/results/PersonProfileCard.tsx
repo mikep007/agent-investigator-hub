@@ -157,7 +157,7 @@ const PersonProfileCard = ({ findings, targetName, inputKeywords = [], aiSuggest
   // Count verified findings
   const verifiedCount = findings.filter(f => f.verification_status === 'verified').length;
   const totalPlatforms = findings.filter(f => 
-    f.agent_type === 'Sherlock' || f.agent_type === 'Holehe' || f.agent_type === 'Social'
+    f.agent_type === 'Sherlock' || f.agent_type === 'Holehe' || f.agent_type === 'Social' || f.agent_type === 'Social_email' || f.agent_type === 'Social_username'
   ).reduce((count, f) => {
     if (f.data?.foundPlatforms) return count + f.data.foundPlatforms.length;
     if (f.data?.accountsFound) return count + f.data.accountsFound;

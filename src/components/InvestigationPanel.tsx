@@ -557,6 +557,8 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
     log.agent_type === 'Sherlock' ||
     log.agent_type === 'Sherlock_from_email' ||
     log.agent_type === 'Social' ||
+    log.agent_type === 'Social_email' ||
+    log.agent_type === 'Social_username' ||
     log.agent_type === 'Social_name' ||
     log.agent_type === 'Idcrawl' ||
     log.agent_type === 'Toutatis' ||
@@ -1237,7 +1239,7 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
         }
 
         // Social Media Results
-        if (log.agent_type === 'Social' && log.data?.profiles?.some((p: any) => p.exists)) {
+        if ((log.agent_type === 'Social' || log.agent_type === 'Social_email' || log.agent_type === 'Social_username') && log.data?.profiles?.some((p: any) => p.exists)) {
           const foundProfiles = log.data.profiles.filter((p: any) => p.exists);
           return (
             <div key={log.id} className="space-y-4">
@@ -2566,6 +2568,7 @@ const InvestigationPanel = ({ active, investigationId, onPivot }: InvestigationP
                     {(() => {
                       const socialProfileLogs = filteredLogs.filter(log => 
                         log.agent_type === 'Social' || log.agent_type === 'Social_name' || 
+                        log.agent_type === 'Social_email' || log.agent_type === 'Social_username' ||
                         log.agent_type === 'Idcrawl' || log.agent_type === 'Toutatis' ||
                         log.agent_type === 'Toutatis_from_email' || log.agent_type === 'Instaloader' ||
                         log.agent_type === 'Instaloader_from_email'

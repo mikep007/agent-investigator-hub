@@ -81,7 +81,7 @@ const VisualTimeline = ({ findings }: VisualTimelineProps) => {
       }
 
       // Social results
-      if ((finding.agent_type === 'Social' || finding.agent_type === 'Social_name' || finding.agent_type === 'Idcrawl') && data.profiles) {
+      if ((finding.agent_type === 'Social' || finding.agent_type === 'Social_name' || finding.agent_type === 'Social_email' || finding.agent_type === 'Social_username' || finding.agent_type === 'Idcrawl') && data.profiles) {
         data.profiles
           .filter((p: any) => p.exists)
           .forEach((p: any) => {

@@ -132,7 +132,7 @@ const OSINTResultsGrid = ({
       }
 
       // Social search results - exclude "Potential Relative" web search noise
-      if ((finding.agent_type === 'Social' || finding.agent_type === 'Social_name' || finding.agent_type === 'Idcrawl') && data.profiles) {
+      if ((finding.agent_type === 'Social' || finding.agent_type === 'Social_name' || finding.agent_type === 'Social_email' || finding.agent_type === 'Social_username' || finding.agent_type === 'Idcrawl') && data.profiles) {
         data.profiles
           .filter((p: any) => {
             // Must exist

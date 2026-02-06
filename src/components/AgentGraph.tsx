@@ -77,7 +77,7 @@ const AgentGraph = ({ active, investigationId }: AgentGraphProps) => {
             });
           }
           
-          if (finding.agent_type === "Social" && findingData.profiles) {
+          if ((finding.agent_type === "Social" || finding.agent_type === "Social_email" || finding.agent_type === "Social_username") && findingData.profiles) {
             findingData.profiles.forEach((profile: any) => {
               if (profile.exists && !newData.social.includes(profile.platform)) {
                 newData.social.push(profile.platform);
