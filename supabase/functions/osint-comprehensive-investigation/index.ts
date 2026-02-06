@@ -8,6 +8,8 @@ import {
   type SearchBatch,
   parseLocationFromAddress,
   detectStateCode,
+  detectLocationSignals,
+  deduplicateRelatives,
 } from '../_shared/osint-utils.ts';
 
 // ========== AGENT MODULES ==========
@@ -304,15 +306,37 @@ function buildBusinessSearches(client: any, searchData: SearchData): SearchBatch
 
   const fullContext = { fullName: searchData.fullName, phone: searchData.phone, email: searchData.email };
 
-  // Sunbiz officer search
-  promises.push(client.functions.invoke('osint-sunbiz-search', { body: { officerName: searchData.fullName, fullContext } }));
-  types.push('sunbiz_officer');
+  // Smart state-search gating: only run multi-state business searches when we have location signals
+  const locationSignals = detectLocationSignals(searchData);
 
-  // Multi-state business registry searches
-  const states = ['CA', 'NY', 'TX', 'NV', 'DE', 'GA'];
-  for (const state of states) {
-    promises.push(client.functions.invoke('osint-state-business-search', { body: { state, officerName: searchData.fullName, fullContext } }));
-    types.push(`state_business_${state.toLowerCase()}_officer`);
+  if (locationSignals.length > 0) {
+    // We have location signals — only search relevant states
+    console.log(`[BusinessAgent] Location signals detected: ${locationSignals.map(s => s.state).join(', ')}`);
+
+    const statesToSearch = new Set(locationSignals.map(s => s.state));
+
+    // Always include FL (Sunbiz) if it's in the set
+    if (statesToSearch.has('FL')) {
+      promises.push(client.functions.invoke('osint-sunbiz-search', { body: { officerName: searchData.fullName, fullContext } }));
+      types.push('sunbiz_officer');
+      statesToSearch.delete('FL');
+    }
+
+    // Search remaining detected states
+    for (const state of statesToSearch) {
+      if (['CA', 'NY', 'TX', 'NV', 'DE', 'GA', 'AZ'].includes(state)) {
+        promises.push(client.functions.invoke('osint-state-business-search', { body: { state, officerName: searchData.fullName, fullContext } }));
+        types.push(`state_business_${state.toLowerCase()}_officer`);
+      }
+    }
+
+    console.log(`[BusinessAgent] Gated to ${promises.length} state-specific searches`);
+  } else {
+    // No location signals — skip multi-state business searches entirely
+    // Only run a lightweight Sunbiz officer search (FL is most common for business registrations)
+    console.log('[BusinessAgent] No location signals — skipping multi-state business searches, running FL Sunbiz only');
+    promises.push(client.functions.invoke('osint-sunbiz-search', { body: { officerName: searchData.fullName, fullContext } }));
+    types.push('sunbiz_officer');
   }
 
   console.log(`[BusinessAgent] Queued ${promises.length} officer/business searches`);
@@ -347,7 +371,7 @@ function buildRecordSearches(client: any, searchData: SearchData): SearchBatch {
   promises.push(client.functions.invoke('osint-court-records', { body: { firstName, lastName, state, county } }));
   types.push('court_records');
 
-  // Voter lookups
+  // Smart voter lookup gating: use location signals instead of blindly querying all 8 states
   const voterLookupStates = [
     { state: 'PA', fn: 'osint-pa-voter-lookup' },
     { state: 'NY', fn: 'osint-ny-voter-lookup' },
@@ -368,11 +392,20 @@ function buildRecordSearches(client: any, searchData: SearchData): SearchBatch {
       types.push(`${match.state}_voter`);
     }
   } else {
-    // No address: run all state voter lookups
-    console.log('[RecordsAgent] Running multi-state voter lookups (no address)');
-    for (const { state: st, fn } of voterLookupStates) {
-      promises.push(client.functions.invoke(fn, { body: { firstName, lastName } }));
-      types.push(`${st}_voter`);
+    // No address: use location signals to gate voter lookups
+    const locationSignals = detectLocationSignals(searchData);
+    if (locationSignals.length > 0) {
+      const statesToSearch = new Set(locationSignals.map(s => s.state));
+      console.log(`[RecordsAgent] Location signals for voter lookups: ${Array.from(statesToSearch).join(', ')}`);
+      for (const { state: st, fn } of voterLookupStates) {
+        if (statesToSearch.has(st)) {
+          promises.push(client.functions.invoke(fn, { body: { firstName, lastName } }));
+          types.push(`${st}_voter`);
+        }
+      }
+    } else {
+      // No location signals at all — skip multi-state voter lookups entirely
+      console.log('[RecordsAgent] No location signals — skipping multi-state voter lookups');
     }
   }
 
@@ -527,6 +560,8 @@ Deno.serve(async (req) => {
     const allWebDiscoveredRelatives: Set<string> = new Set();
     const seenWebUrls = new Set<string>();
     const webQueryStats: any[] = [];
+    // Cross-source relative collection for deduplication
+    const allDiscoveredRelatives: Array<{ name: string; relationship?: string; source: string }> = [];
 
     for (let i = 0; i < results.length; i++) {
       const result = results[i];
@@ -563,7 +598,15 @@ Deno.serve(async (req) => {
             }
           }
           if (data.discoveredRelatives && Array.isArray(data.discoveredRelatives)) {
-            data.discoveredRelatives.forEach((rel: string) => allWebDiscoveredRelatives.add(rel));
+            data.discoveredRelatives.forEach((rel: string | { name: string; relationship?: string }) => {
+              if (typeof rel === 'string') {
+                allWebDiscoveredRelatives.add(rel);
+                allDiscoveredRelatives.push({ name: rel, source: agentType });
+              } else if (rel.name) {
+                allWebDiscoveredRelatives.add(rel.name);
+                allDiscoveredRelatives.push({ name: rel.name, relationship: rel.relationship, source: agentType });
+              }
+            });
           }
           if (data.queriesUsed && Array.isArray(data.queriesUsed)) {
             webQueryStats.push(...data.queriesUsed);
@@ -627,6 +670,28 @@ Deno.serve(async (req) => {
 
         if (insertError) console.error(`Error inserting ${agentType} findings:`, insertError);
         else console.log(`Stored ${agentType} findings with confidence: ${confidenceScore}%`);
+
+        // Collect relatives from non-web sources for cross-source dedup
+        if (data.relatives && Array.isArray(data.relatives)) {
+          for (const rel of data.relatives) {
+            const relName = typeof rel === 'string' ? rel : (rel.name || '');
+            const relType = typeof rel === 'string' ? undefined : rel.relationship;
+            if (relName) allDiscoveredRelatives.push({ name: relName, relationship: relType, source: agentType });
+          }
+        }
+        if (data.discoveredRelatives && Array.isArray(data.discoveredRelatives)) {
+          for (const rel of data.discoveredRelatives) {
+            const relName = typeof rel === 'string' ? rel : (rel.name || '');
+            const relType = typeof rel === 'string' ? undefined : rel.relationship;
+            if (relName) allDiscoveredRelatives.push({ name: relName, relationship: relType, source: agentType });
+          }
+        }
+        if (data.associatedPeople && Array.isArray(data.associatedPeople)) {
+          for (const person of data.associatedPeople) {
+            const name = typeof person === 'string' ? person : (person.name || '');
+            if (name) allDiscoveredRelatives.push({ name, source: agentType });
+          }
+        }
       } else {
         console.error(`OSINT search ${agentType} failed:`, result.reason);
         const errorMessage = typeof result.reason === 'string' ? result.reason : (result.reason?.message || JSON.stringify(result.reason));
@@ -679,6 +744,33 @@ Deno.serve(async (req) => {
 
       if (webInsertError) console.error('Error inserting merged web findings:', webInsertError);
       else console.log(`Stored merged web findings: ${allWebConfirmedItems.length} confirmed, ${allWebPossibleItems.length} possible (deduplicated from ${seenWebUrls.size} URLs)`);
+    }
+
+    // Cross-source relative deduplication
+    if (allDiscoveredRelatives.length > 0) {
+      const dedupedRelatives = deduplicateRelatives(allDiscoveredRelatives);
+      console.log(`[Dedup] ${allDiscoveredRelatives.length} raw relatives → ${dedupedRelatives.length} deduplicated`);
+
+      const multiSourceRelatives = dedupedRelatives.filter(r => r.sources.length > 1);
+      if (multiSourceRelatives.length > 0) {
+        console.log(`[Dedup] ${multiSourceRelatives.length} relatives confirmed by multiple sources:`,
+          multiSourceRelatives.map(r => `${r.name} (${r.sources.join('+')})`).join(', '));
+      }
+
+      // Store deduplicated relatives as a finding
+      await supabaseClient.from('findings').insert({
+        investigation_id: investigation.id,
+        agent_type: 'Relatives',
+        source: 'OSINT-cross-source-dedup',
+        data: {
+          deduplicatedRelatives: dedupedRelatives,
+          totalRawCount: allDiscoveredRelatives.length,
+          totalDedupedCount: dedupedRelatives.length,
+          multiSourceCount: multiSourceRelatives.length,
+        },
+        confidence_score: multiSourceRelatives.length > 0 ? 85 : 60,
+        verification_status: 'needs_review',
+      });
     }
 
     // Diagnostic record

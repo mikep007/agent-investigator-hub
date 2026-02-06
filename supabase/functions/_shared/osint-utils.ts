@@ -570,3 +570,184 @@ export function detectStateCode(address: string): string | null {
   
   return null;
 }
+
+// ========== LOCATION SIGNAL DETECTION ==========
+
+export interface LocationSignal {
+  state: string;
+  source: string;
+  confidence: number;
+}
+
+/**
+ * Detect location signals from all available search data to gate state-specific searches.
+ * Returns an array of state codes with confidence and source info.
+ */
+export function detectLocationSignals(searchData: SearchData): LocationSignal[] {
+  const signals: LocationSignal[] = [];
+  const seenStates = new Set<string>();
+
+  const addSignal = (state: string, source: string, confidence: number) => {
+    const code = state.toUpperCase().trim();
+    if (code.length === 2 && !seenStates.has(code)) {
+      seenStates.add(code);
+      signals.push({ state: code, source, confidence });
+    }
+  };
+
+  // 1. Explicit address field
+  if (searchData.address) {
+    const detected = detectStateCode(searchData.address);
+    if (detected) addSignal(detected, 'address_field', 0.95);
+  }
+
+  // 2. Explicit city/state fields
+  if (searchData.state) {
+    addSignal(searchData.state, 'state_field', 0.9);
+  }
+
+  // 3. Keywords may contain state names or codes
+  if (searchData.keywords) {
+    const kwLower = searchData.keywords.toLowerCase();
+    const stateNameMap: Record<string, string> = {
+      'florida': 'FL', 'california': 'CA', 'new york': 'NY', 'texas': 'TX',
+      'pennsylvania': 'PA', 'ohio': 'OH', 'georgia': 'GA', 'north carolina': 'NC',
+      'nevada': 'NV', 'delaware': 'DE', 'arizona': 'AZ', 'new jersey': 'NJ',
+      'illinois': 'IL', 'michigan': 'MI', 'virginia': 'VA', 'washington': 'WA',
+      'colorado': 'CO', 'maryland': 'MD', 'massachusetts': 'MA',
+    };
+    for (const [name, code] of Object.entries(stateNameMap)) {
+      if (kwLower.includes(name)) addSignal(code, 'keyword_state_name', 0.7);
+    }
+    // Check for 2-letter state codes in keywords (e.g., "FL", "CA")
+    const codeMatches = searchData.keywords.match(/\b([A-Z]{2})\b/g);
+    if (codeMatches) {
+      const validCodes = new Set(['FL','CA','NY','TX','PA','OH','GA','NC','NV','DE','AZ','NJ','IL','MI','VA','WA','CO','MD','MA']);
+      for (const code of codeMatches) {
+        if (validCodes.has(code)) addSignal(code, 'keyword_state_code', 0.6);
+      }
+    }
+  }
+
+  // 4. Known relatives with location context in their names (rare but possible)
+  // 5. City names in the fullName field (e.g., "John Smith Miami") — very low confidence
+  if (searchData.fullName) {
+    const nameLower = searchData.fullName.toLowerCase();
+    const cityStateMap: Record<string, string> = {
+      'miami': 'FL', 'orlando': 'FL', 'tampa': 'FL', 'jacksonville': 'FL',
+      'los angeles': 'CA', 'san francisco': 'CA', 'san diego': 'CA',
+      'new york': 'NY', 'brooklyn': 'NY', 'manhattan': 'NY',
+      'houston': 'TX', 'dallas': 'TX', 'austin': 'TX', 'san antonio': 'TX',
+      'atlanta': 'GA', 'chicago': 'IL', 'philadelphia': 'PA', 'phoenix': 'AZ',
+      'las vegas': 'NV', 'charlotte': 'NC', 'columbus': 'OH', 'cleveland': 'OH',
+    };
+    for (const [city, state] of Object.entries(cityStateMap)) {
+      if (nameLower.includes(city)) addSignal(state, 'name_city_hint', 0.3);
+    }
+  }
+
+  return signals;
+}
+
+// ========== CROSS-SOURCE RELATIVE DEDUPLICATION ==========
+
+export interface DeduplicatedRelative {
+  name: string;
+  normalizedName: string;
+  relationship?: string;
+  sources: string[];
+  confidence: number;
+  variants: string[]; // All name forms seen
+}
+
+/**
+ * Deduplicate relatives found across multiple OSINT sources.
+ * Merges entries with matching names (fuzzy) and combines metadata.
+ */
+export function deduplicateRelatives(
+  allRelatives: Array<{ name: string; relationship?: string; source: string }>
+): DeduplicatedRelative[] {
+  const groups = new Map<string, DeduplicatedRelative>();
+
+  for (const rel of allRelatives) {
+    const normalized = normalizeName(rel.name);
+    if (!normalized || normalized.length < 3) continue;
+
+    // Try to find an existing group that matches
+    let matchedKey: string | null = null;
+    for (const [key, group] of groups) {
+      if (namesMatch(normalized, key)) {
+        matchedKey = key;
+        break;
+      }
+    }
+
+    if (matchedKey) {
+      const group = groups.get(matchedKey)!;
+      if (!group.sources.includes(rel.source)) {
+        group.sources.push(rel.source);
+      }
+      if (!group.variants.includes(rel.name)) {
+        group.variants.push(rel.name);
+      }
+      // Prefer the longest name variant as canonical
+      if (rel.name.length > group.name.length) {
+        group.name = rel.name;
+        group.normalizedName = normalized;
+      }
+      // Prefer specific relationship over generic
+      if (rel.relationship && (!group.relationship || group.relationship === 'family')) {
+        group.relationship = rel.relationship;
+      }
+      // Boost confidence for each additional source
+      group.confidence = Math.min(100, group.confidence + 15);
+    } else {
+      groups.set(normalized, {
+        name: rel.name,
+        normalizedName: normalized,
+        relationship: rel.relationship,
+        sources: [rel.source],
+        confidence: 40, // Base confidence for single-source
+        variants: [rel.name],
+      });
+    }
+  }
+
+  // Sort by confidence (multi-source first), then alphabetically
+  return Array.from(groups.values())
+    .sort((a, b) => b.confidence - a.confidence || a.name.localeCompare(b.name));
+}
+
+function normalizeName(name: string): string {
+  return name
+    .trim()
+    .toLowerCase()
+    .replace(/\s+/g, ' ')
+    .replace(/[^a-z\s'-]/g, '');
+}
+
+function namesMatch(a: string, b: string): boolean {
+  if (a === b) return true;
+
+  const aParts = a.split(/\s+/);
+  const bParts = b.split(/\s+/);
+
+  // "john smith" matches "john a smith" or "john smith jr"
+  if (aParts.length >= 2 && bParts.length >= 2) {
+    const aFirst = aParts[0];
+    const aLast = aParts[aParts.length - 1];
+    const bFirst = bParts[0];
+    const bLast = bParts[bParts.length - 1];
+
+    // Same first + last name (ignoring middle names/suffixes)
+    if (aFirst === bFirst && aLast === bLast) return true;
+
+    // Handle suffixes: "john smith" vs "john smith jr"
+    const suffixes = new Set(['jr', 'sr', 'ii', 'iii', 'iv']);
+    const aLastClean = suffixes.has(aLast) ? aParts[aParts.length - 2] || aLast : aLast;
+    const bLastClean = suffixes.has(bLast) ? bParts[bParts.length - 2] || bLast : bLast;
+    if (aFirst === bFirst && aLastClean === bLastClean) return true;
+  }
+
+  return false;
+}
