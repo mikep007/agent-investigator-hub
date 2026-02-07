@@ -9,6 +9,8 @@ import {
   X, Search, Network, Loader2
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import GraphNodeBox from '@/components/graph/GraphNodeBox';
+import { toast } from 'sonner';
 import {
   Select,
   SelectContent,
@@ -90,9 +92,9 @@ const NODE_RADIUS: Record<string, number> = {
 };
 
 // Physics
-const REPULSION = 800;
-const LINK_SPRING = 0.03;
-const LINK_REST = 160;
+const REPULSION = 1400;
+const LINK_SPRING = 0.025;
+const LINK_REST = 220;
 const CENTER_PULL = 0.003;
 const DAMPING = 0.88;
 const VELOCITY_THRESHOLD = 0.01;
@@ -817,30 +819,21 @@ const PalantirLinkGraph = ({
         Drag nodes • Scroll to zoom • Double-click to investigate
       </div>
 
-      {/* ── Selected node panel ── */}
+      {/* ── Selected node info (minimal) ── */}
       {selectedNode && (() => {
         const node = nodes.find(n => n.id === selectedNode);
         if (!node) return null;
         const connectedCount = links.filter(l => l.source === node.id || l.target === node.id).length;
         return (
-          <div className="absolute bottom-3 right-3 z-20 w-56 p-3 rounded-lg bg-[#161b22]/95 backdrop-blur border border-gray-800 shadow-xl">
-            <div className="flex items-center gap-2 mb-2">
-              <div className="w-3 h-3 rounded-full" style={{ backgroundColor: NODE_COLORS[node.type] }} />
-              <p className="text-xs font-medium text-white truncate flex-1">{node.label}</p>
-              <Button variant="ghost" size="icon" className="h-5 w-5 p-0 text-gray-500 hover:text-white"
+          <div className="absolute bottom-3 right-3 z-20 px-3 py-2 rounded-md bg-[#161b22]/95 backdrop-blur border border-gray-800 shadow-xl">
+            <div className="flex items-center gap-2">
+              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: NODE_COLORS[node.type] }} />
+              <p className="text-[10px] text-gray-400 truncate">{node.label} · {connectedCount} connections</p>
+              <Button variant="ghost" size="icon" className="h-4 w-4 p-0 text-gray-600 hover:text-white"
                 onClick={() => setSelectedNode(null)}>
-                <X className="h-3 w-3" />
+                <X className="h-2.5 w-2.5" />
               </Button>
             </div>
-            <p className="text-[10px] text-gray-500 capitalize mb-1">{node.type}{node.metadata?.source ? ` • ${node.metadata.source}` : ''}</p>
-            <p className="text-[10px] text-gray-600 mb-2">{connectedCount} connection{connectedCount !== 1 ? 's' : ''}</p>
-            {node.type !== 'root' && onPivot && (
-              <Button size="sm" className="w-full h-7 text-xs bg-purple-600/20 hover:bg-purple-600/30 text-purple-300 border border-purple-600/30"
-                onClick={() => handleNodeDoubleClick(node.id)}>
-                {node.searching ? <Loader2 className="h-3 w-3 mr-1 animate-spin" /> : <Search className="h-3 w-3 mr-1" />}
-                Investigate
-              </Button>
-            )}
           </div>
         );
       })()}
@@ -910,15 +903,11 @@ const PalantirLinkGraph = ({
             );
           })}
 
-          {/* Nodes */}
+          {/* Nodes — rectangular input boxes */}
           {nodes.map((node) => {
+            const bloom = getBloomProgress(node.birthTime);
             const isHovered = hoveredNode === node.id;
             const isSelected = selectedNode === node.id;
-            const color = NODE_COLORS[node.type] || '#c084fc';
-            const bloom = getBloomProgress(node.birthTime);
-            const r = node.radius * bloom; // scale in
-            const opacity = bloom; // fade in
-            const showLabel = (isHovered || isSelected || node.type === 'root' || zoom > 1.2) && bloom > 0.5;
 
             return (
               <g
@@ -930,64 +919,45 @@ const PalantirLinkGraph = ({
                 onClick={() => handleNodeClick(node.id)}
                 onDoubleClick={() => handleNodeDoubleClick(node.id)}
                 className="cursor-pointer"
-                style={{ opacity }}
               >
                 {/* Bloom burst ring */}
                 {bloom < 1 && (
                   <circle
-                    r={node.radius * 4 * (1 - bloom)}
+                    r={40 * (1 - bloom)}
                     fill="none"
-                    stroke={color}
+                    stroke={NODE_COLORS[node.type] || '#c084fc'}
                     strokeWidth={0.5}
                     opacity={0.3 * (1 - bloom)}
                   />
                 )}
 
-                {/* Glow */}
-                {(isHovered || isSelected) && bloom >= 1 && (
-                  <circle r={r * 3} fill={color} opacity={0.08} />
-                )}
-                
-                {/* Pulse ring for searching */}
+                {/* Searching pulse */}
                 {node.searching && (
-                  <circle r={r * 2.5} fill="none" stroke={color} strokeWidth="0.5" opacity="0.4">
-                    <animate attributeName="r" from={`${r * 1.5}`} to={`${r * 4}`} dur="1.2s" repeatCount="indefinite" />
+                  <circle r={30} fill="none" stroke={NODE_COLORS[node.type] || '#c084fc'} strokeWidth="0.5" opacity="0.4">
+                    <animate attributeName="r" from="20" to="50" dur="1.2s" repeatCount="indefinite" />
                     <animate attributeName="opacity" from="0.5" to="0" dur="1.2s" repeatCount="indefinite" />
                   </circle>
                 )}
 
-                {/* Selection ring */}
-                {isSelected && (
-                  <circle r={r + 3} fill="none" stroke={color} strokeWidth="1" strokeDasharray="2 2" opacity="0.6" />
-                )}
-
-                {/* Dot */}
-                <circle
-                  r={r}
-                  fill={color}
-                  opacity={isHovered || isSelected ? 1 : 0.7}
-                  style={{
-                    filter: isHovered || isSelected ? `drop-shadow(0 0 ${r * 2}px ${color})` : 'none',
-                    transition: 'opacity 0.2s',
+                <GraphNodeBox
+                  node={node}
+                  isHovered={isHovered}
+                  isSelected={isSelected}
+                  bloom={bloom}
+                  zoom={zoom}
+                  onInvestigate={(id) => handleNodeDoubleClick(id)}
+                  onCopyValue={(val) => {
+                    navigator.clipboard.writeText(val);
+                    toast.success('Copied to clipboard');
                   }}
+                  onRemove={(id) => {
+                    nodesRef.current = nodesRef.current.filter(n => n.id !== id);
+                    setNodes(prev => prev.filter(n => n.id !== id));
+                    setLinks(prev => prev.filter(l => l.source !== id && l.target !== id));
+                    if (selectedNode === id) setSelectedNode(null);
+                  }}
+                  onOpenUrl={(url) => window.open(url, '_blank')}
                 />
-
-                {/* Label */}
-                {showLabel && (
-                  <text
-                    y={r + 12}
-                    textAnchor="middle"
-                    className="pointer-events-none select-none"
-                    style={{ 
-                      fontSize: node.type === 'root' ? '11px' : '9px',
-                      fill: isHovered || isSelected ? '#e6edf3' : '#8b949e',
-                      fontWeight: node.type === 'root' ? 600 : 400,
-                      textShadow: '0 1px 3px rgba(0,0,0,0.8)',
-                    }}
-                  >
-                    {node.label.length > 24 ? node.label.substring(0, 22) + '…' : node.label}
-                  </text>
-                )}
               </g>
             );
           })}
