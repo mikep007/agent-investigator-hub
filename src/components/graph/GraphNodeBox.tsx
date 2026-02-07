@@ -75,21 +75,82 @@ const GraphNodeBox = ({
   onOpenUrl,
 }: GraphNodeBoxProps) => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const menuRef = useRef<HTMLDivElement>(null);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
   const Icon = ICON_MAP[node.type] || Globe;
   const color = NODE_COLORS[node.type] || '#c084fc';
 
-  // Close menu on outside click
+  const showingMenu = menuOpen || contextMenu !== null;
+
+  // Close menus on outside click
   useEffect(() => {
-    if (!menuOpen) return;
+    if (!showingMenu) return;
     const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node) &&
+          contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
         setMenuOpen(false);
+        setContextMenu(null);
+      }
+      if (menuOpen && menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+      if (contextMenu && contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        setContextMenu(null);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, [menuOpen]);
+  }, [showingMenu, menuOpen, contextMenu]);
+
+  const handleContextMenu = (e: React.MouseEvent) => {
+    if (node.type === 'root') return;
+    e.preventDefault();
+    e.stopPropagation();
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setContextMenu({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+    setMenuOpen(false);
+  };
+
+  const menuItems = (onClose: () => void) => (
+    <>
+      <button
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[11px] text-left hover:bg-white/5 transition-colors"
+        style={{ color: '#e6edf3' }}
+        onClick={(e) => { e.stopPropagation(); onClose(); onInvestigate(node.id); }}
+      >
+        <Search style={{ width: 11, height: 11, color: '#c084fc' }} />
+        Investigate
+      </button>
+      <button
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[11px] text-left hover:bg-white/5 transition-colors"
+        style={{ color: '#e6edf3' }}
+        onClick={(e) => { e.stopPropagation(); onClose(); onCopyValue(node.label); }}
+      >
+        <Copy style={{ width: 11, height: 11, color: '#8b949e' }} />
+        Copy value
+      </button>
+      {node.metadata?.url && (
+        <button
+          className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[11px] text-left hover:bg-white/5 transition-colors"
+          style={{ color: '#e6edf3' }}
+          onClick={(e) => { e.stopPropagation(); onClose(); onOpenUrl?.(node.metadata!.url!); }}
+        >
+          <ExternalLink style={{ width: 11, height: 11, color: '#60a5fa' }} />
+          Open link
+        </button>
+      )}
+      <div style={{ height: 1, background: '#21262d', margin: '2px 0' }} />
+      <button
+        className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[11px] text-left hover:bg-white/5 transition-colors"
+        style={{ color: '#f87171' }}
+        onClick={(e) => { e.stopPropagation(); onClose(); onRemove(node.id); }}
+      >
+        <Trash2 style={{ width: 11, height: 11 }} />
+        Remove
+      </button>
+    </>
+  );
 
   const boxWidth = node.type === 'root' ? 180 : 160;
   const boxHeight = 36;
@@ -99,7 +160,7 @@ const GraphNodeBox = ({
       x={-boxWidth / 2}
       y={-boxHeight / 2}
       width={boxWidth + 2}
-      height={menuOpen ? boxHeight + 140 : boxHeight + 4}
+      height={showingMenu ? boxHeight + 160 : boxHeight + 4}
       style={{
         opacity: bloom,
         overflow: 'visible',
@@ -109,25 +170,18 @@ const GraphNodeBox = ({
       <div
         style={{ transform: `scale(${bloom})`, transformOrigin: 'center top' }}
         className="relative"
+        onContextMenu={handleContextMenu}
       >
         {/* Main box */}
         <div
           className={cn(
             "flex items-center gap-1.5 rounded-md border px-2 py-1 transition-all duration-150 select-none",
             "text-[11px] font-medium whitespace-nowrap",
-            isSelected
-              ? "ring-1 ring-offset-0"
-              : ""
+            isSelected ? "ring-1 ring-offset-0" : ""
           )}
           style={{
-            background: isSelected || isHovered
-              ? `${color}18`
-              : '#0d1117',
-            borderColor: isSelected
-              ? color
-              : isHovered
-                ? `${color}80`
-                : '#30363d',
+            background: isSelected || isHovered ? `${color}18` : '#0d1117',
+            borderColor: isSelected ? color : isHovered ? `${color}80` : '#30363d',
             color: '#e6edf3',
             boxShadow: isSelected || isHovered
               ? `0 0 12px ${color}30, 0 0 4px ${color}15`
@@ -139,11 +193,7 @@ const GraphNodeBox = ({
           {/* Type icon */}
           <div
             className="flex items-center justify-center rounded-sm flex-shrink-0"
-            style={{
-              width: 22,
-              height: 22,
-              background: `${color}20`,
-            }}
+            style={{ width: 22, height: 22, background: `${color}20` }}
           >
             {node.searching ? (
               <Loader2 className="animate-spin" style={{ width: 12, height: 12, color }} />
@@ -180,6 +230,7 @@ const GraphNodeBox = ({
               onClick={(e) => {
                 e.stopPropagation();
                 setMenuOpen(!menuOpen);
+                setContextMenu(null);
               }}
               style={{ color: '#8b949e' }}
             >
@@ -188,67 +239,31 @@ const GraphNodeBox = ({
           )}
         </div>
 
-        {/* Dropdown menu */}
+        {/* Chevron dropdown menu */}
         {menuOpen && node.type !== 'root' && (
           <div
             ref={menuRef}
             className="absolute left-0 right-0 mt-1 rounded-md border shadow-xl z-50"
+            style={{ background: '#161b22', borderColor: '#30363d' }}
+          >
+            {menuItems(() => setMenuOpen(false))}
+          </div>
+        )}
+
+        {/* Right-click context menu */}
+        {contextMenu && node.type !== 'root' && (
+          <div
+            ref={contextMenuRef}
+            className="fixed rounded-md border shadow-xl z-[100]"
             style={{
               background: '#161b22',
               borderColor: '#30363d',
+              left: contextMenu.x,
+              top: contextMenu.y,
+              minWidth: 140,
             }}
           >
-            <button
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[11px] text-left hover:bg-white/5 transition-colors"
-              style={{ color: '#e6edf3' }}
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen(false);
-                onInvestigate(node.id);
-              }}
-            >
-              <Search style={{ width: 11, height: 11, color: '#c084fc' }} />
-              Investigate
-            </button>
-            <button
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[11px] text-left hover:bg-white/5 transition-colors"
-              style={{ color: '#e6edf3' }}
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen(false);
-                onCopyValue(node.label);
-              }}
-            >
-              <Copy style={{ width: 11, height: 11, color: '#8b949e' }} />
-              Copy value
-            </button>
-            {node.metadata?.url && (
-              <button
-                className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[11px] text-left hover:bg-white/5 transition-colors"
-                style={{ color: '#e6edf3' }}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setMenuOpen(false);
-                  onOpenUrl?.(node.metadata!.url!);
-                }}
-              >
-                <ExternalLink style={{ width: 11, height: 11, color: '#60a5fa' }} />
-                Open link
-              </button>
-            )}
-            <div style={{ height: 1, background: '#21262d', margin: '2px 0' }} />
-            <button
-              className="flex items-center gap-2 w-full px-2.5 py-1.5 text-[11px] text-left hover:bg-white/5 transition-colors"
-              style={{ color: '#f87171' }}
-              onClick={(e) => {
-                e.stopPropagation();
-                setMenuOpen(false);
-                onRemove(node.id);
-              }}
-            >
-              <Trash2 style={{ width: 11, height: 11 }} />
-              Remove
-            </button>
+            {menuItems(() => setContextMenu(null))}
           </div>
         )}
       </div>
