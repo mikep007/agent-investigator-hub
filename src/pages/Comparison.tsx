@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ActiveInvestigationBanner from "@/components/ActiveInvestigationBanner";
 import { useNavigate } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { Card } from "@/components/ui/card";
@@ -241,6 +242,10 @@ const Comparison = () => {
           </div>
         </div>
       </header>
+
+      <div className="container mx-auto px-6 pt-4">
+        <ActiveInvestigationBanner />
+      </div>
 
       <main className="container mx-auto px-6 py-8">
         {comparisonData.length === 0 ? (

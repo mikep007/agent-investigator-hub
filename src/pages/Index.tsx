@@ -394,6 +394,23 @@ const Index = () => {
                 </div>
               </div>
               <div className="flex items-center gap-3">
+                {/* Resume Investigation indicator */}
+                {activeInvestigation && targetName && (
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    className="gap-2 border border-primary/30 bg-primary/10 text-primary hover:bg-primary/20"
+                    onClick={() => {
+                      const resultsSection = document.getElementById('investigation-results');
+                      if (resultsSection) {
+                        resultsSection.scrollIntoView({ behavior: 'smooth' });
+                      }
+                    }}
+                  >
+                    <Search className="w-4 h-4" />
+                    <span className="hidden sm:inline">Active:</span> {targetName}
+                  </Button>
+                )}
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button variant="outline" size="sm">
@@ -459,6 +476,7 @@ const Index = () => {
           )}
 
           {/* Investigation Log - Full Width Landscape */}
+          <div id="investigation-results" />
           <Card className="bg-card/80 backdrop-blur border-border/50 overflow-hidden mb-6">
             <div className="px-6 pt-6">
               <div className="flex items-center justify-between mb-4">
