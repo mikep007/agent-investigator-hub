@@ -1,4 +1,5 @@
 import { useState } from "react";
+import ActiveInvestigationBanner from "@/components/ActiveInvestigationBanner";
 import { Link } from "react-router-dom";
 import { ArrowLeft, Search, Mail, Phone, Loader2, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -128,6 +129,10 @@ export default function SelectorEnrichment() {
           </div>
         </div>
       </header>
+
+      <div className="container mx-auto px-4 pt-4">
+        <ActiveInvestigationBanner />
+      </div>
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-8">

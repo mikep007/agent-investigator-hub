@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ActiveInvestigationBanner from "@/components/ActiveInvestigationBanner";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -309,6 +310,7 @@ export default function BreachMonitoring() {
 
   return (
     <div className="container mx-auto p-6 space-y-6">
+      <ActiveInvestigationBanner />
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-3xl font-bold">Breach Monitoring</h1>

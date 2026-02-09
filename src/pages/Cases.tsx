@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import ActiveInvestigationBanner from "@/components/ActiveInvestigationBanner";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -267,6 +268,10 @@ const Cases = () => {
           </div>
         </div>
       </header>
+
+      <div className="container mx-auto px-4 pt-4">
+        <ActiveInvestigationBanner />
+      </div>
 
       {/* Main Content */}
       <main className="container mx-auto px-4 py-6">
