@@ -536,15 +536,15 @@ const Index = () => {
             </div>
           )}
 
-          {/* Full-Width Palantir Link Graph */}
-          <Card className="mb-6 p-0 bg-transparent border-border/50 overflow-hidden">
+          {/* Full-Width OSINT Nexus Mind Map */}
+          <div className="mb-6">
             <PalantirLinkGraph 
               active={activeInvestigation} 
               investigationId={currentInvestigationId}
               targetName={targetName}
               onPivot={handlePivot}
             />
-          </Card>
+          </div>
 
           {/* Visualization and Analysis Grid */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">

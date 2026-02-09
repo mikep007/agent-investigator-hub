@@ -6,10 +6,12 @@ import { Input } from '@/components/ui/input';
 import { 
   Mail, Phone, AtSign, User, MapPin, Globe, AlertTriangle, Shield,
   ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw,
-  X, Search, Network, Loader2
+  X, Search, Network, Loader2, Plus, Download
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import GraphNodeBox from '@/components/graph/GraphNodeBox';
+import OSINTToolPalette from '@/components/graph/OSINTToolPalette';
+import NodeInspector from '@/components/graph/NodeInspector';
 import { toast } from 'sonner';
 import {
   Select,
@@ -43,7 +45,8 @@ interface GraphNode {
   locked: boolean;
   radius: number;
   searching?: boolean;
-  birthTime: number; // ms timestamp for bloom animation
+  birthTime: number;
+  notes?: string;
   metadata?: {
     source?: string;
     url?: string;
@@ -68,27 +71,14 @@ interface Finding {
   created_at: string;
 }
 
-// Obsidian-inspired muted palette
 const NODE_COLORS: Record<string, string> = {
-  root: '#c084fc',
-  email: '#60a5fa',
-  phone: '#34d399',
-  username: '#a78bfa',
-  platform: '#f472b6',
-  person: '#fbbf24',
-  address: '#22d3ee',
-  breach: '#f87171',
+  root: '#c084fc', email: '#60a5fa', phone: '#34d399', username: '#a78bfa',
+  platform: '#f472b6', person: '#fbbf24', address: '#22d3ee', breach: '#f87171',
 };
 
 const NODE_RADIUS: Record<string, number> = {
-  root: 10,
-  email: 6,
-  phone: 6,
-  username: 6,
-  platform: 4,
-  person: 6,
-  address: 5,
-  breach: 5,
+  root: 10, email: 6, phone: 6, username: 6,
+  platform: 4, person: 6, address: 5, breach: 5,
 };
 
 // Physics
@@ -126,6 +116,7 @@ const PalantirLinkGraph = ({
   const [showSearch, setShowSearch] = useState(false);
   
   const containerRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const animationRef = useRef<number>();
   const nodesRef = useRef<GraphNode[]>([]);
@@ -135,9 +126,9 @@ const PalantirLinkGraph = ({
   const MAX_ZOOM = 5;
 
   const dimensions = useMemo(() => ({
-    width: containerRef.current?.clientWidth || 1200,
+    width: canvasRef.current?.clientWidth || 900,
     height: isFullscreen ? (typeof window !== 'undefined' ? window.innerHeight - 60 : 800) : 650,
-  }), [isFullscreen, containerRef.current?.clientWidth]);
+  }), [isFullscreen, canvasRef.current?.clientWidth]);
 
   // ──────── Data ────────
   useEffect(() => {
@@ -168,8 +159,6 @@ const PalantirLinkGraph = ({
   }, [active, investigationId]);
 
   // ──────── Daisy-chain graph builder ────────
-  // Key idea: nodes connect through shared identifiers, not all to root.
-  // Email found on a person → person→email. Platform found via email → email→platform.
   const buildGraph = useCallback(() => {
     const newNodes: GraphNode[] = [];
     const newLinks: GraphLink[] = [];
@@ -177,13 +166,11 @@ const PalantirLinkGraph = ({
     const cy = dimensions.height / 2;
     const now = Date.now();
     
-    // Track old node birth times to preserve animations
     const oldBirthTimes = new Map<string, number>();
     nodesRef.current.forEach(n => oldBirthTimes.set(n.id, n.birthTime));
     
     const added = new Set<string>(['root']);
-    // Map selector values to their node IDs for cross-linking
-    const selectorIndex = new Map<string, string>(); // normalized value → nodeId
+    const selectorIndex = new Map<string, string>();
 
     newNodes.push({
       id: 'root', label: targetName, type: 'root',
@@ -193,7 +180,6 @@ const PalantirLinkGraph = ({
       metadata: { verified: true },
     });
 
-    // Register root name for cross-linking
     selectorIndex.set(targetName.toLowerCase().trim(), 'root');
     
     const addNode = (
@@ -201,7 +187,6 @@ const PalantirLinkGraph = ({
       parentId: string, linkLabel?: string, meta?: GraphNode['metadata']
     ) => {
       if (added.has(id)) {
-        // Node exists — but add a link if not already linked to this parent
         if (!newLinks.find(l => 
           (l.source === parentId && l.target === id) || 
           (l.source === id && l.target === parentId)
@@ -228,27 +213,17 @@ const PalantirLinkGraph = ({
       newLinks.push({ source: parentId, target: id, label: linkLabel, strength: 0.7 });
       added.add(id);
       
-      // Index for cross-linking
       const normalized = label.toLowerCase().trim();
       if (!selectorIndex.has(normalized)) {
         selectorIndex.set(normalized, id);
       }
     };
 
-    // Helper: find best parent for a selector value
-    const findParent = (value: string, fallback: string): string => {
-      const normalized = value.toLowerCase().trim();
-      return selectorIndex.get(normalized) || fallback;
-    };
-
-    // ── Pass 1: Extract person-level data (people search, FamilyTreeNow) ──
-    // These create the person nodes that other data can chain from
+    // ── Pass 1: Person-level data ──
     findings.forEach((f) => {
       const data = f.data as any;
       
-      // People search relatives
       if (f.agent_type === 'People_search') {
-        // Extract emails found on the target → link to root
         if (data.emails) {
           (Array.isArray(data.emails) ? data.emails : []).forEach((email: string) => {
             const eid = `email-${email.toLowerCase()}`;
@@ -256,7 +231,6 @@ const PalantirLinkGraph = ({
             selectorIndex.set(email.toLowerCase(), eid);
           });
         }
-        // Extract phones
         if (data.phones) {
           (Array.isArray(data.phones) ? data.phones : []).forEach((phone: string) => {
             const pid = `phone-${phone.replace(/\D/g, '')}`;
@@ -264,10 +238,9 @@ const PalantirLinkGraph = ({
             selectorIndex.set(phone.replace(/\D/g, ''), pid);
           });
         }
-        // Relatives
         const extractRelatives = (rels: any[], suffix: string) => {
           if (!rels) return;
-          rels.slice(0, 8).forEach((rel: any, i: number) => {
+          rels.slice(0, 8).forEach((rel: any) => {
             const name = typeof rel === 'string' ? rel : rel.name || 'Unknown';
             const rid = `person-${name.replace(/\s+/g, '-').toLowerCase()}-${suffix}`;
             addNode(rid, name, 'person', 'root', 'relative', { source: 'People Search' });
@@ -277,7 +250,6 @@ const PalantirLinkGraph = ({
         if (data.results) {
           data.results.forEach((result: any) => {
             extractRelatives(result.relatives, 'psr');
-            // Chain emails found on result to root
             if (result.emails) {
               result.emails.forEach((email: string) => {
                 const eid = `email-${email.toLowerCase()}`;
@@ -294,7 +266,6 @@ const PalantirLinkGraph = ({
             }
           });
         }
-        // Addresses
         const addrs = data.addresses || (data.address ? [data.address] : []);
         addrs.slice(0, 3).forEach((addr: any, i: number) => {
           const str = typeof addr === 'string' ? addr : addr.full || addr.street || 'Address';
@@ -303,7 +274,6 @@ const PalantirLinkGraph = ({
         });
       }
 
-      // FamilyTreeNow
       if (f.agent_type === 'FamilyTreeNow' && data.relatives) {
         data.relatives.forEach((rel: any, i: number) => {
           const name = rel.person?.name 
@@ -316,18 +286,16 @@ const PalantirLinkGraph = ({
       }
     });
 
-    // ── Pass 2: Email-based findings → chain off email nodes ──
+    // ── Pass 2: Email-based findings ──
     findings.forEach((f) => {
       const data = f.data as any;
 
-      // If the finding's source looks like an email, ensure that email node exists
       if (f.source?.includes('@')) {
         const emailId = `email-${f.source.toLowerCase()}`;
         addNode(emailId, f.source, 'email', 'root', 'email', { source: f.agent_type });
         selectorIndex.set(f.source.toLowerCase(), emailId);
       }
       
-      // Holehe: platforms chain off the email they were found on
       if (f.agent_type === 'Holehe' && data.results) {
         const emailId = f.source?.includes('@') ? `email-${f.source.toLowerCase()}` : 'root';
         data.results.forEach((r: any) => {
@@ -338,7 +306,6 @@ const PalantirLinkGraph = ({
         });
       }
       
-      // LeakCheck breaches chain off the email
       if ((f.agent_type === 'LeakCheck' || f.source?.includes('LeakCheck')) && data.sources) {
         const emailId = f.source?.includes('@') ? `email-${f.source.toLowerCase()}` : 'root';
         data.sources.forEach((b: any, i: number) => {
@@ -347,18 +314,16 @@ const PalantirLinkGraph = ({
         });
       }
 
-      // Gravatar → chain off email
       if (f.agent_type === 'Gravatar' && data.found) {
         const emailId = f.source?.includes('@') ? `email-${f.source.toLowerCase()}` : 'root';
         addNode('plat-gravatar', 'Gravatar', 'platform', emailId, 'profile', { source: 'Gravatar', verified: true });
       }
     });
 
-    // ── Pass 3: Username/handle-based findings ──
+    // ── Pass 3: Username/handle-based ──
     findings.forEach((f) => {
       const data = f.data as any;
       
-      // Sherlock: username → platforms chain off username
       if (f.agent_type === 'Sherlock' && (data.profileLinks || data.foundPlatforms || data.platforms)) {
         const platforms = data.profileLinks || data.foundPlatforms || data.platforms || [];
         const username = data.username || f.source;
@@ -372,9 +337,7 @@ const PalantirLinkGraph = ({
         }
       }
 
-      // Social platforms
       if ((f.agent_type === 'Social' || f.agent_type === 'social_email' || f.agent_type === 'social_username') && data.results) {
-        // Try to chain off the relevant email or username
         let parentId = 'root';
         if (f.source?.includes('@')) {
           const eid = `email-${f.source.toLowerCase()}`;
@@ -387,13 +350,11 @@ const PalantirLinkGraph = ({
         });
       }
 
-      // Phone
       if (f.agent_type === 'Phone' && data.valid) {
         const num = data.number || data.phone || 'Phone';
         addNode(`phone-${num.replace(/\D/g, '')}`, num, 'phone', 'root', 'owns', { source: 'Phone' });
       }
 
-      // WhatsApp → chain off phone if possible
       if (f.agent_type === 'WhatsApp' && data.registered) {
         const phoneNum = data.phone || data.number || '';
         const phoneId = phoneNum ? `phone-${phoneNum.replace(/\D/g, '')}` : null;
@@ -401,12 +362,10 @@ const PalantirLinkGraph = ({
         addNode('plat-whatsapp', 'WhatsApp', 'platform', parent, 'registered', { source: 'WhatsApp', verified: true });
       }
 
-      // Telegram
       if (f.agent_type === 'Telegram' && data.found) {
         addNode('plat-telegram', 'Telegram', 'platform', 'root', 'account', { source: 'Telegram', verified: true });
       }
 
-      // Address findings
       if (f.agent_type === 'Address' && (data.addresses || data.address)) {
         const addrs = data.addresses || (data.address ? [data.address] : []);
         addrs.slice(0, 3).forEach((addr: any, i: number) => {
@@ -416,25 +375,17 @@ const PalantirLinkGraph = ({
       }
     });
 
-    // ── Pass 4: Cross-link shared selectors ──
-    // If two person nodes share an email or phone, link them
-    // (This happens when daisy-chaining from relative investigations)
-    // For now, platforms with same name from different sources get merged via addNode's dedup
-
     return { nodes: newNodes, links: newLinks };
   }, [findings, targetName, dimensions]);
 
   useEffect(() => {
     const { nodes: n, links: l } = buildGraph();
-    // Preserve positions of existing nodes
     const oldPositions = new Map<string, { x: number; y: number }>();
     nodesRef.current.forEach(node => oldPositions.set(node.id, { x: node.x, y: node.y }));
     
     const mergedNodes = n.map(node => {
       const old = oldPositions.get(node.id);
-      if (old) {
-        return { ...node, x: old.x, y: old.y };
-      }
+      if (old) return { ...node, x: old.x, y: old.y };
       return node;
     });
     
@@ -573,6 +524,40 @@ const PalantirLinkGraph = ({
     kickSimulation();
   }, [buildGraph, kickSimulation]);
 
+  // ──────── Add node from palette ────────
+  const handleAddNodeFromPalette = useCallback((toolName: string, nodeType: string) => {
+    const nodeId = `manual-${Date.now()}`;
+    const cx = dimensions.width / 2;
+    const cy = dimensions.height / 2;
+    const angle = Math.random() * Math.PI * 2;
+    
+    const parentId = selectedNode || 'root';
+    const parentNode = nodesRef.current.find(n => n.id === parentId);
+    const px = parentNode?.x || cx;
+    const py = parentNode?.y || cy;
+    
+    const newNode: GraphNode = {
+      id: nodeId, label: toolName,
+      type: nodeType as GraphNode['type'],
+      x: px + Math.cos(angle) * 150,
+      y: py + Math.sin(angle) * 150,
+      vx: 0, vy: 0, locked: false,
+      radius: NODE_RADIUS[nodeType] || 6,
+      birthTime: Date.now(),
+      metadata: { source: 'Manual' },
+    };
+    
+    const newLink: GraphLink = {
+      source: parentId, target: nodeId, label: 'linked', strength: 0.7,
+    };
+    
+    nodesRef.current = [...nodesRef.current, newNode];
+    setNodes(prev => [...prev, newNode]);
+    setLinks(prev => [...prev, newLink]);
+    kickSimulation();
+    toast.success(`Added ${toolName} node`);
+  }, [selectedNode, dimensions, kickSimulation]);
+
   // ──────── Inline search ────────
   const handleInlineSearch = useCallback(async () => {
     const value = searchValue.trim();
@@ -601,8 +586,7 @@ const PalantirLinkGraph = ({
     };
     
     const newLink: GraphLink = {
-      source: parentId,
-      target: nodeId,
+      source: parentId, target: nodeId,
       label: searchType === 'email' || searchType === 'phone' ? 'owns' : 'linked',
       strength: 0.7,
     };
@@ -634,7 +618,6 @@ const PalantirLinkGraph = ({
     }, 5000);
   }, [searchValue, searchType, selectedNode, dimensions, onPivot, kickSimulation]);
 
-  // Double-click to pivot
   const handleNodeDoubleClick = useCallback((nodeId: string) => {
     const node = nodes.find(n => n.id === nodeId);
     if (!node || node.type === 'root' || !onPivot) return;
@@ -668,29 +651,62 @@ const PalantirLinkGraph = ({
     setSelectedNode(nodeId === selectedNode ? null : nodeId);
   }, [selectedNode]);
 
-  // ──────── Bloom animation helper ────────
+  const handleUpdateNotes = useCallback((nodeId: string, notes: string) => {
+    nodesRef.current = nodesRef.current.map(n =>
+      n.id === nodeId ? { ...n, notes } : n
+    );
+    setNodes(prev => prev.map(n =>
+      n.id === nodeId ? { ...n, notes } : n
+    ));
+  }, []);
+
+  // ──────── Bloom animation ────────
   const getBloomProgress = useCallback((birthTime: number): number => {
     const age = Date.now() - birthTime;
     if (age >= BLOOM_DURATION_MS) return 1;
-    // Ease-out cubic
     const t = age / BLOOM_DURATION_MS;
     return 1 - Math.pow(1 - t, 3);
   }, []);
 
-  // Force re-render during bloom animations
   useEffect(() => {
     const hasAnimating = nodes.some(n => (Date.now() - n.birthTime) < BLOOM_DURATION_MS);
     if (!hasAnimating) return;
     
     let rafId: number;
     const tick = () => {
-      setNodes(prev => [...prev]); // trigger re-render
+      setNodes(prev => [...prev]);
       const stillAnimating = nodesRef.current.some(n => (Date.now() - n.birthTime) < BLOOM_DURATION_MS);
       if (stillAnimating) rafId = requestAnimationFrame(tick);
     };
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
   }, [nodes.length]);
+
+  // ──────── Canvas drop handler ────────
+  const handleCanvasDrop = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    try {
+      const toolData = JSON.parse(e.dataTransfer.getData('application/json'));
+      handleAddNodeFromPalette(toolData.name, toolData.nodeType);
+    } catch {
+      // ignore
+    }
+  }, [handleAddNodeFromPalette]);
+
+  const handleCanvasDragOver = useCallback((e: React.DragEvent) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  // Get selected node data for inspector
+  const selectedNodeData = useMemo(() => {
+    return nodes.find(n => n.id === selectedNode) || null;
+  }, [nodes, selectedNode]);
+
+  const selectedConnectionCount = useMemo(() => {
+    if (!selectedNode) return 0;
+    return links.filter(l => l.source === selectedNode || l.target === selectedNode).length;
+  }, [links, selectedNode]);
 
   // ──────── Render ────────
   if (!active) {
@@ -699,8 +715,8 @@ const PalantirLinkGraph = ({
         style={{ height: 650, background: '#0d1117' }}>
         <div className="text-center text-muted-foreground">
           <Network className="h-12 w-12 mx-auto mb-3 opacity-20" style={{ color: '#c084fc' }} />
-          <p className="text-sm font-medium text-gray-400">Intelligence Link Graph</p>
-          <p className="text-xs mt-1 text-gray-600">Start an investigation to visualize connections</p>
+          <p className="text-sm font-medium" style={{ color: '#8b949e' }}>Intelligence Link Graph</p>
+          <p className="text-xs mt-1" style={{ color: '#484f58' }}>Start an investigation to visualize connections</p>
         </div>
       </div>
     );
@@ -710,7 +726,7 @@ const PalantirLinkGraph = ({
     <div
       ref={containerRef}
       className={cn(
-        "relative w-full rounded-lg border border-border/20 overflow-hidden transition-all duration-300",
+        "flex w-full rounded-lg border border-border/20 overflow-hidden transition-all duration-300",
         isFullscreen && "fixed inset-0 z-50 rounded-none"
       )}
       style={{ 
@@ -718,251 +734,259 @@ const PalantirLinkGraph = ({
         height: isFullscreen ? '100vh' : 650,
       }}
     >
-      {/* ── Floating Search Bar ── */}
-      <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30">
-        <div className={cn(
-          "flex items-center gap-2 rounded-full border border-gray-700/60 bg-[#161b22]/90 backdrop-blur-xl px-3 py-1.5 shadow-2xl transition-all",
-          showSearch ? "w-[420px]" : "w-auto"
-        )}>
-          {showSearch ? (
-            <>
-              <Select value={searchType} onValueChange={setSearchType}>
-                <SelectTrigger className="w-[100px] h-7 bg-transparent border-none text-gray-300 text-xs focus:ring-0 px-1">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent className="bg-[#161b22] border-gray-700">
-                  <SelectItem value="email"><div className="flex items-center gap-1.5 text-xs"><Mail className="h-3 w-3 text-blue-400"/>Email</div></SelectItem>
-                  <SelectItem value="username"><div className="flex items-center gap-1.5 text-xs"><AtSign className="h-3 w-3 text-purple-400"/>Username</div></SelectItem>
-                  <SelectItem value="phone"><div className="flex items-center gap-1.5 text-xs"><Phone className="h-3 w-3 text-green-400"/>Phone</div></SelectItem>
-                  <SelectItem value="person"><div className="flex items-center gap-1.5 text-xs"><User className="h-3 w-3 text-amber-400"/>Person</div></SelectItem>
-                  <SelectItem value="address"><div className="flex items-center gap-1.5 text-xs"><MapPin className="h-3 w-3 text-cyan-400"/>Address</div></SelectItem>
-                </SelectContent>
-              </Select>
-              <Input
-                ref={searchInputRef}
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleInlineSearch()}
-                placeholder={
-                  searchType === 'email' ? 'user@example.com' :
-                  searchType === 'username' ? '@handle' :
-                  searchType === 'phone' ? '+1 555 123 4567' :
-                  searchType === 'person' ? 'John Smith' :
-                  '123 Main St'
-                }
-                className="flex-1 h-7 bg-transparent border-none text-white text-xs placeholder:text-gray-600 focus-visible:ring-0"
-              />
-              {searchingNodeId ? (
-                <Loader2 className="h-4 w-4 text-purple-400 animate-spin" />
+      {/* ── Left: Tool Palette ── */}
+      <div className="w-80 border-r flex-shrink-0 overflow-hidden" style={{ borderColor: '#21262d' }}>
+        <OSINTToolPalette
+          onDragTool={() => {}}
+          onClickTool={(tool) => handleAddNodeFromPalette(tool.name, tool.nodeType)}
+        />
+      </div>
+
+      {/* ── Center: Mind Map Canvas ── */}
+      <div ref={canvasRef} className="flex-1 flex flex-col min-w-0">
+        {/* Canvas Toolbar */}
+        <div className="h-12 border-b flex items-center px-4 justify-between flex-shrink-0" style={{ borderColor: '#21262d', background: '#161b22' }}>
+          <h2 className="font-semibold text-[13px]" style={{ color: '#e6edf3' }}>Investigation Canvas</h2>
+          <div className="flex items-center gap-2">
+            <Badge variant="outline" className="text-[10px] font-mono h-5 px-1.5" style={{ borderColor: '#30363d', color: '#484f58' }}>
+              {nodes.length} nodes
+            </Badge>
+            
+            {/* Search toggle */}
+            <div className={cn(
+              "flex items-center gap-1.5 rounded-full border px-2 py-0.5 transition-all",
+              showSearch ? "w-[320px]" : "w-auto"
+            )} style={{ borderColor: '#30363d', background: '#0d1117' }}>
+              {showSearch ? (
+                <>
+                  <Select value={searchType} onValueChange={setSearchType}>
+                    <SelectTrigger className="w-[80px] h-6 bg-transparent border-none text-[11px] focus:ring-0 px-1" style={{ color: '#8b949e' }}>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent className="bg-[#161b22] border-[#30363d]">
+                      <SelectItem value="email"><div className="flex items-center gap-1.5 text-[11px]"><Mail className="h-3 w-3 text-blue-400"/>Email</div></SelectItem>
+                      <SelectItem value="username"><div className="flex items-center gap-1.5 text-[11px]"><AtSign className="h-3 w-3 text-purple-400"/>Username</div></SelectItem>
+                      <SelectItem value="phone"><div className="flex items-center gap-1.5 text-[11px]"><Phone className="h-3 w-3 text-green-400"/>Phone</div></SelectItem>
+                      <SelectItem value="person"><div className="flex items-center gap-1.5 text-[11px]"><User className="h-3 w-3 text-amber-400"/>Person</div></SelectItem>
+                      <SelectItem value="address"><div className="flex items-center gap-1.5 text-[11px]"><MapPin className="h-3 w-3 text-cyan-400"/>Address</div></SelectItem>
+                    </SelectContent>
+                  </Select>
+                  <Input
+                    ref={searchInputRef}
+                    value={searchValue}
+                    onChange={(e) => setSearchValue(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleInlineSearch()}
+                    placeholder="Search..."
+                    className="flex-1 h-6 bg-transparent border-none text-[11px] placeholder:text-[#484f58] focus-visible:ring-0"
+                    style={{ color: '#e6edf3' }}
+                  />
+                  {searchingNodeId ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" style={{ color: '#c084fc' }} />
+                  ) : (
+                    <Button size="sm" variant="ghost" className="h-5 w-5 p-0" style={{ color: '#c084fc' }}
+                      onClick={handleInlineSearch} disabled={!searchValue.trim()}>
+                      <Search className="h-3 w-3" />
+                    </Button>
+                  )}
+                  <Button size="sm" variant="ghost" className="h-5 w-5 p-0" style={{ color: '#484f58' }}
+                    onClick={() => setShowSearch(false)}>
+                    <X className="h-3 w-3" />
+                  </Button>
+                </>
               ) : (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  className="h-7 w-7 p-0 text-purple-400 hover:text-purple-300 hover:bg-purple-400/10"
-                  onClick={handleInlineSearch}
-                  disabled={!searchValue.trim()}
-                >
-                  <Search className="h-3.5 w-3.5" />
+                <Button size="sm" variant="ghost" className="h-6 gap-1 px-2 text-[11px]" style={{ color: '#8b949e' }}
+                  onClick={() => { setShowSearch(true); setTimeout(() => searchInputRef.current?.focus(), 100); }}>
+                  <Search className="h-3 w-3" /> Add Node
                 </Button>
               )}
-              <Button
-                size="sm"
-                variant="ghost"
-                className="h-6 w-6 p-0 text-gray-500 hover:text-gray-300"
-                onClick={() => setShowSearch(false)}
-              >
-                <X className="h-3 w-3" />
+            </div>
+
+            {/* View controls */}
+            <div className="flex items-center gap-0.5 ml-1">
+              <Button variant="ghost" size="icon" className="h-7 w-7" style={{ color: '#484f58' }}
+                onClick={() => setZoom(z => Math.max(MIN_ZOOM, z - 0.2))}>
+                <ZoomOut className="h-3.5 w-3.5" />
               </Button>
-            </>
-          ) : (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="h-7 gap-1.5 text-gray-400 hover:text-white hover:bg-white/5 text-xs px-3"
-              onClick={() => {
-                setShowSearch(true);
-                setTimeout(() => searchInputRef.current?.focus(), 100);
-              }}
-            >
-              <Search className="h-3.5 w-3.5" />
-              Search entity…
-            </Button>
-          )}
-        </div>
-      </div>
-
-      {/* ── Controls ── */}
-      <div className="absolute top-3 right-3 z-20 flex items-center gap-1">
-        <Badge variant="outline" className="text-[10px] font-mono border-gray-700/50 text-gray-500 bg-transparent h-6">
-          {nodes.length} nodes
-        </Badge>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-600 hover:text-gray-300 hover:bg-white/5"
-          onClick={() => setZoom(z => Math.max(MIN_ZOOM, z - 0.2))}>
-          <ZoomOut className="h-3.5 w-3.5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-600 hover:text-gray-300 hover:bg-white/5"
-          onClick={() => setZoom(z => Math.min(MAX_ZOOM, z + 0.2))}>
-          <ZoomIn className="h-3.5 w-3.5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-600 hover:text-gray-300 hover:bg-white/5"
-          onClick={resetView}>
-          <RotateCcw className="h-3.5 w-3.5" />
-        </Button>
-        <Button variant="ghost" size="icon" className="h-7 w-7 text-gray-600 hover:text-gray-300 hover:bg-white/5"
-          onClick={() => setIsFullscreen(!isFullscreen)}>
-          {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
-        </Button>
-      </div>
-
-      {/* ── Hint ── */}
-      <div className="absolute bottom-3 left-3 z-20 text-[10px] text-gray-600 select-none">
-        Drag nodes • Scroll to zoom • Double-click to investigate
-      </div>
-
-      {/* ── Selected node info (minimal) ── */}
-      {selectedNode && (() => {
-        const node = nodes.find(n => n.id === selectedNode);
-        if (!node) return null;
-        const connectedCount = links.filter(l => l.source === node.id || l.target === node.id).length;
-        return (
-          <div className="absolute bottom-3 right-3 z-20 px-3 py-2 rounded-md bg-[#161b22]/95 backdrop-blur border border-gray-800 shadow-xl">
-            <div className="flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full" style={{ backgroundColor: NODE_COLORS[node.type] }} />
-              <p className="text-[10px] text-gray-400 truncate">{node.label} · {connectedCount} connections</p>
-              <Button variant="ghost" size="icon" className="h-4 w-4 p-0 text-gray-600 hover:text-white"
-                onClick={() => setSelectedNode(null)}>
-                <X className="h-2.5 w-2.5" />
+              <Button variant="ghost" size="icon" className="h-7 w-7" style={{ color: '#484f58' }}
+                onClick={() => setZoom(z => Math.min(MAX_ZOOM, z + 0.2))}>
+                <ZoomIn className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" style={{ color: '#484f58' }}
+                onClick={resetView}>
+                <RotateCcw className="h-3.5 w-3.5" />
+              </Button>
+              <Button variant="ghost" size="icon" className="h-7 w-7" style={{ color: '#484f58' }}
+                onClick={() => setIsFullscreen(!isFullscreen)}>
+                {isFullscreen ? <Minimize2 className="h-3.5 w-3.5" /> : <Maximize2 className="h-3.5 w-3.5" />}
               </Button>
             </div>
           </div>
-        );
-      })()}
+        </div>
 
-      {/* ── SVG Canvas ── */}
-      <svg
-        ref={svgRef}
-        width="100%"
-        height="100%"
-        className="cursor-grab active:cursor-grabbing"
-        onMouseDown={handlePanStart}
-        onMouseMove={handleMouseMove}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-        onWheel={handleWheel}
-      >
-        <defs>
-          <pattern id="dot-grid" width="30" height="30" patternUnits="userSpaceOnUse">
-            <circle cx="15" cy="15" r="0.5" fill="#21262d" />
-          </pattern>
-          <filter id="node-glow" x="-100%" y="-100%" width="300%" height="300%">
-            <feGaussianBlur stdDeviation="6" result="blur" />
-            <feMerge>
-              <feMergeNode in="blur" />
-              <feMergeNode in="SourceGraphic" />
-            </feMerge>
-          </filter>
-        </defs>
-        <rect width="100%" height="100%" fill="#0d1117" />
-        <rect width="100%" height="100%" fill="url(#dot-grid)" />
+        {/* SVG Canvas */}
+        <div className="flex-1 relative overflow-hidden"
+          onDrop={handleCanvasDrop}
+          onDragOver={handleCanvasDragOver}
+        >
+          <svg
+            ref={svgRef}
+            width="100%"
+            height="100%"
+            className="cursor-grab active:cursor-grabbing"
+            onMouseDown={handlePanStart}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+            onWheel={handleWheel}
+          >
+            <defs>
+              <pattern id="dot-grid" width="20" height="20" patternUnits="userSpaceOnUse">
+                <circle cx="10" cy="10" r="0.6" fill="#1f2937" />
+              </pattern>
+              <filter id="node-glow" x="-100%" y="-100%" width="300%" height="300%">
+                <feGaussianBlur stdDeviation="6" result="blur" />
+                <feMerge>
+                  <feMergeNode in="blur" />
+                  <feMergeNode in="SourceGraphic" />
+                </feMerge>
+              </filter>
+            </defs>
+            <rect width="100%" height="100%" fill="#0a0a0a" />
+            <rect width="100%" height="100%" fill="url(#dot-grid)" />
 
-        <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
-          {/* Links */}
-          {links.map((link) => {
-            const s = nodes.find(n => n.id === link.source);
-            const t = nodes.find(n => n.id === link.target);
-            if (!s || !t) return null;
+            <g transform={`translate(${pan.x}, ${pan.y}) scale(${zoom})`}>
+              {/* Links */}
+              {links.map((link) => {
+                const s = nodes.find(n => n.id === link.source);
+                const t = nodes.find(n => n.id === link.target);
+                if (!s || !t) return null;
 
-            const isActive = hoveredNode === link.source || hoveredNode === link.target ||
-                             selectedNode === link.source || selectedNode === link.target;
-            
-            // Bloom: fade link in with the newer node
-            const newerBirth = Math.max(s.birthTime, t.birthTime);
-            const linkBloom = getBloomProgress(newerBirth);
+                const isActive = hoveredNode === link.source || hoveredNode === link.target ||
+                                 selectedNode === link.source || selectedNode === link.target;
+                
+                const newerBirth = Math.max(s.birthTime, t.birthTime);
+                const linkBloom = getBloomProgress(newerBirth);
 
-            return (
-              <g key={`${link.source}-${link.target}`}>
-                <line
-                  x1={s.x} y1={s.y} x2={t.x} y2={t.y}
-                  stroke={isActive ? '#c084fc' : '#21262d'}
-                  strokeWidth={isActive ? 1.5 : 0.5}
-                  strokeOpacity={(isActive ? 0.6 : 0.3) * linkBloom}
-                />
-                {/* Edge label on hover */}
-                {isActive && link.label && linkBloom >= 1 && (
-                  <text
-                    x={(s.x + t.x) / 2}
-                    y={(s.y + t.y) / 2 - 4}
-                    textAnchor="middle"
-                    style={{ fontSize: '7px', fill: '#484f58', fontWeight: 500 }}
-                    className="pointer-events-none select-none"
+                return (
+                  <g key={`${link.source}-${link.target}`}>
+                    <line
+                      x1={s.x} y1={s.y} x2={t.x} y2={t.y}
+                      stroke={isActive ? '#c084fc' : '#21262d'}
+                      strokeWidth={isActive ? 1.5 : 0.5}
+                      strokeOpacity={(isActive ? 0.6 : 0.3) * linkBloom}
+                    />
+                    {isActive && link.label && linkBloom >= 1 && (
+                      <text
+                        x={(s.x + t.x) / 2}
+                        y={(s.y + t.y) / 2 - 4}
+                        textAnchor="middle"
+                        style={{ fontSize: '7px', fill: '#484f58', fontWeight: 500 }}
+                        className="pointer-events-none select-none"
+                      >
+                        {link.label}
+                      </text>
+                    )}
+                  </g>
+                );
+              })}
+
+              {/* Nodes */}
+              {nodes.map((node) => {
+                const bloom = getBloomProgress(node.birthTime);
+                const isHovered = hoveredNode === node.id;
+                const isSelected = selectedNode === node.id;
+
+                return (
+                  <g
+                    key={node.id}
+                    transform={`translate(${node.x}, ${node.y})`}
+                    onMouseEnter={() => setHoveredNode(node.id)}
+                    onMouseLeave={() => setHoveredNode(null)}
+                    onMouseDown={(e) => handleNodeDragStart(node.id, e)}
+                    onClick={() => handleNodeClick(node.id)}
+                    onDoubleClick={() => handleNodeDoubleClick(node.id)}
+                    className="cursor-pointer"
                   >
-                    {link.label}
-                  </text>
-                )}
-              </g>
-            );
-          })}
+                    {bloom < 1 && (
+                      <circle
+                        r={40 * (1 - bloom)}
+                        fill="none"
+                        stroke={NODE_COLORS[node.type] || '#c084fc'}
+                        strokeWidth={0.5}
+                        opacity={0.3 * (1 - bloom)}
+                      />
+                    )}
 
-          {/* Nodes — rectangular input boxes */}
-          {nodes.map((node) => {
-            const bloom = getBloomProgress(node.birthTime);
-            const isHovered = hoveredNode === node.id;
-            const isSelected = selectedNode === node.id;
+                    {node.searching && (
+                      <circle r={30} fill="none" stroke={NODE_COLORS[node.type] || '#c084fc'} strokeWidth="0.5" opacity="0.4">
+                        <animate attributeName="r" from="20" to="50" dur="1.2s" repeatCount="indefinite" />
+                        <animate attributeName="opacity" from="0.5" to="0" dur="1.2s" repeatCount="indefinite" />
+                      </circle>
+                    )}
 
-            return (
-              <g
-                key={node.id}
-                transform={`translate(${node.x}, ${node.y})`}
-                onMouseEnter={() => setHoveredNode(node.id)}
-                onMouseLeave={() => setHoveredNode(null)}
-                onMouseDown={(e) => handleNodeDragStart(node.id, e)}
-                onClick={() => handleNodeClick(node.id)}
-                onDoubleClick={() => handleNodeDoubleClick(node.id)}
-                className="cursor-pointer"
-              >
-                {/* Bloom burst ring */}
-                {bloom < 1 && (
-                  <circle
-                    r={40 * (1 - bloom)}
-                    fill="none"
-                    stroke={NODE_COLORS[node.type] || '#c084fc'}
-                    strokeWidth={0.5}
-                    opacity={0.3 * (1 - bloom)}
-                  />
-                )}
+                    <GraphNodeBox
+                      node={node}
+                      isHovered={isHovered}
+                      isSelected={isSelected}
+                      bloom={bloom}
+                      zoom={zoom}
+                      onInvestigate={(id) => handleNodeDoubleClick(id)}
+                      onCopyValue={(val) => {
+                        navigator.clipboard.writeText(val);
+                        toast.success('Copied to clipboard');
+                      }}
+                      onRemove={(id) => {
+                        nodesRef.current = nodesRef.current.filter(n => n.id !== id);
+                        setNodes(prev => prev.filter(n => n.id !== id));
+                        setLinks(prev => prev.filter(l => l.source !== id && l.target !== id));
+                        if (selectedNode === id) setSelectedNode(null);
+                      }}
+                      onOpenUrl={(url) => window.open(url, '_blank')}
+                    />
+                  </g>
+                );
+              })}
+            </g>
+          </svg>
 
-                {/* Searching pulse */}
-                {node.searching && (
-                  <circle r={30} fill="none" stroke={NODE_COLORS[node.type] || '#c084fc'} strokeWidth="0.5" opacity="0.4">
-                    <animate attributeName="r" from="20" to="50" dur="1.2s" repeatCount="indefinite" />
-                    <animate attributeName="opacity" from="0.5" to="0" dur="1.2s" repeatCount="indefinite" />
-                  </circle>
-                )}
+          {/* Canvas hints */}
+          <div className="absolute bottom-3 left-3 z-20 text-[10px] select-none" style={{ color: '#484f58' }}>
+            Drag nodes • Scroll to zoom • Double-click to investigate • Drag tools from palette
+          </div>
+        </div>
+      </div>
 
-                <GraphNodeBox
-                  node={node}
-                  isHovered={isHovered}
-                  isSelected={isSelected}
-                  bloom={bloom}
-                  zoom={zoom}
-                  onInvestigate={(id) => handleNodeDoubleClick(id)}
-                  onCopyValue={(val) => {
-                    navigator.clipboard.writeText(val);
-                    toast.success('Copied to clipboard');
-                  }}
-                  onRemove={(id) => {
-                    nodesRef.current = nodesRef.current.filter(n => n.id !== id);
-                    setNodes(prev => prev.filter(n => n.id !== id));
-                    setLinks(prev => prev.filter(l => l.source !== id && l.target !== id));
-                    if (selectedNode === id) setSelectedNode(null);
-                  }}
-                  onOpenUrl={(url) => window.open(url, '_blank')}
-                />
-              </g>
-            );
-          })}
-        </g>
-      </svg>
+      {/* ── Right: Inspector ── */}
+      <div className="w-72 border-l flex-shrink-0 overflow-hidden" style={{ borderColor: '#21262d' }}>
+        <NodeInspector
+          selectedNode={selectedNodeData}
+          connectionCount={selectedConnectionCount}
+          onClose={() => setSelectedNode(null)}
+          onInvestigate={handleNodeDoubleClick}
+          onCopy={(val) => {
+            navigator.clipboard.writeText(val);
+            toast.success('Copied to clipboard');
+          }}
+          onRemove={(id) => {
+            nodesRef.current = nodesRef.current.filter(n => n.id !== id);
+            setNodes(prev => prev.filter(n => n.id !== id));
+            setLinks(prev => prev.filter(l => l.source !== id && l.target !== id));
+            setSelectedNode(null);
+          }}
+          onOpenUrl={(url) => window.open(url, '_blank')}
+          onUpdateNotes={handleUpdateNotes}
+          onPivot={(type, value) => {
+            if (onPivot) {
+              const pivotType = type === 'username' ? 'username' 
+                : type === 'email' ? 'email' 
+                : type === 'phone' ? 'phone' 
+                : type === 'person' ? 'name'
+                : 'address';
+              onPivot({ type: pivotType as PivotData['type'], value });
+            }
+          }}
+        />
+      </div>
     </div>
   );
 };
