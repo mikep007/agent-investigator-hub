@@ -116,6 +116,10 @@ const PalantirLinkGraph = ({
   const [searchingNodeId, setSearchingNodeId] = useState<string | null>(null);
   const [showSearch, setShowSearch] = useState(false);
   
+  // Connection drawing state
+  const [linkingFrom, setLinkingFrom] = useState<string | null>(null);
+  const [linkingMouse, setLinkingMouse] = useState<{ x: number; y: number } | null>(null);
+  
   const containerRef = useRef<HTMLDivElement>(null);
   const canvasRef = useRef<HTMLDivElement>(null);
   const svgRef = useRef<SVGSVGElement>(null);
@@ -465,17 +469,39 @@ const PalantirLinkGraph = ({
     animationRef.current = requestAnimationFrame(simulate);
   }, [simulate]);
 
-  // ──────── Drag ────────
+  // ──────── Drag & Connection Drawing ────────
   const handleNodeDragStart = useCallback((nodeId: string, e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    
+    // Shift+drag = draw connection line
+    if (e.shiftKey) {
+      setLinkingFrom(nodeId);
+      if (svgRef.current) {
+        const rect = svgRef.current.getBoundingClientRect();
+        setLinkingMouse({
+          x: (e.clientX - rect.left - pan.x) / zoom,
+          y: (e.clientY - rect.top - pan.y) / zoom,
+        });
+      }
+      return;
+    }
+    
     setDraggedNode(nodeId);
     nodesRef.current = nodesRef.current.map(n =>
       n.id === nodeId ? { ...n, locked: true } : n
     );
-  }, []);
+  }, [pan, zoom]);
 
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    if (linkingFrom && svgRef.current) {
+      const rect = svgRef.current.getBoundingClientRect();
+      setLinkingMouse({
+        x: (e.clientX - rect.left - pan.x) / zoom,
+        y: (e.clientY - rect.top - pan.y) / zoom,
+      });
+      return;
+    }
     if (draggedNode && svgRef.current) {
       const rect = svgRef.current.getBoundingClientRect();
       const x = (e.clientX - rect.left - pan.x) / zoom;
@@ -490,9 +516,38 @@ const PalantirLinkGraph = ({
         y: e.clientY - panStart.y,
       });
     }
-  }, [draggedNode, isPanning, panStart, zoom, pan]);
+  }, [draggedNode, isPanning, panStart, zoom, pan, linkingFrom]);
 
   const handleMouseUp = useCallback(() => {
+    if (linkingFrom) {
+      if (linkingMouse) {
+        const targetNode = nodesRef.current.find(n => {
+          if (n.id === linkingFrom) return false;
+          return Math.abs(n.x - linkingMouse.x) < 90 && Math.abs(n.y - linkingMouse.y) < 25;
+        });
+        if (targetNode) {
+          const exists = links.some(l =>
+            (l.source === linkingFrom && l.target === targetNode.id) ||
+            (l.source === targetNode.id && l.target === linkingFrom)
+          );
+          if (!exists) {
+            setLinks(prev => [...prev, {
+              source: linkingFrom,
+              target: targetNode.id,
+              label: 'linked',
+              strength: 0.7,
+            }]);
+            toast.success(`Connected to ${targetNode.label}`);
+            kickSimulation();
+          } else {
+            toast.info('Connection already exists');
+          }
+        }
+      }
+      setLinkingFrom(null);
+      setLinkingMouse(null);
+      return;
+    }
     if (draggedNode) {
       nodesRef.current = nodesRef.current.map(n =>
         n.id === draggedNode && n.type !== 'root' ? { ...n, locked: false } : n
@@ -501,7 +556,7 @@ const PalantirLinkGraph = ({
       kickSimulation();
     }
     setIsPanning(false);
-  }, [draggedNode, kickSimulation]);
+  }, [draggedNode, kickSimulation, linkingFrom, linkingMouse, links]);
 
   const handlePanStart = useCallback((e: React.MouseEvent) => {
     if (e.button === 0 && !draggedNode) {
@@ -682,6 +737,19 @@ const PalantirLinkGraph = ({
     rafId = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(rafId);
   }, [nodes.length]);
+
+  // ESC to cancel connection drawing
+  useEffect(() => {
+    if (!linkingFrom) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setLinkingFrom(null);
+        setLinkingMouse(null);
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [linkingFrom]);
 
   // ──────── Canvas drop handler ────────
   const handleCanvasDrop = useCallback((e: React.DragEvent) => {
@@ -966,12 +1034,32 @@ const PalantirLinkGraph = ({
                   </g>
                 );
               })}
+              {/* Connection drawing preview line */}
+              {linkingFrom && linkingMouse && (() => {
+                const sourceNode = nodes.find(n => n.id === linkingFrom);
+                if (!sourceNode) return null;
+                return (
+                  <line
+                    x1={sourceNode.x}
+                    y1={sourceNode.y}
+                    x2={linkingMouse.x}
+                    y2={linkingMouse.y}
+                    stroke="#c084fc"
+                    strokeWidth={2}
+                    strokeDasharray="6 3"
+                    strokeOpacity={0.8}
+                    className="pointer-events-none"
+                  />
+                );
+              })()}
             </g>
           </svg>
 
           {/* Canvas hints */}
           <div className="absolute bottom-3 left-3 z-20 text-[10px] select-none" style={{ color: '#484f58' }}>
-            Drag nodes • Scroll to zoom • Double-click to investigate • Drag tools from palette
+            {linkingFrom 
+              ? '🔗 Release on a node to connect • ESC to cancel'
+              : 'Drag nodes • Shift+drag to connect • Scroll to zoom • Double-click to investigate'}
           </div>
         </div>
       </div>
