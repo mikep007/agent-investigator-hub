@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { 
   Mail, Phone, AtSign, User, MapPin, Globe, AlertTriangle, Shield,
   ZoomIn, ZoomOut, Maximize2, Minimize2, RotateCcw,
-  X, Search, Network, Loader2, Plus, Download
+  X, Search, Network, Loader2, Plus, Download, PanelLeftClose, PanelLeftOpen
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import GraphNodeBox from '@/components/graph/GraphNodeBox';
@@ -105,6 +105,7 @@ const PalantirLinkGraph = ({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [paletteOpen, setPaletteOpen] = useState(true);
   
   const [hoveredNode, setHoveredNode] = useState<string | null>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
@@ -735,18 +736,37 @@ const PalantirLinkGraph = ({
       }}
     >
       {/* ── Left: Tool Palette ── */}
-      <div className="w-80 border-r flex-shrink-0 overflow-hidden" style={{ borderColor: '#21262d' }}>
-        <OSINTToolPalette
-          onDragTool={() => {}}
-          onClickTool={(tool) => handleAddNodeFromPalette(tool.name, tool.nodeType)}
-        />
+      <div
+        className={cn(
+          "border-r flex-shrink-0 overflow-hidden transition-all duration-300",
+          paletteOpen ? "w-80" : "w-0"
+        )}
+        style={{ borderColor: paletteOpen ? '#21262d' : 'transparent' }}
+      >
+        <div className="w-80 h-full">
+          <OSINTToolPalette
+            onDragTool={() => {}}
+            onClickTool={(tool) => handleAddNodeFromPalette(tool.name, tool.nodeType)}
+          />
+        </div>
       </div>
 
       {/* ── Center: Mind Map Canvas ── */}
       <div ref={canvasRef} className="flex-1 flex flex-col min-w-0">
         {/* Canvas Toolbar */}
         <div className="h-12 border-b flex items-center px-4 justify-between flex-shrink-0" style={{ borderColor: '#21262d', background: '#161b22' }}>
-          <h2 className="font-semibold text-[13px]" style={{ color: '#e6edf3' }}>Investigation Canvas</h2>
+          <div className="flex items-center gap-2">
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={() => setPaletteOpen(!paletteOpen)}
+              className="h-7 w-7 hover:bg-[#21262d]"
+              title={paletteOpen ? "Hide tool palette" : "Show tool palette"}
+            >
+              {paletteOpen ? <PanelLeftClose className="h-4 w-4" style={{ color: '#8b949e' }} /> : <PanelLeftOpen className="h-4 w-4" style={{ color: '#8b949e' }} />}
+            </Button>
+            <h2 className="font-semibold text-[13px]" style={{ color: '#e6edf3' }}>Investigation Canvas</h2>
+          </div>
           <div className="flex items-center gap-2">
             <Badge variant="outline" className="text-[10px] font-mono h-5 px-1.5" style={{ borderColor: '#30363d', color: '#484f58' }}>
               {nodes.length} nodes
