@@ -1,19 +1,21 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
-  Search, User, Mail, Phone, MapPin, Users, Globe, Camera,
-  MessageSquare, Shield, Plus, X, ChevronRight, Database,
-  ExternalLink, Check, Loader, Download, CheckSquare, Square
+  Search, User, Mail, Phone, AtSign, Image, FileText,
+  Plus, X, ChevronRight, ChevronDown, Download, Check,
+  Loader, Link2, Trash2, Lock, Unlock, Settings, Database,
+  Undo2, Redo2, MousePointer, Eraser, Clock, Map,
+  LayoutGrid, CheckSquare, Square
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
+  Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import {
+  Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from '@/components/ui/select';
+import { Input } from '@/components/ui/input';
 
 export interface PivotData {
   type: 'username' | 'email' | 'phone' | 'name' | 'address';
@@ -32,8 +34,10 @@ interface GraphNode {
   id: string;
   type: string;
   label: string;
+  value: string;
   data: Record<string, any>;
   position: { x: number; y: number };
+  locked: boolean;
 }
 
 interface Connection {
@@ -44,309 +48,251 @@ interface Connection {
   field: string;
 }
 
-interface DropdownResult {
-  type: string;
-  value: string;
-  verified?: boolean;
-  platforms?: string[];
-  carrier?: string;
-  registered?: boolean;
-  platform?: string;
-  followers?: number;
+interface HistoryEntry {
+  nodes: GraphNode[];
+  connections: Connection[];
 }
 
-const entityTypes: Record<string, { icon: typeof User; color: string; label: string }> = {
-  person: { icon: User, color: '#06b6d4', label: 'Person' },
+type ActiveTab = 'graph' | 'timeline' | 'map';
+type CanvasToolMode = 'interact' | 'link' | 'search' | 'eraser';
+type NodeType = 'name' | 'email' | 'phone' | 'username' | 'image' | 'general';
+
+const nodeTypeConfig: Record<NodeType, { icon: typeof User; color: string; label: string }> = {
+  name: { icon: User, color: '#06b6d4', label: 'Name' },
   email: { icon: Mail, color: '#8b5cf6', label: 'Email' },
   phone: { icon: Phone, color: '#ec4899', label: 'Phone' },
-  username: { icon: User, color: '#f59e0b', label: 'Username' },
-  location: { icon: MapPin, color: '#10b981', label: 'Location' },
-  relative: { icon: Users, color: '#3b82f6', label: 'Relative' },
-  account: { icon: Globe, color: '#14b8a6', label: 'Social Account' },
-  image: { icon: Camera, color: '#f43f5e', label: 'Image/Photo' },
-  post: { icon: MessageSquare, color: '#a855f7', label: 'Post/Content' },
+  username: { icon: AtSign, color: '#f59e0b', label: 'Username' },
+  image: { icon: Image, color: '#f43f5e', label: 'Image' },
+  general: { icon: FileText, color: '#64748b', label: 'General' },
 };
 
-// No auto-loading — the Intelligence Graph starts blank as a manual analysis canvas
-
 const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: IntelligenceGraphProps) => {
-  const [nodes, setNodes] = useState<GraphNode[]>([]);
+  const [activeTab, setActiveTab] = useState<ActiveTab>('graph');
+  const [nodes, setNodes] = useState<GraphNode[]>(() => {
+    // Start with subject node in center
+    const name = targetName || 'Michael Petrie';
+    return [{
+      id: 'subject-root',
+      type: 'name',
+      label: name,
+      value: name,
+      data: { source: 'subject' },
+      position: { x: 450, y: 300 },
+      locked: false,
+    }];
+  });
   const [connections, setConnections] = useState<Connection[]>([]);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [isSearching, setIsSearching] = useState(false);
-  const canvasRef = useRef<HTMLDivElement>(null);
+  const [toolMode, setToolMode] = useState<CanvasToolMode>('interact');
 
-  const [showSearchDropdown, setShowSearchDropdown] = useState<string | null>(null);
-  const [dropdownSearchQuery, setDropdownSearchQuery] = useState('');
-  const [dropdownResults, setDropdownResults] = useState<DropdownResult[]>([]);
-  const [isDropdownSearching, setIsDropdownSearching] = useState(false);
-  const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
+  // Context menu
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; canvasX: number; canvasY: number } | null>(null);
+
+  // Node action menu
+  const [nodeActionMenu, setNodeActionMenu] = useState<string | null>(null);
+
+  // Create node dialog
+  const [showCreateNode, setShowCreateNode] = useState(false);
+  const [createNodePos, setCreateNodePos] = useState({ x: 400, y: 300 });
+  const [newNodeType, setNewNodeType] = useState<NodeType>('email');
+  const [newNodeLabel, setNewNodeLabel] = useState('');
+  const [newNodeValue, setNewNodeValue] = useState('');
+
+  // Link mode
+  const [linkSource, setLinkSource] = useState<string | null>(null);
+
+  // History for undo/redo
+  const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Search results panel
+  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [isSearching, setIsSearching] = useState(false);
+  const [selectedResults, setSelectedResults] = useState<Set<number>>(new Set());
+
+  // Import findings
   const [showImportDialog, setShowImportDialog] = useState(false);
   const [availableFindings, setAvailableFindings] = useState<any[]>([]);
   const [selectedFindings, setSelectedFindings] = useState<Set<string>>(new Set());
   const [isLoadingFindings, setIsLoadingFindings] = useState(false);
 
-  // Load findings from active investigation for selective import
-  const loadFindings = async () => {
-    if (!investigationId) return;
-    setIsLoadingFindings(true);
-    try {
-      const { data, error } = await supabase
-        .from('findings')
-        .select('*')
-        .eq('investigation_id', investigationId)
-        .order('created_at', { ascending: false });
-      if (!error && data) {
-        setAvailableFindings(data);
-      }
-    } finally {
-      setIsLoadingFindings(false);
-    }
-  };
+  const canvasRef = useRef<HTMLDivElement>(null);
 
-  const openImportDialog = () => {
-    setShowImportDialog(true);
-    setSelectedFindings(new Set());
-    loadFindings();
-  };
-
-  const toggleFinding = (id: string) => {
-    setSelectedFindings(prev => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
+  // Push state to history
+  const pushHistory = useCallback(() => {
+    setHistory(prev => {
+      const newHistory = prev.slice(0, historyIndex + 1);
+      newHistory.push({ nodes: JSON.parse(JSON.stringify(nodes)), connections: JSON.parse(JSON.stringify(connections)) });
+      return newHistory;
     });
+    setHistoryIndex(prev => prev + 1);
+  }, [nodes, connections, historyIndex]);
+
+  const undo = () => {
+    if (historyIndex <= 0) return;
+    const entry = history[historyIndex - 1];
+    setNodes(entry.nodes);
+    setConnections(entry.connections);
+    setHistoryIndex(prev => prev - 1);
   };
 
-  const toggleAll = () => {
-    if (selectedFindings.size === availableFindings.length) {
-      setSelectedFindings(new Set());
-    } else {
-      setSelectedFindings(new Set(availableFindings.map(f => f.id)));
+  const redo = () => {
+    if (historyIndex >= history.length - 1) return;
+    const entry = history[historyIndex + 1];
+    setNodes(entry.nodes);
+    setConnections(entry.connections);
+    setHistoryIndex(prev => prev + 1);
+  };
+
+  // Canvas right-click
+  const handleCanvasContextMenu = (e: React.MouseEvent) => {
+    e.preventDefault();
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    setContextMenu({
+      x: e.clientX,
+      y: e.clientY,
+      canvasX: e.clientX - rect.left,
+      canvasY: e.clientY - rect.top,
+    });
+    setNodeActionMenu(null);
+  };
+
+  const handleCanvasClick = () => {
+    setContextMenu(null);
+    setNodeActionMenu(null);
+    if (toolMode !== 'link') {
+      setSelectedNode(null);
     }
   };
 
-  const classifyFindingType = (finding: any): string => {
-    const agent = finding.agent_type?.toLowerCase() || '';
-    const src = finding.source?.toLowerCase() || '';
-    if (agent.includes('people') || agent.includes('person') || src.includes('people')) return 'person';
-    if (agent.includes('email') || src.includes('email') || src.includes('holehe')) return 'email';
-    if (agent.includes('phone') || src.includes('phone')) return 'phone';
-    if (agent.includes('social') || src.includes('social') || src.includes('sherlock')) return 'account';
-    if (agent.includes('address') || src.includes('address') || src.includes('property')) return 'location';
-    if (agent.includes('breach') || src.includes('breach') || src.includes('leak')) return 'post';
-    if (agent.includes('username') || src.includes('username')) return 'username';
-    return 'account';
+  // Create node
+  const openCreateNodeDialog = () => {
+    if (contextMenu) {
+      setCreateNodePos({ x: contextMenu.canvasX, y: contextMenu.canvasY });
+    }
+    setContextMenu(null);
+    setNewNodeType('email');
+    setNewNodeLabel('');
+    setNewNodeValue('');
+    setShowCreateNode(true);
   };
 
-  const getFindingLabel = (finding: any): string => {
-    const d = finding.data as any;
-    if (d?.name) return d.name;
-    if (d?.email) return d.email;
-    if (d?.phone) return d.phone;
-    if (d?.username) return d.username;
-    if (d?.platform) return `${d.platform}${d.username ? ': ' + d.username : ''}`;
-    if (d?.url) return d.url;
-    return finding.source || finding.agent_type || 'Unknown';
+  const handleCreateNode = () => {
+    if (!newNodeValue.trim()) return;
+    pushHistory();
+    const node: GraphNode = {
+      id: `node-${Date.now()}`,
+      type: newNodeType,
+      label: newNodeLabel.trim() || newNodeType,
+      value: newNodeValue.trim(),
+      data: { source: 'manual' },
+      position: createNodePos,
+      locked: false,
+    };
+    setNodes(prev => [...prev, node]);
+    setShowCreateNode(false);
   };
 
-  const importSelectedFindings = () => {
-    const selected = availableFindings.filter(f => selectedFindings.has(f.id));
-    const existingLabels = new Set(nodes.map(n => n.label));
-    const centerX = 400;
-    const centerY = 350;
-    const angleStep = selected.length > 0 ? (2 * Math.PI) / selected.length : 0;
-    const radius = 250;
-
-    const newNodes: GraphNode[] = [];
-    const newConns: Connection[] = [];
-
-    selected.forEach((finding, i) => {
-      const label = getFindingLabel(finding);
-      if (existingLabels.has(label)) return; // skip duplicates
-
-      const nodeType = classifyFindingType(finding);
-      const angle = i * angleStep - Math.PI / 2;
-      const node: GraphNode = {
-        id: `imported-${finding.id}`,
-        type: nodeType,
-        label,
-        data: {
-          source: finding.source,
-          agent: finding.agent_type,
-          confidence: finding.confidence_score,
-          ...(typeof finding.data === 'object' && finding.data !== null ? finding.data as Record<string, any> : {}),
-        },
-        position: {
-          x: centerX + radius * Math.cos(angle),
-          y: centerY + radius * Math.sin(angle),
-        },
-      };
-      newNodes.push(node);
-
-      // Connect to first existing node if any
-      if (nodes.length > 0) {
-        newConns.push({
-          id: `conn-import-${finding.id}`,
-          from: nodes[0].id,
+  // Node click
+  const handleNodeClick = (e: React.MouseEvent, node: GraphNode) => {
+    e.stopPropagation();
+    if (toolMode === 'link' && linkSource) {
+      // Complete link
+      if (linkSource !== node.id) {
+        pushHistory();
+        setConnections(prev => [...prev, {
+          id: `conn-${Date.now()}`,
+          from: linkSource,
           to: node.id,
-          label: finding.agent_type || 'finding',
-          field: nodeType,
-        });
+          label: 'linked',
+          field: node.type,
+        }]);
       }
-    });
-
-    setNodes(prev => [...prev, ...newNodes]);
-    setConnections(prev => [...prev, ...newConns]);
-    setShowImportDialog(false);
+      setLinkSource(null);
+      setToolMode('interact');
+      return;
+    }
+    if (toolMode === 'eraser') {
+      // Erase connections to this node
+      pushHistory();
+      setConnections(prev => prev.filter(c => c.from !== node.id && c.to !== node.id));
+      return;
+    }
+    setSelectedNode(node);
+    setNodeActionMenu(node.id);
+    setContextMenu(null);
   };
 
-  // Dropdown: invoke selector enrichment edge function for real results
-  const searchDropdownData = async (query: string, sourceNode: GraphNode) => {
-    setIsDropdownSearching(true);
+  // Node actions
+  const startLink = (nodeId: string) => {
+    setLinkSource(nodeId);
+    setToolMode('link');
+    setNodeActionMenu(null);
+  };
+
+  const startSearch = (node: GraphNode) => {
+    setNodeActionMenu(null);
+    if (onPivot) {
+      const pivotType = node.type === 'name' ? 'name' : node.type === 'email' ? 'email' : node.type === 'phone' ? 'phone' : 'username';
+      onPivot({ type: pivotType as PivotData['type'], value: node.value, source: 'intelligence_graph' });
+    }
+    // Also run selector enrichment for results panel
+    runSearch(node);
+  };
+
+  const runSearch = async (node: GraphNode) => {
+    setIsSearching(true);
+    setSearchResults([]);
+    setSelectedResults(new Set());
     try {
       const { data, error } = await supabase.functions.invoke('osint-selector-enrichment', {
-        body: { selector: query, type: 'auto' },
+        body: { selector: node.value, type: 'auto' },
       });
-
-      if (error || !data?.results) {
-        // Fallback: create a simple node from the query
-        setDropdownResults([{
-          type: query.includes('@') ? 'email' : query.match(/^\+?\d/) ? 'phone' : 'username',
-          value: query,
-          verified: false,
-        }]);
-      } else {
-        const results: DropdownResult[] = (data.results || [])
-          .filter((r: any) => r.exists)
-          .slice(0, 8)
-          .map((r: any) => ({
-            type: 'account',
-            value: `${r.platform}`,
-            verified: r.exists,
-            platform: r.platform,
-          }));
-
-        // Also add the raw selector as an option
-        const selectorType = query.includes('@') ? 'email' : query.match(/^\+?\d/) ? 'phone' : 'username';
-        results.unshift({ type: selectorType, value: query, verified: false });
-        setDropdownResults(results);
+      if (!error && data?.results) {
+        setSearchResults(data.results.filter((r: any) => r.exists).slice(0, 20));
       }
-    } catch {
-      setDropdownResults([{
-        type: query.includes('@') ? 'email' : 'username',
-        value: query,
-        verified: false,
-      }]);
-    } finally {
-      setIsDropdownSearching(false);
-    }
-  };
-
-  const addFieldFromDropdown = (result: DropdownResult, sourceNodeId: string) => {
-    const sourceNode = nodes.find(n => n.id === sourceNodeId);
-    if (!sourceNode) return;
-
-    const existingNode = nodes.find(n => n.label === result.value);
-
-    if (existingNode) {
-      setConnections(prev => [
-        ...prev,
-        { id: `conn-${sourceNodeId}-${existingNode.id}-${Date.now()}`, from: sourceNodeId, to: existingNode.id, label: 'discovered', field: result.type },
-      ]);
-    } else {
-      const newNode: GraphNode = {
-        id: `node-${Date.now()}`,
-        type: result.type,
-        label: result.value,
-        data: { ...result },
-        position: {
-          x: sourceNode.position.x + 300 + Math.random() * 100,
-          y: sourceNode.position.y + (Math.random() - 0.5) * 200,
-        },
-      };
-      setNodes(prev => [...prev, newNode]);
-      setConnections(prev => [
-        ...prev,
-        { id: `conn-${sourceNodeId}-${newNode.id}`, from: sourceNodeId, to: newNode.id, label: 'owns', field: result.type },
-      ]);
-    }
-
-    setShowSearchDropdown(null);
-    setDropdownSearchQuery('');
-    setDropdownResults([]);
-  };
-
-  // Manual search triggers a new investigation via edge function
-  const handleSearch = async () => {
-    if (!searchQuery.trim()) return;
-    setIsSearching(true);
-
-    try {
-      // Trigger a lateral movement search using the selector enrichment
-      const isEmail = searchQuery.includes('@');
-      const isPhone = /^\+?\d{7,}$/.test(searchQuery.replace(/[\s()-]/g, ''));
-
-      const nodeType = isEmail ? 'email' : isPhone ? 'phone' : 'person';
-      const newNode: GraphNode = {
-        id: `node-manual-${Date.now()}`,
-        type: nodeType,
-        label: searchQuery,
-        data: { source: 'manual_search', timestamp: new Date().toISOString() },
-        position: { x: 400 + Math.random() * 200, y: 300 + Math.random() * 200 },
-      };
-
-      setNodes(prev => [...prev, newNode]);
-
-      // If there's a primary node, connect it
-      if (nodes.length > 0) {
-        setConnections(prev => [
-          ...prev,
-          { id: `conn-manual-${Date.now()}`, from: nodes[0].id, to: newNode.id, label: 'investigated', field: nodeType },
-        ]);
-      }
-
-      // Trigger pivot if callback exists
-      if (onPivot) {
-        const pivotType = isEmail ? 'email' : isPhone ? 'phone' : 'name';
-        onPivot({ type: pivotType as PivotData['type'], value: searchQuery, source: 'intelligence_graph' });
-      }
-    } finally {
+    } catch { /* ignore */ } finally {
       setIsSearching(false);
-      setSearchQuery('');
     }
   };
 
-  // ──── Drag handlers ────
+  const updateNodeLock = (nodeId: string) => {
+    pushHistory();
+    setNodes(prev => prev.map(n => n.id === nodeId ? { ...n, locked: !n.locked } : n));
+    setNodeActionMenu(null);
+  };
+
+  const removeNode = (nodeId: string) => {
+    pushHistory();
+    setNodes(prev => prev.filter(n => n.id !== nodeId));
+    setConnections(prev => prev.filter(c => c.from !== nodeId && c.to !== nodeId));
+    if (selectedNode?.id === nodeId) setSelectedNode(null);
+    setNodeActionMenu(null);
+  };
+
+  // Drag
   const handleMouseDown = (e: React.MouseEvent, node: GraphNode) => {
-    if (e.button !== 0) return;
+    if (e.button !== 0 || node.locked) return;
+    if (toolMode !== 'interact' && toolMode !== 'link') return;
     setIsDragging(true);
     setDraggedNode(node.id);
-    setSelectedNode(node);
   };
 
-  const handleMouseMove = useCallback(
-    (e: MouseEvent) => {
-      if (!isDragging || !draggedNode) return;
-      setNodes(prev =>
-        prev.map(node =>
-          node.id === draggedNode
-            ? { ...node, position: { x: node.position.x + e.movementX, y: node.position.y + e.movementY } }
-            : node
-        )
-      );
-    },
-    [isDragging, draggedNode]
-  );
+  const handleMouseMove = useCallback((e: MouseEvent) => {
+    if (!isDragging || !draggedNode) return;
+    setNodes(prev => prev.map(n =>
+      n.id === draggedNode ? { ...n, position: { x: n.position.x + e.movementX, y: n.position.y + e.movementY } } : n
+    ));
+  }, [isDragging, draggedNode]);
 
   const handleMouseUp = useCallback(() => {
+    if (isDragging) pushHistory();
     setIsDragging(false);
     setDraggedNode(null);
-  }, []);
+  }, [isDragging, pushHistory]);
 
   useEffect(() => {
     if (isDragging) {
@@ -359,509 +305,494 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
     }
   }, [isDragging, handleMouseMove, handleMouseUp]);
 
-  const deleteNode = (nodeId: string) => {
-    setNodes(prev => prev.filter(n => n.id !== nodeId));
-    setConnections(prev => prev.filter(c => c.from !== nodeId && c.to !== nodeId));
-    if (selectedNode?.id === nodeId) setSelectedNode(null);
+  // Import findings
+  const loadFindings = async () => {
+    if (!investigationId) return;
+    setIsLoadingFindings(true);
+    try {
+      const { data } = await supabase.from('findings').select('*').eq('investigation_id', investigationId).order('created_at', { ascending: false });
+      if (data) setAvailableFindings(data);
+    } finally { setIsLoadingFindings(false); }
   };
 
-  // ──── Node Component ────
-  const NodeComponent = ({ node }: { node: GraphNode }) => {
-    const EntityIcon = entityTypes[node.type]?.icon || User;
-    const color = entityTypes[node.type]?.color || '#64748b';
-    const isSelected = selectedNode?.id === node.id;
-    const showingDropdown = showSearchDropdown === node.id;
-
-    return (
-      <div
-        style={{ position: 'absolute', left: node.position.x, top: node.position.y, zIndex: showingDropdown || isSelected ? 50 : 10 }}
-        onMouseDown={(e) => {
-          if (!showingDropdown) handleMouseDown(e, node);
-        }}
-        className={`transition-all duration-200 ${!showingDropdown ? 'cursor-move' : ''}`}
-      >
-        <div
-          className="rounded-xl border backdrop-blur-sm shadow-2xl"
-          style={{
-            background: 'rgba(15, 23, 42, 0.95)',
-            borderColor: isSelected ? color : 'rgba(51, 65, 85, 0.5)',
-            boxShadow: isSelected ? `0 0 30px ${color}30, 0 4px 20px rgba(0,0,0,0.4)` : '0 4px 20px rgba(0,0,0,0.4)',
-            minWidth: 280,
-          }}
-        >
-          {/* Header */}
-          <div className="flex items-center gap-3 p-4 border-b" style={{ borderColor: 'rgba(51, 65, 85, 0.3)' }}>
-            <div className="w-10 h-10 rounded-lg flex items-center justify-center flex-shrink-0" style={{ backgroundColor: `${color}20` }}>
-              <EntityIcon className="w-5 h-5" style={{ color }} />
-            </div>
-            <div className="flex-1 min-w-0">
-              <span className="text-[10px] uppercase tracking-widest font-medium" style={{ color: `${color}cc` }}>
-                {entityTypes[node.type]?.label || node.type}
-              </span>
-              <p className="text-sm font-semibold text-slate-100 truncate">{node.label}</p>
-            </div>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                deleteNode(node.id);
-              }}
-              className="p-1 hover:bg-red-500/20 rounded transition-colors"
-            >
-              <X className="w-4 h-4 text-slate-500 hover:text-red-400" />
-            </button>
-          </div>
-
-          {/* Data fields */}
-          <div className="px-4 py-3 space-y-1.5">
-            {Object.entries(node.data || {})
-              .filter(([key]) => !['type', 'value'].includes(key))
-              .slice(0, 3)
-              .map(([key, value]) => (
-                <div key={key} className="flex items-center justify-between text-xs">
-                  <span className="text-slate-500 capitalize">{key.replace(/_/g, ' ')}:</span>
-                  <span className="text-slate-300 font-medium truncate ml-2 max-w-[160px]">
-                    {Array.isArray(value) ? value.join(', ') : String(value)}
-                  </span>
-                </div>
-              ))}
-          </div>
-
-          {/* Actions */}
-          <div className="px-4 pb-4 flex gap-2">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowSearchDropdown(showingDropdown ? null : node.id);
-                setDropdownSearchQuery('');
-                setDropdownResults([]);
-              }}
-              className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 hover:scale-105"
-              style={{ backgroundColor: `${color}20`, color }}
-            >
-              <Plus className="w-3.5 h-3.5" />
-              {showingDropdown ? 'Close Search' : 'Add Connection'}
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                setSelectedNode(node);
-              }}
-              className="flex-1 px-3 py-2 rounded-lg text-xs font-medium transition-all flex items-center justify-center gap-2 bg-slate-800/80 text-slate-300 hover:bg-slate-700/80"
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-              View Details
-            </button>
-          </div>
-
-          {/* Searchable Dropdown */}
-          {showingDropdown && (
-            <div
-              className="border-t"
-              style={{ borderColor: 'rgba(51, 65, 85, 0.3)' }}
-              onMouseDown={(e) => e.stopPropagation()}
-            >
-              <div className="p-3">
-                <div className="relative">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
-                  <input
-                    value={dropdownSearchQuery}
-                    onChange={(e) => {
-                      setDropdownSearchQuery(e.target.value);
-                      if (e.target.value.length > 2) {
-                        searchDropdownData(e.target.value, node);
-                      }
-                    }}
-                    placeholder="Search email, phone, username..."
-                    className="w-full bg-slate-900 border border-slate-600 rounded-lg pl-10 pr-3 py-2 text-sm text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500"
-                    autoFocus
-                  />
-                  {isDropdownSearching && <Loader className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-cyan-400 animate-spin" />}
-                </div>
-              </div>
-
-              <div className="max-h-52 overflow-y-auto">
-                {dropdownResults.length === 0 && dropdownSearchQuery.length > 2 && !isDropdownSearching && (
-                  <div className="px-4 py-6 text-center text-sm text-slate-500">No results found. Try a different search.</div>
-                )}
-
-                {dropdownResults.map((result, idx) => {
-                  const ResultIcon = entityTypes[result.type]?.icon || User;
-                  const resultColor = entityTypes[result.type]?.color;
-                  return (
-                    <div
-                      key={idx}
-                      onClick={() => addFieldFromDropdown(result, node.id)}
-                      className="px-4 py-3 hover:bg-slate-700/50 cursor-pointer border-b transition-colors"
-                      style={{ borderColor: 'rgba(51, 65, 85, 0.3)' }}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg flex items-center justify-center" style={{ backgroundColor: `${resultColor}20` }}>
-                          <ResultIcon className="w-4 h-4" style={{ color: resultColor }} />
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <div className="text-sm text-slate-200 font-medium truncate">{result.value}</div>
-                          <div className="text-xs text-slate-500 flex items-center gap-1">
-                            {entityTypes[result.type]?.label}
-                            {result.verified && <Check className="w-3 h-3 text-green-400" />}
-                          </div>
-                        </div>
-                        <Plus className="w-4 h-4 text-slate-500" />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          )}
-        </div>
-      </div>
-    );
+  const classifyFindingType = (finding: any): string => {
+    const agent = finding.agent_type?.toLowerCase() || '';
+    const src = finding.source?.toLowerCase() || '';
+    if (agent.includes('people') || agent.includes('person') || src.includes('people')) return 'name';
+    if (agent.includes('email') || src.includes('email')) return 'email';
+    if (agent.includes('phone') || src.includes('phone')) return 'phone';
+    if (agent.includes('username') || src.includes('username') || src.includes('sherlock')) return 'username';
+    return 'general';
   };
 
-  // ──── Connection Line ────
-  const ConnectionLine = ({ connection }: { connection: Connection }) => {
-    const fromNode = nodes.find(n => n.id === connection.from);
-    const toNode = nodes.find(n => n.id === connection.to);
-    if (!fromNode || !toNode) return null;
-
-    const isHovered = hoveredConnection === connection.id;
-    const midX = (fromNode.position.x + toNode.position.x) / 2;
-    const midY = (fromNode.position.y + toNode.position.y) / 2;
-    const color = entityTypes[connection.field]?.color || '#64748b';
-
-    return (
-      <g
-        onMouseEnter={() => setHoveredConnection(connection.id)}
-        onMouseLeave={() => setHoveredConnection(null)}
-        className="cursor-pointer"
-      >
-        <line
-          x1={fromNode.position.x + 140}
-          y1={fromNode.position.y + 40}
-          x2={toNode.position.x + 140}
-          y2={toNode.position.y + 40}
-          stroke={isHovered ? color : 'rgba(100, 116, 139, 0.3)'}
-          strokeWidth={isHovered ? 2 : 1}
-          strokeDasharray={isHovered ? 'none' : '6 4'}
-        />
-        <circle cx={midX + 140} cy={midY + 40} r={isHovered ? 16 : 12} fill="rgba(15, 23, 42, 0.9)" stroke={color} strokeWidth={1} />
-        <text x={midX + 140} y={midY + 44} textAnchor="middle" fill={isHovered ? color : '#94a3b8'} fontSize={isHovered ? 9 : 7} fontWeight={500}>
-          {connection.label}
-        </text>
-      </g>
-    );
+  const getFindingLabel = (finding: any): string => {
+    const d = finding.data as any;
+    return d?.name || d?.email || d?.phone || d?.username || d?.platform || finding.source || 'Unknown';
   };
+
+  const importSelectedFindings = () => {
+    pushHistory();
+    const selected = availableFindings.filter(f => selectedFindings.has(f.id));
+    const existingLabels = new Set(nodes.map(n => n.value));
+    const cx = 450, cy = 300, radius = 250;
+    const step = selected.length > 0 ? (2 * Math.PI) / selected.length : 0;
+    const newNodes: GraphNode[] = [];
+    const newConns: Connection[] = [];
+
+    selected.forEach((finding, i) => {
+      const label = getFindingLabel(finding);
+      if (existingLabels.has(label)) return;
+      const nodeType = classifyFindingType(finding);
+      const angle = i * step - Math.PI / 2;
+      const node: GraphNode = {
+        id: `imported-${finding.id}`,
+        type: nodeType,
+        label,
+        value: label,
+        data: typeof finding.data === 'object' && finding.data !== null ? finding.data as Record<string, any> : {},
+        position: { x: cx + radius * Math.cos(angle), y: cy + radius * Math.sin(angle) },
+        locked: false,
+      };
+      newNodes.push(node);
+      if (nodes.length > 0) {
+        newConns.push({ id: `conn-import-${finding.id}`, from: nodes[0].id, to: node.id, label: finding.agent_type || 'finding', field: nodeType });
+      }
+    });
+
+    setNodes(prev => [...prev, ...newNodes]);
+    setConnections(prev => [...prev, ...newConns]);
+    setShowImportDialog(false);
+  };
+
+  // Add search results to graph
+  const addResultsToGraph = () => {
+    pushHistory();
+    const selected = Array.from(selectedResults);
+    const subjectNode = nodes[0];
+    selected.forEach((idx, i) => {
+      const result = searchResults[idx];
+      if (!result) return;
+      const existingNode = nodes.find(n => n.value === result.platform);
+      if (existingNode) return;
+      const newNode: GraphNode = {
+        id: `result-${Date.now()}-${i}`,
+        type: 'general',
+        label: result.platform,
+        value: result.platform,
+        data: { ...result },
+        position: { x: subjectNode.position.x + 350 + i * 30, y: subjectNode.position.y - 100 + i * 60 },
+        locked: false,
+      };
+      setNodes(prev => [...prev, newNode]);
+      setConnections(prev => [...prev, { id: `conn-result-${Date.now()}-${i}`, from: subjectNode.id, to: newNode.id, label: 'found_on', field: 'general' }]);
+    });
+    setSelectedResults(new Set());
+  };
+
+  const toggleAllResults = () => {
+    if (selectedResults.size === searchResults.length) {
+      setSelectedResults(new Set());
+    } else {
+      setSelectedResults(new Set(searchResults.map((_, i) => i)));
+    }
+  };
+
+  // ──── Render ────
+  const tabs: { id: ActiveTab; label: string; icon: typeof LayoutGrid }[] = [
+    { id: 'graph', label: 'Graph', icon: LayoutGrid },
+    { id: 'timeline', label: 'Timeline', icon: Clock },
+    { id: 'map', label: 'Map', icon: Map },
+  ];
 
   return (
-    <div className="relative w-full overflow-hidden rounded-xl border" style={{ height: 700, background: '#0a0e17', borderColor: 'rgba(51,65,85,0.3)' }}>
-      {/* Background effects */}
-      <div className="absolute inset-0">
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,_var(--tw-gradient-stops))] from-cyan-900/20 via-slate-950 to-slate-950" />
-      </div>
-      <div
-        className="absolute inset-0"
-        style={{ backgroundImage: 'radial-gradient(circle, rgba(51, 65, 85, 0.3) 1px, transparent 1px)', backgroundSize: '24px 24px' }}
-      />
-
-      {/* Header */}
-      <div className="relative z-20 p-6">
-        <div className="max-w-7xl mx-auto">
-          <div className="flex items-center justify-between mb-6">
-            <div className="flex items-center gap-4">
-              <div className="w-12 h-12 rounded-xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/25">
-                <Database className="w-6 h-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-slate-100">Intelligence Graph</h1>
-                <p className="text-sm text-slate-500">
-                  {targetName ? `Investigation: ${targetName}` : 'OSINT Lateral Movement Analysis'}
-                </p>
-              </div>
-            </div>
-            <div className="flex items-center gap-3">
-              {investigationId && (
-                <button
-                  onClick={openImportDialog}
-                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium hover:bg-cyan-600/30 transition-colors"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Import Findings
-                </button>
-              )}
-              <span className="px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700/50 text-xs text-slate-400">
-                Entities: <span className="text-cyan-400 font-medium">{nodes.length}</span>
-              </span>
-              <span className="px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700/50 text-xs text-slate-400">
-                Connections: <span className="text-cyan-400 font-medium">{connections.length}</span>
-              </span>
-            </div>
-          </div>
-
-          {/* Search Bar */}
-          <div className="max-w-3xl mx-auto">
-            <div className="relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-500" />
-              <input
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Add entity: name, email, phone, username..."
-                className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl pl-12 pr-32 py-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
-              />
+    <div className="relative w-full flex" style={{ height: 750 }}>
+      {/* Main canvas area */}
+      <div className="flex-1 flex flex-col overflow-hidden rounded-l-xl border" style={{ background: '#0a0e17', borderColor: 'rgba(51,65,85,0.3)' }}>
+        {/* Tab bar */}
+        <div className="relative z-20 flex items-center gap-0 border-b" style={{ borderColor: 'rgba(51,65,85,0.4)' }}>
+          {tabs.map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`px-6 py-3 text-sm font-medium transition-colors border-b-2 flex items-center gap-2 ${
+                activeTab === tab.id
+                  ? 'text-cyan-400 border-cyan-400 bg-cyan-400/5'
+                  : 'text-slate-500 border-transparent hover:text-slate-300 hover:bg-slate-800/30'
+              }`}
+            >
+              <tab.icon className="w-4 h-4" />
+              {tab.label}
+            </button>
+          ))}
+          <div className="flex-1" />
+          <div className="flex items-center gap-2 pr-4">
+            {investigationId && (
               <button
-                onClick={handleSearch}
-                disabled={isSearching || !searchQuery.trim()}
-                className="absolute right-2 top-1/2 -translate-y-1/2 px-6 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 disabled:opacity-50 text-white text-sm font-medium rounded-lg transition-all"
+                onClick={() => { setShowImportDialog(true); setSelectedFindings(new Set()); loadFindings(); }}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-cyan-600/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium hover:bg-cyan-600/30 transition-colors"
               >
-                {isSearching ? <Loader className="w-4 h-4 animate-spin" /> : 'Investigate'}
+                <Download className="w-3.5 h-3.5" />
+                Import Findings
               </button>
-            </div>
+            )}
+            <span className="px-2 py-1 rounded bg-slate-800/50 border border-slate-700/50 text-[10px] text-slate-400">
+              {nodes.length} nodes · {connections.length} links
+            </span>
           </div>
         </div>
-      </div>
 
-      {/* Main Canvas */}
-      <div ref={canvasRef} className="absolute inset-0 pt-44 overflow-auto" style={{ cursor: isDragging ? 'grabbing' : 'default' }}>
-        <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 5 }}>
-          <defs>
-            <linearGradient id="conn-gradient" x1="0%" y1="0%" x2="100%" y2="0%">
-              <stop offset="0%" stopColor="#06b6d4" stopOpacity="0.6" />
-              <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.6" />
-            </linearGradient>
-          </defs>
-          {connections.map(connection => (
-            <ConnectionLine key={connection.id} connection={connection} />
-          ))}
-        </svg>
+        {/* Canvas */}
+        {activeTab === 'graph' && (
+          <div className="flex-1 relative overflow-hidden">
+            {/* Dot grid bg */}
+            <div className="absolute inset-0" style={{ backgroundImage: 'radial-gradient(circle, rgba(51,65,85,0.3) 1px, transparent 1px)', backgroundSize: '24px 24px' }} />
 
-        {nodes.map(node => (
-          <NodeComponent key={node.id} node={node} />
-        ))}
-
-        {nodes.length === 0 && (
-          <div className="absolute inset-0 flex items-center justify-center pt-20">
-            <div className="text-center max-w-md">
-              <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-slate-800/50 border border-slate-700/30 flex items-center justify-center">
-                <Search className="w-8 h-8 text-slate-600" />
+            {/* Link mode indicator */}
+            {toolMode === 'link' && linkSource && (
+              <div className="absolute top-3 left-1/2 -translate-x-1/2 z-30 px-4 py-2 rounded-lg bg-cyan-600/20 border border-cyan-500/40 text-cyan-400 text-xs font-medium">
+                Click a node to complete the link · Press Esc to cancel
               </div>
-              <h3 className="text-xl font-semibold text-slate-300 mb-2">Build Your Intelligence Map</h3>
-              <p className="text-slate-500 text-sm">
-                Search for a name, email, phone, or username above to add entities and start mapping connections
-              </p>
+            )}
+
+            <div
+              ref={canvasRef}
+              className="absolute inset-0"
+              onClick={handleCanvasClick}
+              onContextMenu={handleCanvasContextMenu}
+              style={{ cursor: toolMode === 'link' ? 'crosshair' : toolMode === 'eraser' ? 'not-allowed' : isDragging ? 'grabbing' : 'default' }}
+            >
+              {/* SVG connections */}
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" style={{ zIndex: 5 }}>
+                {connections.map(conn => {
+                  const from = nodes.find(n => n.id === conn.from);
+                  const to = nodes.find(n => n.id === conn.to);
+                  if (!from || !to) return null;
+                  const x1 = from.position.x + 80, y1 = from.position.y + 20;
+                  const x2 = to.position.x + 80, y2 = to.position.y + 20;
+                  const midX = (x1 + x2) / 2, midY = (y1 + y2) / 2;
+                  const color = nodeTypeConfig[conn.field as NodeType]?.color || '#64748b';
+                  return (
+                    <g key={conn.id}>
+                      <line x1={x1} y1={y1} x2={x2} y2={y2} stroke={color} strokeWidth={1.5} strokeOpacity={0.4} strokeDasharray="6 3" />
+                      <circle cx={midX} cy={midY} r={10} fill="rgba(15,23,42,0.9)" stroke={color} strokeWidth={1} />
+                      <text x={midX} y={midY + 3} textAnchor="middle" fill={color} fontSize={7} fontWeight={500}>{conn.label}</text>
+                    </g>
+                  );
+                })}
+              </svg>
+
+              {/* Nodes */}
+              {nodes.map(node => {
+                const cfg = nodeTypeConfig[node.type as NodeType] || nodeTypeConfig.general;
+                const Icon = cfg.icon;
+                const isSubject = node.id === 'subject-root';
+                const isSelected = selectedNode?.id === node.id;
+                const showActions = nodeActionMenu === node.id;
+
+                return (
+                  <div
+                    key={node.id}
+                    style={{
+                      position: 'absolute',
+                      left: node.position.x,
+                      top: node.position.y,
+                      zIndex: showActions ? 50 : 10,
+                    }}
+                    onMouseDown={(e) => { if (!showActions) handleMouseDown(e, node); }}
+                    onClick={(e) => handleNodeClick(e, node)}
+                  >
+                    <div
+                      className={`rounded-lg border transition-all ${isSubject ? 'px-5 py-3' : 'px-4 py-2.5'}`}
+                      style={{
+                        background: '#0d1117',
+                        borderColor: isSelected ? cfg.color : 'rgba(51,65,85,0.5)',
+                        boxShadow: isSelected ? `0 0 20px ${cfg.color}25` : '0 2px 8px rgba(0,0,0,0.3)',
+                        cursor: node.locked ? 'default' : 'grab',
+                        minWidth: isSubject ? 180 : 160,
+                      }}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded flex items-center justify-center" style={{ backgroundColor: `${cfg.color}15` }}>
+                          <Icon className="w-4 h-4" style={{ color: cfg.color }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[9px] uppercase tracking-widest font-medium" style={{ color: `${cfg.color}99` }}>{cfg.label}</p>
+                          <p className={`font-semibold text-slate-100 truncate ${isSubject ? 'text-sm' : 'text-xs'}`}>{node.value}</p>
+                        </div>
+                        {node.locked && <Lock className="w-3 h-3 text-slate-600" />}
+                      </div>
+                    </div>
+
+                    {/* Node action dropdown */}
+                    {showActions && (
+                      <div
+                        className="absolute left-0 top-full mt-1 w-44 rounded-lg border overflow-hidden z-50"
+                        style={{ background: '#0d1117', borderColor: 'rgba(51,65,85,0.5)' }}
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <button onClick={() => startLink(node.id)} className="w-full px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2.5 transition-colors">
+                          <Link2 className="w-3.5 h-3.5 text-cyan-400" /> Start Link
+                        </button>
+                        <button onClick={() => startSearch(node)} className="w-full px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2.5 transition-colors">
+                          <Search className="w-3.5 h-3.5 text-green-400" /> Start Search
+                        </button>
+                        <button onClick={() => { /* TODO: update node dialog */ setNodeActionMenu(null); }} className="w-full px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2.5 transition-colors">
+                          <Settings className="w-3.5 h-3.5 text-amber-400" /> Update Node
+                        </button>
+                        <button onClick={() => updateNodeLock(node.id)} className="w-full px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2.5 transition-colors">
+                          {node.locked ? <Unlock className="w-3.5 h-3.5 text-slate-400" /> : <Lock className="w-3.5 h-3.5 text-slate-400" />}
+                          {node.locked ? 'Unlock Node' : 'Lock Node'}
+                        </button>
+                        <div className="border-t" style={{ borderColor: 'rgba(51,65,85,0.3)' }} />
+                        <button onClick={() => removeNode(node.id)} className="w-full px-3 py-2.5 text-xs text-red-400 hover:bg-red-500/10 flex items-center gap-2.5 transition-colors">
+                          <Trash2 className="w-3.5 h-3.5" /> Remove Node
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
+
+            {/* Canvas context menu */}
+            {contextMenu && (
+              <div
+                className="fixed z-50 w-48 rounded-lg border overflow-hidden shadow-xl"
+                style={{ left: contextMenu.x, top: contextMenu.y, background: '#0d1117', borderColor: 'rgba(51,65,85,0.5)' }}
+              >
+                <button onClick={openCreateNodeDialog} className="w-full px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2.5 transition-colors">
+                  <Plus className="w-3.5 h-3.5 text-cyan-400" /> Create Node
+                </button>
+                <button onClick={() => { setContextMenu(null); }} className="w-full px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2.5 transition-colors">
+                  <LayoutGrid className="w-3.5 h-3.5 text-purple-400" /> Create Group
+                </button>
+                <div className="border-t" style={{ borderColor: 'rgba(51,65,85,0.3)' }} />
+                <button onClick={() => setContextMenu(null)} className="w-full px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2.5 transition-colors">
+                  <Settings className="w-3.5 h-3.5 text-slate-400" /> Open Settings
+                </button>
+                <button onClick={() => setContextMenu(null)} className="w-full px-3 py-2.5 text-xs text-slate-300 hover:bg-slate-800 flex items-center gap-2.5 transition-colors">
+                  <Database className="w-3.5 h-3.5 text-slate-400" /> Open Storage
+                </button>
+              </div>
+            )}
+
+            {/* Bottom toolbar */}
+            <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-20 flex items-center gap-1 px-2 py-1.5 rounded-xl border" style={{ background: 'rgba(13,17,23,0.95)', borderColor: 'rgba(51,65,85,0.4)' }}>
+              <button onClick={undo} className="p-2 rounded-lg hover:bg-slate-800 transition-colors group" title="Undo">
+                <Undo2 className="w-4 h-4 text-slate-500 group-hover:text-slate-300" />
+              </button>
+              <button onClick={redo} className="p-2 rounded-lg hover:bg-slate-800 transition-colors group" title="Redo">
+                <Redo2 className="w-4 h-4 text-slate-500 group-hover:text-slate-300" />
+              </button>
+              <div className="w-px h-5 bg-slate-700 mx-1" />
+              {([
+                { mode: 'interact' as CanvasToolMode, icon: MousePointer, label: 'Interact' },
+                { mode: 'link' as CanvasToolMode, icon: Link2, label: 'Link' },
+                { mode: 'search' as CanvasToolMode, icon: Search, label: 'Search' },
+                { mode: 'eraser' as CanvasToolMode, icon: Eraser, label: 'Erase' },
+              ]).map(tool => (
+                <button
+                  key={tool.mode}
+                  onClick={() => { setToolMode(tool.mode); setLinkSource(null); }}
+                  className={`p-2 rounded-lg transition-colors ${toolMode === tool.mode ? 'bg-cyan-600/20 text-cyan-400' : 'text-slate-500 hover:bg-slate-800 hover:text-slate-300'}`}
+                  title={tool.label}
+                >
+                  <tool.icon className="w-4 h-4" />
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'timeline' && (
+          <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
+            <Clock className="w-5 h-5 mr-2" /> Timeline view coming soon
+          </div>
+        )}
+
+        {activeTab === 'map' && (
+          <div className="flex-1 flex items-center justify-center text-slate-500 text-sm">
+            <Map className="w-5 h-5 mr-2" /> Map view coming soon
           </div>
         )}
       </div>
 
-      {/* Side Panel */}
-      {selectedNode && (
-        <div className="absolute right-0 top-0 bottom-0 w-96 z-30 border-l backdrop-blur-xl overflow-y-auto" style={{ background: 'rgba(15, 23, 42, 0.95)', borderColor: 'rgba(51, 65, 85, 0.5)' }}>
-          <div className="p-6">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-lg font-semibold text-slate-100">Entity Details</h2>
-              <button onClick={() => setSelectedNode(null)} className="p-2 hover:bg-slate-800 rounded-lg transition-colors">
-                <X className="w-5 h-5 text-slate-400" />
-              </button>
-            </div>
+      {/* Right results panel */}
+      <div className="w-80 border-t border-r border-b rounded-r-xl flex flex-col" style={{ background: '#0d1117', borderColor: 'rgba(51,65,85,0.3)' }}>
+        <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(51,65,85,0.4)' }}>
+          <h3 className="text-sm font-semibold text-slate-200">Search Results</h3>
+          {searchResults.length > 0 && (
+            <span className="text-[10px] text-slate-500">{searchResults.length} results</span>
+          )}
+        </div>
 
-            <div className="space-y-6">
-              {/* Type */}
-              <div>
-                <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Type</p>
-                <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/50">
-                  {React.createElement(entityTypes[selectedNode.type]?.icon || User, {
-                    className: 'w-5 h-5',
-                    style: { color: entityTypes[selectedNode.type]?.color },
-                  })}
-                  <span className="text-sm text-slate-200 font-medium">{entityTypes[selectedNode.type]?.label || selectedNode.type}</span>
-                </div>
-              </div>
-
-              {/* Identifier */}
-              <div>
-                <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Identifier</p>
-                <div className="p-3 rounded-lg bg-slate-800/50 text-sm text-cyan-400 font-mono break-all">{selectedNode.label}</div>
-              </div>
-
-              {/* Pivot Action */}
-              {onPivot && ['email', 'phone', 'username', 'person', 'relative'].includes(selectedNode.type) && (
-                <button
-                  onClick={() => {
-                    const pivotType = selectedNode.type === 'relative' || selectedNode.type === 'person' ? 'name' : selectedNode.type;
-                    onPivot({ type: pivotType as PivotData['type'], value: selectedNode.label, source: 'intelligence_graph' });
-                  }}
-                  className="w-full px-4 py-3 rounded-lg bg-cyan-600/20 text-cyan-400 text-sm font-medium hover:bg-cyan-600/30 transition-colors flex items-center justify-center gap-2"
-                >
-                  <Search className="w-4 h-4" />
-                  Investigate "{selectedNode.label}"
-                </button>
-              )}
-
-              {/* Intelligence Data */}
-              <div>
-                <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Intelligence Data</p>
-                <div className="space-y-3">
-                  {Object.entries(selectedNode.data || {})
-                    .filter(([key]) => !['type', 'value'].includes(key))
-                    .map(([key, value]) => (
-                    <div key={key} className="p-3 rounded-lg bg-slate-800/30">
-                      <p className="text-xs text-slate-500 mb-1 capitalize">{key.replace(/_/g, ' ')}</p>
-                      <div className="text-sm text-slate-200">
-                        {Array.isArray(value) ? (
-                          <div className="flex flex-wrap gap-1.5">
-                            {value.map((item: string, i: number) => (
-                              <span key={i} className="px-2 py-0.5 rounded-full bg-slate-700/50 text-xs text-slate-300">
-                                {item}
-                              </span>
-                            ))}
-                          </div>
-                        ) : typeof value === 'boolean' ? (
-                          <span className={value ? 'text-green-400' : 'text-red-400'}>{value ? '✓ Yes' : '✗ No'}</span>
-                        ) : typeof value === 'object' && value !== null ? (
-                          JSON.stringify(value).slice(0, 100)
-                        ) : (
-                          String(value)
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Connections */}
-              <div>
-                <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">
-                  Connections ({connections.filter(c => c.from === selectedNode.id || c.to === selectedNode.id).length})
-                </p>
-                <div className="space-y-2">
-                  {connections
-                    .filter(c => c.from === selectedNode.id || c.to === selectedNode.id)
-                    .map(conn => {
-                      const otherNodeId = conn.from === selectedNode.id ? conn.to : conn.from;
-                      const otherNode = nodes.find(n => n.id === otherNodeId);
-                      if (!otherNode) return null;
-                      return (
-                        <div
-                          key={conn.id}
-                          onClick={() => setSelectedNode(otherNode)}
-                          className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/30 hover:bg-slate-700/40 cursor-pointer transition-colors"
-                        >
-                          {React.createElement(entityTypes[otherNode.type]?.icon || User, {
-                            className: 'w-4 h-4',
-                            style: { color: entityTypes[otherNode.type]?.color },
-                          })}
-                          <div className="flex-1 min-w-0">
-                            <p className="text-[10px] uppercase text-slate-500">{conn.label}</p>
-                            <p className="text-sm text-slate-200 truncate">{otherNode.label}</p>
-                          </div>
-                          <ChevronRight className="w-4 h-4 text-slate-600" />
-                        </div>
-                      );
-                    })}
-                </div>
-              </div>
+        {isSearching ? (
+          <div className="flex-1 flex items-center justify-center">
+            <Loader className="w-5 h-5 text-cyan-400 animate-spin" />
+            <span className="ml-2 text-sm text-slate-500">Search in progress</span>
+          </div>
+        ) : searchResults.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center text-center px-6">
+            <div>
+              <Search className="w-8 h-8 text-slate-700 mx-auto mb-3" />
+              <p className="text-xs text-slate-500">Click a node and select "Start Search" to see results here</p>
             </div>
           </div>
-        </div>
-      )}
-
-      {/* Legend */}
-      <div className="absolute bottom-6 left-6 z-20 bg-slate-900/80 backdrop-blur-sm border border-slate-700/30 rounded-xl p-4">
-        <p className="text-xs text-slate-500 mb-2">Entity Types</p>
-        <div className="flex flex-wrap gap-3">
-          {Object.entries(entityTypes)
-            .slice(0, 6)
-            .map(([type, config]) => (
-              <div key={type} className="flex items-center gap-1.5 text-xs text-slate-400">
-                <div className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: config.color }} />
-                {config.label}
+        ) : (
+          <div className="flex-1 flex flex-col overflow-hidden">
+            <div className="px-4 py-2 flex items-center justify-between border-b" style={{ borderColor: 'rgba(51,65,85,0.3)' }}>
+              <button onClick={toggleAllResults} className="text-[10px] text-cyan-400 hover:text-cyan-300">
+                {selectedResults.size === searchResults.length ? 'Clear selection' : 'Select all'}
+              </button>
+              <span className="text-[10px] text-slate-500">{selectedResults.size} selected</span>
+            </div>
+            <ScrollArea className="flex-1">
+              <div className="p-2 space-y-1.5">
+                {searchResults.map((result, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => {
+                      setSelectedResults(prev => {
+                        const next = new Set(prev);
+                        if (next.has(idx)) next.delete(idx); else next.add(idx);
+                        return next;
+                      });
+                    }}
+                    className={`w-full rounded-lg border p-3 text-left transition-colors ${
+                      selectedResults.has(idx) ? 'bg-cyan-600/10 border-cyan-500/30' : 'bg-slate-800/30 border-transparent hover:bg-slate-800/60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-2">
+                      {selectedResults.has(idx) ? (
+                        <CheckSquare className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                      ) : (
+                        <Square className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-slate-200 truncate">{result.platform}</p>
+                        {result.name && <p className="text-[10px] text-slate-500">Name: {result.name}</p>}
+                      </div>
+                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                        {result.exists ? 'Found' : '—'}
+                      </span>
+                    </div>
+                  </button>
+                ))}
               </div>
-            ))}
-        </div>
+            </ScrollArea>
+            {selectedResults.size > 0 && (
+              <div className="px-3 py-2 border-t" style={{ borderColor: 'rgba(51,65,85,0.3)' }}>
+                <Button onClick={addResultsToGraph} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white text-xs h-8">
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Add {selectedResults.size} to Graph
+                </Button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Create Node Dialog */}
+      <Dialog open={showCreateNode} onOpenChange={setShowCreateNode}>
+        <DialogContent className="sm:max-w-[380px] bg-slate-900 border-slate-700 text-slate-100">
+          <DialogHeader>
+            <DialogTitle className="text-slate-100">Add a New Node</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 py-2">
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-400 font-medium">Node Type</label>
+              <Select value={newNodeType} onValueChange={(v) => { setNewNodeType(v as NodeType); setNewNodeLabel(v); }}>
+                <SelectTrigger className="bg-slate-800 border-slate-700 text-slate-200">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent className="bg-slate-800 border-slate-700">
+                  {Object.entries(nodeTypeConfig).map(([key, cfg]) => (
+                    <SelectItem key={key} value={key} className="text-slate-200 focus:bg-slate-700">
+                      <div className="flex items-center gap-2">
+                        <cfg.icon className="w-3.5 h-3.5" style={{ color: cfg.color }} />
+                        {cfg.label}
+                      </div>
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-400 font-medium">Label</label>
+              <Input
+                value={newNodeLabel}
+                onChange={(e) => setNewNodeLabel(e.target.value)}
+                placeholder="e.g. Email"
+                className="bg-slate-800 border-slate-700 text-slate-200"
+              />
+            </div>
+            <div className="space-y-1.5">
+              <label className="text-xs text-slate-400 font-medium">Value</label>
+              <Input
+                value={newNodeValue}
+                onChange={(e) => setNewNodeValue(e.target.value)}
+                placeholder="e.g. mikep007@gmail.com"
+                className="bg-slate-800 border-slate-700 text-slate-200"
+              />
+            </div>
+          </div>
+          <Button onClick={handleCreateNode} disabled={!newNodeValue.trim()} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white">
+            <Plus className="w-4 h-4 mr-2" /> Add New Node
+          </Button>
+        </DialogContent>
+      </Dialog>
 
       {/* Import Findings Dialog */}
       <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
         <DialogContent className="max-w-lg bg-slate-900 border-slate-700 text-slate-100">
           <DialogHeader>
             <DialogTitle className="text-slate-100">Import Findings</DialogTitle>
-            <DialogDescription className="text-slate-400">
-              Select findings from your investigation to add to the canvas.
-            </DialogDescription>
+            <DialogDescription className="text-slate-400">Select findings to add to the canvas.</DialogDescription>
           </DialogHeader>
-
           {isLoadingFindings ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader className="w-6 h-6 text-cyan-400 animate-spin" />
-            </div>
+            <div className="flex items-center justify-center py-12"><Loader className="w-6 h-6 text-cyan-400 animate-spin" /></div>
           ) : availableFindings.length === 0 ? (
-            <div className="text-center py-12 text-slate-500 text-sm">
-              No findings available for this investigation.
-            </div>
+            <div className="text-center py-12 text-slate-500 text-sm">No findings available.</div>
           ) : (
             <>
               <div className="flex items-center justify-between mb-2">
-                <button onClick={toggleAll} className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
+                <button onClick={() => {
+                  if (selectedFindings.size === availableFindings.length) setSelectedFindings(new Set());
+                  else setSelectedFindings(new Set(availableFindings.map(f => f.id)));
+                }} className="text-xs text-cyan-400 hover:text-cyan-300">
                   {selectedFindings.size === availableFindings.length ? 'Deselect All' : 'Select All'}
                 </button>
-                <span className="text-xs text-slate-500">{selectedFindings.size} of {availableFindings.length} selected</span>
+                <span className="text-xs text-slate-500">{selectedFindings.size} selected</span>
               </div>
-              <ScrollArea className="max-h-[360px] pr-2">
+              <ScrollArea className="max-h-[360px]">
                 <div className="space-y-1.5">
                   {availableFindings.map(finding => {
-                    const fType = classifyFindingType(finding);
-                    const Icon = entityTypes[fType]?.icon || User;
-                    const color = entityTypes[fType]?.color || '#64748b';
+                    const fType = classifyFindingType(finding) as NodeType;
+                    const cfg = nodeTypeConfig[fType] || nodeTypeConfig.general;
                     const isSelected = selectedFindings.has(finding.id);
-                    const alreadyOnCanvas = nodes.some(n => n.label === getFindingLabel(finding));
-
+                    const alreadyOnCanvas = nodes.some(n => n.value === getFindingLabel(finding));
                     return (
                       <button
                         key={finding.id}
-                        onClick={() => !alreadyOnCanvas && toggleFinding(finding.id)}
+                        onClick={() => { if (!alreadyOnCanvas) { setSelectedFindings(prev => { const n = new Set(prev); if (n.has(finding.id)) n.delete(finding.id); else n.add(finding.id); return n; }); } }}
                         disabled={alreadyOnCanvas}
-                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
-                          alreadyOnCanvas
-                            ? 'opacity-40 cursor-not-allowed bg-slate-800/20'
-                            : isSelected
-                            ? 'bg-cyan-600/15 border border-cyan-500/30'
-                            : 'bg-slate-800/40 hover:bg-slate-800/70 border border-transparent'
-                        }`}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${alreadyOnCanvas ? 'opacity-40' : isSelected ? 'bg-cyan-600/15 border border-cyan-500/30' : 'bg-slate-800/40 hover:bg-slate-800/70 border border-transparent'}`}
                       >
-                        {alreadyOnCanvas ? (
-                          <Check className="w-4 h-4 text-green-500 shrink-0" />
-                        ) : isSelected ? (
-                          <CheckSquare className="w-4 h-4 text-cyan-400 shrink-0" />
-                        ) : (
-                          <Square className="w-4 h-4 text-slate-600 shrink-0" />
-                        )}
-                        <div className="w-7 h-7 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}20` }}>
-                          <Icon className="w-3.5 h-3.5" style={{ color }} />
+                        {alreadyOnCanvas ? <Check className="w-4 h-4 text-green-500 shrink-0" /> : isSelected ? <CheckSquare className="w-4 h-4 text-cyan-400 shrink-0" /> : <Square className="w-4 h-4 text-slate-600 shrink-0" />}
+                        <div className="w-7 h-7 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: `${cfg.color}20` }}>
+                          <cfg.icon className="w-3.5 h-3.5" style={{ color: cfg.color }} />
                         </div>
                         <div className="flex-1 min-w-0">
                           <p className="text-sm text-slate-200 truncate">{getFindingLabel(finding)}</p>
-                          <p className="text-[10px] text-slate-500 truncate">
-                            {finding.source} · {entityTypes[fType]?.label}
-                            {alreadyOnCanvas && ' · Already on canvas'}
-                          </p>
+                          <p className="text-[10px] text-slate-500 truncate">{finding.source} · {cfg.label}{alreadyOnCanvas && ' · On canvas'}</p>
                         </div>
-                        {finding.confidence_score != null && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
-                            {Math.round(finding.confidence_score * 100)}%
-                          </span>
-                        )}
                       </button>
                     );
                   })}
                 </div>
               </ScrollArea>
-              <Button
-                onClick={importSelectedFindings}
-                disabled={selectedFindings.size === 0}
-                className="w-full bg-cyan-600 hover:bg-cyan-500 text-white mt-2"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                Import {selectedFindings.size} Finding{selectedFindings.size !== 1 ? 's' : ''}
+              <Button onClick={importSelectedFindings} disabled={selectedFindings.size === 0} className="w-full bg-cyan-600 hover:bg-cyan-500 text-white mt-2">
+                <Download className="w-4 h-4 mr-2" /> Import {selectedFindings.size}
               </Button>
             </>
           )}
