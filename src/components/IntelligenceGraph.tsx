@@ -2,9 +2,18 @@ import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   Search, User, Mail, Phone, MapPin, Users, Globe, Camera,
   MessageSquare, Shield, Plus, X, ChevronRight, Database,
-  ExternalLink, Check, Loader
+  ExternalLink, Check, Loader, Download, CheckSquare, Square
 } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+} from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { ScrollArea } from '@/components/ui/scroll-area';
 
 export interface PivotData {
   type: 'username' | 'email' | 'phone' | 'name' | 'address';
@@ -75,6 +84,126 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
   const [dropdownResults, setDropdownResults] = useState<DropdownResult[]>([]);
   const [isDropdownSearching, setIsDropdownSearching] = useState(false);
   const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
+  const [showImportDialog, setShowImportDialog] = useState(false);
+  const [availableFindings, setAvailableFindings] = useState<any[]>([]);
+  const [selectedFindings, setSelectedFindings] = useState<Set<string>>(new Set());
+  const [isLoadingFindings, setIsLoadingFindings] = useState(false);
+
+  // Load findings from active investigation for selective import
+  const loadFindings = async () => {
+    if (!investigationId) return;
+    setIsLoadingFindings(true);
+    try {
+      const { data, error } = await supabase
+        .from('findings')
+        .select('*')
+        .eq('investigation_id', investigationId)
+        .order('created_at', { ascending: false });
+      if (!error && data) {
+        setAvailableFindings(data);
+      }
+    } finally {
+      setIsLoadingFindings(false);
+    }
+  };
+
+  const openImportDialog = () => {
+    setShowImportDialog(true);
+    setSelectedFindings(new Set());
+    loadFindings();
+  };
+
+  const toggleFinding = (id: string) => {
+    setSelectedFindings(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAll = () => {
+    if (selectedFindings.size === availableFindings.length) {
+      setSelectedFindings(new Set());
+    } else {
+      setSelectedFindings(new Set(availableFindings.map(f => f.id)));
+    }
+  };
+
+  const classifyFindingType = (finding: any): string => {
+    const agent = finding.agent_type?.toLowerCase() || '';
+    const src = finding.source?.toLowerCase() || '';
+    if (agent.includes('people') || agent.includes('person') || src.includes('people')) return 'person';
+    if (agent.includes('email') || src.includes('email') || src.includes('holehe')) return 'email';
+    if (agent.includes('phone') || src.includes('phone')) return 'phone';
+    if (agent.includes('social') || src.includes('social') || src.includes('sherlock')) return 'account';
+    if (agent.includes('address') || src.includes('address') || src.includes('property')) return 'location';
+    if (agent.includes('breach') || src.includes('breach') || src.includes('leak')) return 'post';
+    if (agent.includes('username') || src.includes('username')) return 'username';
+    return 'account';
+  };
+
+  const getFindingLabel = (finding: any): string => {
+    const d = finding.data as any;
+    if (d?.name) return d.name;
+    if (d?.email) return d.email;
+    if (d?.phone) return d.phone;
+    if (d?.username) return d.username;
+    if (d?.platform) return `${d.platform}${d.username ? ': ' + d.username : ''}`;
+    if (d?.url) return d.url;
+    return finding.source || finding.agent_type || 'Unknown';
+  };
+
+  const importSelectedFindings = () => {
+    const selected = availableFindings.filter(f => selectedFindings.has(f.id));
+    const existingLabels = new Set(nodes.map(n => n.label));
+    const centerX = 400;
+    const centerY = 350;
+    const angleStep = selected.length > 0 ? (2 * Math.PI) / selected.length : 0;
+    const radius = 250;
+
+    const newNodes: GraphNode[] = [];
+    const newConns: Connection[] = [];
+
+    selected.forEach((finding, i) => {
+      const label = getFindingLabel(finding);
+      if (existingLabels.has(label)) return; // skip duplicates
+
+      const nodeType = classifyFindingType(finding);
+      const angle = i * angleStep - Math.PI / 2;
+      const node: GraphNode = {
+        id: `imported-${finding.id}`,
+        type: nodeType,
+        label,
+        data: {
+          source: finding.source,
+          agent: finding.agent_type,
+          confidence: finding.confidence_score,
+          ...(typeof finding.data === 'object' && finding.data !== null ? finding.data as Record<string, any> : {}),
+        },
+        position: {
+          x: centerX + radius * Math.cos(angle),
+          y: centerY + radius * Math.sin(angle),
+        },
+      };
+      newNodes.push(node);
+
+      // Connect to first existing node if any
+      if (nodes.length > 0) {
+        newConns.push({
+          id: `conn-import-${finding.id}`,
+          from: nodes[0].id,
+          to: node.id,
+          label: finding.agent_type || 'finding',
+          field: nodeType,
+        });
+      }
+    });
+
+    setNodes(prev => [...prev, ...newNodes]);
+    setConnections(prev => [...prev, ...newConns]);
+    setShowImportDialog(false);
+  };
 
   // Dropdown: invoke selector enrichment edge function for real results
   const searchDropdownData = async (query: string, sourceNode: GraphNode) => {
@@ -449,7 +578,16 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
                 </p>
               </div>
             </div>
-            <div className="flex items-center gap-4">
+            <div className="flex items-center gap-3">
+              {investigationId && (
+                <button
+                  onClick={openImportDialog}
+                  className="flex items-center gap-2 px-4 py-2 rounded-lg bg-cyan-600/20 border border-cyan-500/30 text-cyan-400 text-xs font-medium hover:bg-cyan-600/30 transition-colors"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Import Findings
+                </button>
+              )}
               <span className="px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700/50 text-xs text-slate-400">
                 Entities: <span className="text-cyan-400 font-medium">{nodes.length}</span>
               </span>
@@ -641,6 +779,94 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
             ))}
         </div>
       </div>
+
+      {/* Import Findings Dialog */}
+      <Dialog open={showImportDialog} onOpenChange={setShowImportDialog}>
+        <DialogContent className="max-w-lg bg-slate-900 border-slate-700 text-slate-100">
+          <DialogHeader>
+            <DialogTitle className="text-slate-100">Import Findings</DialogTitle>
+            <DialogDescription className="text-slate-400">
+              Select findings from your investigation to add to the canvas.
+            </DialogDescription>
+          </DialogHeader>
+
+          {isLoadingFindings ? (
+            <div className="flex items-center justify-center py-12">
+              <Loader className="w-6 h-6 text-cyan-400 animate-spin" />
+            </div>
+          ) : availableFindings.length === 0 ? (
+            <div className="text-center py-12 text-slate-500 text-sm">
+              No findings available for this investigation.
+            </div>
+          ) : (
+            <>
+              <div className="flex items-center justify-between mb-2">
+                <button onClick={toggleAll} className="text-xs text-cyan-400 hover:text-cyan-300 transition-colors">
+                  {selectedFindings.size === availableFindings.length ? 'Deselect All' : 'Select All'}
+                </button>
+                <span className="text-xs text-slate-500">{selectedFindings.size} of {availableFindings.length} selected</span>
+              </div>
+              <ScrollArea className="max-h-[360px] pr-2">
+                <div className="space-y-1.5">
+                  {availableFindings.map(finding => {
+                    const fType = classifyFindingType(finding);
+                    const Icon = entityTypes[fType]?.icon || User;
+                    const color = entityTypes[fType]?.color || '#64748b';
+                    const isSelected = selectedFindings.has(finding.id);
+                    const alreadyOnCanvas = nodes.some(n => n.label === getFindingLabel(finding));
+
+                    return (
+                      <button
+                        key={finding.id}
+                        onClick={() => !alreadyOnCanvas && toggleFinding(finding.id)}
+                        disabled={alreadyOnCanvas}
+                        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left transition-colors ${
+                          alreadyOnCanvas
+                            ? 'opacity-40 cursor-not-allowed bg-slate-800/20'
+                            : isSelected
+                            ? 'bg-cyan-600/15 border border-cyan-500/30'
+                            : 'bg-slate-800/40 hover:bg-slate-800/70 border border-transparent'
+                        }`}
+                      >
+                        {alreadyOnCanvas ? (
+                          <Check className="w-4 h-4 text-green-500 shrink-0" />
+                        ) : isSelected ? (
+                          <CheckSquare className="w-4 h-4 text-cyan-400 shrink-0" />
+                        ) : (
+                          <Square className="w-4 h-4 text-slate-600 shrink-0" />
+                        )}
+                        <div className="w-7 h-7 rounded flex items-center justify-center shrink-0" style={{ backgroundColor: `${color}20` }}>
+                          <Icon className="w-3.5 h-3.5" style={{ color }} />
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm text-slate-200 truncate">{getFindingLabel(finding)}</p>
+                          <p className="text-[10px] text-slate-500 truncate">
+                            {finding.source} · {entityTypes[fType]?.label}
+                            {alreadyOnCanvas && ' · Already on canvas'}
+                          </p>
+                        </div>
+                        {finding.confidence_score != null && (
+                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
+                            {Math.round(finding.confidence_score * 100)}%
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </ScrollArea>
+              <Button
+                onClick={importSelectedFindings}
+                disabled={selectedFindings.size === 0}
+                className="w-full bg-cyan-600 hover:bg-cyan-500 text-white mt-2"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Import {selectedFindings.size} Finding{selectedFindings.size !== 1 ? 's' : ''}
+              </Button>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
