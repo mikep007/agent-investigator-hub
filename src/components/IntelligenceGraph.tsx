@@ -4,6 +4,7 @@ import {
   MessageSquare, Shield, Plus, X, ChevronRight, Database,
   ExternalLink, Check, Loader
 } from 'lucide-react';
+import { supabase } from '@/integrations/supabase/client';
 
 export interface PivotData {
   type: 'username' | 'email' | 'phone' | 'name' | 'address';
@@ -57,6 +58,305 @@ const entityTypes: Record<string, { icon: typeof User; color: string; label: str
   post: { icon: MessageSquare, color: '#a855f7', label: 'Post/Content' },
 };
 
+// Parse real findings into graph nodes and connections
+function buildGraphFromFindings(
+  findings: any[],
+  targetName: string
+): { nodes: GraphNode[]; connections: Connection[] } {
+  const nodes: GraphNode[] = [];
+  const connections: Connection[] = [];
+  const seenLabels = new Set<string>();
+
+  const addNode = (type: string, label: string, data: Record<string, any>, position?: { x: number; y: number }): string => {
+    const key = `${type}:${label}`.toLowerCase();
+    if (seenLabels.has(key)) {
+      return nodes.find(n => `${n.type}:${n.label}`.toLowerCase() === key)?.id || '';
+    }
+    seenLabels.add(key);
+    const id = `node-${nodes.length}-${Date.now()}`;
+    nodes.push({ id, type, label, data, position: position || { x: 0, y: 0 } });
+    return id;
+  };
+
+  const addConnection = (from: string, to: string, label: string, field: string) => {
+    if (!from || !to || from === to) return;
+    const exists = connections.some(c => (c.from === from && c.to === to) || (c.from === to && c.to === from));
+    if (!exists) {
+      connections.push({ id: `conn-${connections.length}-${Date.now()}`, from, to, label, field });
+    }
+  };
+
+  // Primary person node
+  const primaryId = addNode('person', targetName || 'Subject', {
+    source: 'investigation',
+    findingsCount: findings.length,
+  });
+
+  for (const finding of findings) {
+    const data = finding.data as any;
+    if (!data) continue;
+
+    // People_search findings
+    if (finding.agent_type === 'People_search') {
+      const params = data.searchParams;
+      if (params?.email) {
+        const eid = addNode('email', params.email, { source: 'search_params', verified: true });
+        addConnection(primaryId, eid, 'owns', 'email');
+      }
+      if (params?.phone) {
+        const formatted = params.phone.length > 10
+          ? `+${params.phone.slice(0, 1)} (${params.phone.slice(1, 4)}) ${params.phone.slice(4, 7)}-${params.phone.slice(7)}`
+          : params.phone;
+        const pid = addNode('phone', formatted, { source: 'search_params', raw: params.phone });
+        addConnection(primaryId, pid, 'owns', 'phone');
+      }
+      if (params?.address) {
+        const lid = addNode('location', params.address, {
+          city: params.city,
+          state: params.state,
+          source: 'search_params',
+        });
+        addConnection(primaryId, lid, 'lives_at', 'location');
+      }
+
+      // Parse actual results if present
+      const results = data.results || data.truePeopleSearch?.persons || data.fastPeopleSearch?.persons || [];
+      for (const person of results) {
+        if (person.emails) {
+          for (const email of person.emails) {
+            const eid = addNode('email', email, { source: data.source || 'people_search' });
+            addConnection(primaryId, eid, 'owns', 'email');
+          }
+        }
+        if (person.phones) {
+          for (const phone of person.phones) {
+            const pid = addNode('phone', phone, { source: data.source || 'people_search' });
+            addConnection(primaryId, pid, 'owns', 'phone');
+          }
+        }
+        if (person.addresses) {
+          for (const addr of person.addresses) {
+            const aid = addNode('location', addr, { source: data.source || 'people_search' });
+            addConnection(primaryId, aid, 'lives_at', 'location');
+          }
+        }
+        if (person.relatives) {
+          for (const rel of person.relatives) {
+            const rid = addNode('relative', rel, { source: data.source || 'people_search' });
+            addConnection(primaryId, rid, 'related_to', 'relative');
+          }
+        }
+      }
+
+      // Manual verification URLs as enrichment data on the person node
+      if (data.manualVerificationUrls?.length) {
+        const personNode = nodes.find(n => n.id === primaryId);
+        if (personNode) {
+          personNode.data.verificationSources = data.manualVerificationUrls.length;
+        }
+      }
+    }
+
+    // Social/name search
+    if (finding.agent_type === 'Social_name' || finding.agent_type === 'IDCrawl') {
+      const profiles = data.profiles || [];
+      for (const profile of profiles) {
+        if (profile.exists && profile.url) {
+          const platform = profile.platform || 'Unknown';
+          const label = profile.name || profile.username || platform;
+          const aid = addNode('account', label, {
+            platform,
+            url: profile.url,
+            username: profile.username,
+            snippet: profile.snippet?.slice(0, 100),
+          });
+          addConnection(primaryId, aid, 'active_on', 'account');
+        }
+      }
+    }
+
+    // Selector enrichment (email/phone platform checks)
+    if (finding.agent_type?.startsWith('Selector_enrichment')) {
+      const results = data.results || [];
+      for (const result of results) {
+        if (result.exists && result.platform) {
+          const label = `${result.platform}${result.profileUrl ? '' : ' (detected)'}`;
+          const aid = addNode('account', label, {
+            platform: result.platform,
+            url: result.profileUrl,
+            verified: result.exists,
+            responseTime: result.responseTime,
+          });
+          // Connect to the relevant selector (email/phone) or primary
+          const selectorType = finding.agent_type.includes('email') ? 'email' : 'phone';
+          const selectorNode = nodes.find(n => n.type === selectorType);
+          addConnection(selectorNode?.id || primaryId, aid, 'registered_on', 'account');
+        }
+      }
+    }
+
+    // Email intelligence / Holehe
+    if (finding.agent_type === 'Email_Intelligence' || finding.agent_type === 'Holehe') {
+      const accounts = data.accounts || [];
+      for (const account of accounts) {
+        if (account.exists) {
+          const aid = addNode('account', `${account.platform || account.name}`, {
+            source: 'email_intelligence',
+            verified: true,
+          });
+          const emailNode = nodes.find(n => n.type === 'email');
+          addConnection(emailNode?.id || primaryId, aid, 'registered_on', 'account');
+        }
+      }
+    }
+
+    // Web search results
+    if (finding.agent_type === 'Web' || finding.agent_type === 'Google_search') {
+      const items = data.items || data.results || [];
+      for (const item of items.slice(0, 5)) {
+        const pid = addNode('post', item.title || item.link || 'Web Result', {
+          url: item.link || item.url,
+          snippet: item.snippet?.slice(0, 100),
+          source: 'web_search',
+        });
+        addConnection(primaryId, pid, 'mentioned_in', 'post');
+      }
+    }
+
+    // Sherlock / username search
+    if (finding.agent_type === 'Sherlock' || finding.agent_type === 'Username_search') {
+      const results = data.results || data.accounts || [];
+      for (const result of results) {
+        if (result.exists || result.found) {
+          const aid = addNode('account', `${result.platform || result.site}: ${result.username || ''}`, {
+            url: result.url || result.profile_url,
+            platform: result.platform || result.site,
+            source: 'username_search',
+          });
+          const usernameNode = nodes.find(n => n.type === 'username');
+          addConnection(usernameNode?.id || primaryId, aid, 'active_on', 'account');
+        }
+      }
+    }
+
+    // Voter registration
+    if (finding.agent_type?.includes('voter') || finding.agent_type?.includes('Voter')) {
+      if (data.records?.length) {
+        for (const record of data.records) {
+          const lid = addNode('location', record.address || record.registration_address || 'Voter Record', {
+            source: 'voter_registration',
+            party: record.party,
+            status: record.status,
+          });
+          addConnection(primaryId, lid, 'registered_at', 'location');
+        }
+      }
+    }
+
+    // Property records
+    if (finding.agent_type === 'Property_records') {
+      const records = data.records || data.properties || [];
+      for (const record of records) {
+        const lid = addNode('location', record.address || record.property_address || 'Property', {
+          source: 'property_records',
+          owner: record.owner,
+          value: record.assessed_value,
+        });
+        addConnection(primaryId, lid, 'owns_property', 'location');
+      }
+    }
+
+    // Power Automate findings with persons data
+    if (finding.agent_type === 'Power_automate' && data.persons) {
+      for (const person of data.persons.slice(0, 10)) {
+        const isSubject = person.name?.toLowerCase() === targetName?.toLowerCase();
+        if (isSubject) {
+          // Enrich primary node
+          const primaryNode = nodes.find(n => n.id === primaryId);
+          if (primaryNode && person.age) primaryNode.data.age = person.age;
+          if (primaryNode && person.location) primaryNode.data.location = person.location;
+          
+          if (person.emails) {
+            for (const email of person.emails) {
+              const eid = addNode('email', email, { source: 'global_findings' });
+              addConnection(primaryId, eid, 'owns', 'email');
+            }
+          }
+          if (person.phones) {
+            for (const phone of person.phones) {
+              const pid = addNode('phone', phone, { source: 'global_findings' });
+              addConnection(primaryId, pid, 'owns', 'phone');
+            }
+          }
+          if (person.addresses) {
+            for (const addr of person.addresses) {
+              const aid = addNode('location', addr, { source: 'global_findings' });
+              addConnection(primaryId, aid, 'lives_at', 'location');
+            }
+          }
+          if (person.relatives) {
+            for (const rel of person.relatives) {
+              const rid = addNode('relative', rel, { source: 'global_findings' });
+              addConnection(primaryId, rid, 'related_to', 'relative');
+            }
+          }
+        } else if (person.name) {
+          const rid = addNode('relative', person.name, {
+            source: 'global_findings',
+            age: person.age,
+            location: person.location,
+          });
+          addConnection(primaryId, rid, 'associated_with', 'relative');
+        }
+      }
+    }
+
+    // Browser scraper results (whitepages, spokeo, etc)
+    if (finding.agent_type?.startsWith('Browser_') && data.success !== false) {
+      if (data.persons) {
+        for (const person of data.persons) {
+          if (person.relatives) {
+            for (const rel of person.relatives) {
+              const rid = addNode('relative', rel, { source: data.source || 'browser_scrape' });
+              addConnection(primaryId, rid, 'related_to', 'relative');
+            }
+          }
+          if (person.addresses) {
+            for (const addr of person.addresses) {
+              const aid = addNode('location', addr, { source: data.source || 'browser_scrape' });
+              addConnection(primaryId, aid, 'lives_at', 'location');
+            }
+          }
+        }
+      }
+    }
+  }
+
+  // Layout: arrange nodes in concentric circles around primary
+  if (nodes.length > 1) {
+    const centerX = 500;
+    const centerY = 350;
+    nodes[0].position = { x: centerX, y: centerY };
+
+    // Group by type for organized layout
+    const childNodes = nodes.slice(1);
+    const radius = 280;
+    const angleStep = (2 * Math.PI) / childNodes.length;
+    
+    childNodes.forEach((node, i) => {
+      const angle = i * angleStep - Math.PI / 2;
+      // Add some jitter based on type for visual variety
+      const typeOffset = Object.keys(entityTypes).indexOf(node.type) * 15;
+      node.position = {
+        x: centerX + (radius + typeOffset) * Math.cos(angle),
+        y: centerY + (radius + typeOffset) * Math.sin(angle),
+      };
+    });
+  }
+
+  return { nodes, connections };
+}
+
 const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: IntelligenceGraphProps) => {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
   const [connections, setConnections] = useState<Connection[]>([]);
@@ -65,6 +365,7 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const [showSearchDropdown, setShowSearchDropdown] = useState<string | null>(null);
@@ -73,31 +374,114 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
   const [isDropdownSearching, setIsDropdownSearching] = useState(false);
   const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
 
-  // Search within dropdown for connections
-  const searchDropdownData = async (query: string) => {
+  // Load real findings when investigationId changes
+  useEffect(() => {
+    if (!investigationId) {
+      setNodes([]);
+      setConnections([]);
+      return;
+    }
+
+    const loadFindings = async () => {
+      setIsLoading(true);
+      try {
+        const { data: findings, error } = await supabase
+          .from('findings')
+          .select('*')
+          .eq('investigation_id', investigationId)
+          .order('created_at', { ascending: true });
+
+        if (error) {
+          console.error('[IntelligenceGraph] Failed to load findings:', error);
+          return;
+        }
+
+        if (findings && findings.length > 0) {
+          const graph = buildGraphFromFindings(findings, targetName || 'Subject');
+          setNodes(graph.nodes);
+          setConnections(graph.connections);
+        }
+      } catch (err) {
+        console.error('[IntelligenceGraph] Error:', err);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    loadFindings();
+
+    // Subscribe to new findings for live updates
+    const channel = supabase
+      .channel(`intel-graph-${investigationId}`)
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'findings',
+          filter: `investigation_id=eq.${investigationId}`,
+        },
+        async () => {
+          const { data: findings } = await supabase
+            .from('findings')
+            .select('*')
+            .eq('investigation_id', investigationId)
+            .order('created_at', { ascending: true });
+
+          if (findings && findings.length > 0) {
+            const graph = buildGraphFromFindings(findings, targetName || 'Subject');
+            setNodes(graph.nodes);
+            setConnections(graph.connections);
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [investigationId, targetName]);
+
+  // Dropdown: invoke selector enrichment edge function for real results
+  const searchDropdownData = async (query: string, sourceNode: GraphNode) => {
     setIsDropdownSearching(true);
-    await new Promise(resolve => setTimeout(resolve, 800));
+    try {
+      const { data, error } = await supabase.functions.invoke('osint-selector-enrichment', {
+        body: { selector: query, type: 'auto' },
+      });
 
-    const results: DropdownResult[] = [
-      { type: 'email', value: `${query}@gmail.com`, verified: true, platforms: ['GitHub', 'Twitter'] },
-      { type: 'email', value: `${query}@protonmail.com`, verified: false, platforms: ['Reddit'] },
-      {
-        type: 'phone',
-        value: `+1 (555) ${Math.floor(Math.random() * 900) + 100}-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`,
-        carrier: 'Verizon',
-        registered: true,
-      },
-      { type: 'username', value: `${query}_dev`, platforms: ['GitHub', 'Twitter', 'Reddit'] },
-      {
-        type: 'account',
-        value: `Twitter: @${query}`,
-        platform: 'Twitter',
-        followers: Math.floor(Math.random() * 5000),
-      },
-    ].filter(r => r.value.toLowerCase().includes(query.toLowerCase()));
+      if (error || !data?.results) {
+        // Fallback: create a simple node from the query
+        setDropdownResults([{
+          type: query.includes('@') ? 'email' : query.match(/^\+?\d/) ? 'phone' : 'username',
+          value: query,
+          verified: false,
+        }]);
+      } else {
+        const results: DropdownResult[] = (data.results || [])
+          .filter((r: any) => r.exists)
+          .slice(0, 8)
+          .map((r: any) => ({
+            type: 'account',
+            value: `${r.platform}`,
+            verified: r.exists,
+            platform: r.platform,
+          }));
 
-    setDropdownResults(results);
-    setIsDropdownSearching(false);
+        // Also add the raw selector as an option
+        const selectorType = query.includes('@') ? 'email' : query.match(/^\+?\d/) ? 'phone' : 'username';
+        results.unshift({ type: selectorType, value: query, verified: false });
+        setDropdownResults(results);
+      }
+    } catch {
+      setDropdownResults([{
+        type: query.includes('@') ? 'email' : 'username',
+        value: query,
+        verified: false,
+      }]);
+    } finally {
+      setIsDropdownSearching(false);
+    }
   };
 
   const addFieldFromDropdown = (result: DropdownResult, sourceNodeId: string) => {
@@ -134,95 +518,47 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
     setDropdownResults([]);
   };
 
-  const investigateEntity = async (query: string) => {
-    setIsSearching(true);
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    const isEmail = query.includes('@');
-    const baseIdentifier = isEmail ? query.split('@')[0] : query.toLowerCase().replace(/\s/g, '.');
-
-    const primary: GraphNode = {
-      id: `node-${Date.now()}`,
-      type: isEmail ? 'email' : 'person',
-      label: query,
-      data: { fullName: isEmail ? baseIdentifier : query, verified: isEmail ? true : undefined, timestamp: new Date().toISOString() },
-      position: { x: 400, y: 300 },
-    };
-
-    const related = [
-      ...(!isEmail
-        ? [
-            { id: `node-${Date.now()}-1`, type: 'email', label: `${baseIdentifier}@gmail.com`, data: { verified: true, breached: false, platforms: ['GitHub', 'Twitter'] }, relationship: 'owns' },
-            { id: `node-${Date.now()}-2`, type: 'email', label: `${baseIdentifier.split('.')[0]}@protonmail.com`, data: { verified: true, breached: false, platforms: ['Reddit'] }, relationship: 'owns' },
-          ]
-        : []),
-      {
-        id: `node-${Date.now()}-3`,
-        type: 'phone',
-        label: `+1 (${Math.floor(Math.random() * 900) + 100}) 555-${String(Math.floor(Math.random() * 10000)).padStart(4, '0')}`,
-        data: { carrier: 'Verizon', type: 'Mobile', registered: true },
-        relationship: 'owns',
-      },
-      {
-        id: `node-${Date.now()}-4`,
-        type: 'username',
-        label: `${baseIdentifier.replace(/\./g, '_')}_${Math.floor(Math.random() * 99)}`,
-        data: { platforms: ['GitHub', 'Twitter', 'Reddit'], verified: true },
-        relationship: 'uses',
-      },
-      {
-        id: `node-${Date.now()}-5`,
-        type: 'account',
-        label: `Twitter: @${baseIdentifier.split('.')[0]}`,
-        data: { platform: 'Twitter', followers: Math.floor(Math.random() * 5000), joined: '2019-03' },
-        relationship: 'active_on',
-      },
-      {
-        id: `node-${Date.now()}-6`,
-        type: 'account',
-        label: `GitHub: ${baseIdentifier.replace(/\./g, '-')}`,
-        data: { platform: 'GitHub', repos: Math.floor(Math.random() * 20), followers: Math.floor(Math.random() * 100) },
-        relationship: 'active_on',
-      },
-    ];
-
-    setIsSearching(false);
-    return { primary, related };
-  };
-
+  // Manual search triggers a new investigation via edge function
   const handleSearch = async () => {
     if (!searchQuery.trim()) return;
+    setIsSearching(true);
 
-    const results = await investigateEntity(searchQuery);
-    const primaryNode = results.primary;
-    setNodes(prev => [...prev, primaryNode]);
+    try {
+      // Trigger a lateral movement search using the selector enrichment
+      const isEmail = searchQuery.includes('@');
+      const isPhone = /^\+?\d{7,}$/.test(searchQuery.replace(/[\s()-]/g, ''));
 
-    const angleStep = (2 * Math.PI) / results.related.length;
-    const radius = 250;
-
-    results.related.forEach((relatedData, index) => {
-      const angle = index * angleStep;
-      const relatedNode: GraphNode = {
-        id: relatedData.id,
-        type: relatedData.type,
-        label: relatedData.label,
-        data: relatedData.data,
-        position: {
-          x: primaryNode.position.x + radius * Math.cos(angle),
-          y: primaryNode.position.y + radius * Math.sin(angle),
-        },
+      const nodeType = isEmail ? 'email' : isPhone ? 'phone' : 'person';
+      const newNode: GraphNode = {
+        id: `node-manual-${Date.now()}`,
+        type: nodeType,
+        label: searchQuery,
+        data: { source: 'manual_search', timestamp: new Date().toISOString() },
+        position: { x: 400 + Math.random() * 200, y: 300 + Math.random() * 200 },
       };
 
-      setNodes(prev => [...prev, relatedNode]);
-      setConnections(prev => [
-        ...prev,
-        { id: `conn-${primaryNode.id}-${relatedNode.id}`, from: primaryNode.id, to: relatedNode.id, label: relatedData.relationship, field: relatedData.type },
-      ]);
-    });
+      setNodes(prev => [...prev, newNode]);
 
-    setSearchQuery('');
+      // If there's a primary node, connect it
+      if (nodes.length > 0) {
+        setConnections(prev => [
+          ...prev,
+          { id: `conn-manual-${Date.now()}`, from: nodes[0].id, to: newNode.id, label: 'investigated', field: nodeType },
+        ]);
+      }
+
+      // Trigger pivot if callback exists
+      if (onPivot) {
+        const pivotType = isEmail ? 'email' : isPhone ? 'phone' : 'name';
+        onPivot({ type: pivotType as PivotData['type'], value: searchQuery, source: 'intelligence_graph' });
+      }
+    } finally {
+      setIsSearching(false);
+      setSearchQuery('');
+    }
   };
 
+  // ──── Drag handlers ────
   const handleMouseDown = (e: React.MouseEvent, node: GraphNode) => {
     if (e.button !== 0) return;
     setIsDragging(true);
@@ -315,6 +651,7 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
           {/* Data fields */}
           <div className="px-4 py-3 space-y-1.5">
             {Object.entries(node.data || {})
+              .filter(([key]) => !['type', 'value'].includes(key))
               .slice(0, 3)
               .map(([key, value]) => (
                 <div key={key} className="flex items-center justify-between text-xs">
@@ -368,7 +705,7 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
                     onChange={(e) => {
                       setDropdownSearchQuery(e.target.value);
                       if (e.target.value.length > 2) {
-                        searchDropdownData(e.target.value);
+                        searchDropdownData(e.target.value, node);
                       }
                     }}
                     placeholder="Search email, phone, username..."
@@ -473,10 +810,18 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-slate-100">Intelligence Graph</h1>
-                <p className="text-sm text-slate-500">OSINT Lateral Movement Analysis</p>
+                <p className="text-sm text-slate-500">
+                  {targetName ? `Investigation: ${targetName}` : 'OSINT Lateral Movement Analysis'}
+                </p>
               </div>
             </div>
             <div className="flex items-center gap-4">
+              {isLoading && (
+                <span className="px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-xs text-cyan-400 flex items-center gap-2">
+                  <Loader className="w-3 h-3 animate-spin" />
+                  Loading findings...
+                </span>
+              )}
               <span className="px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700/50 text-xs text-slate-400">
                 Entities: <span className="text-cyan-400 font-medium">{nodes.length}</span>
               </span>
@@ -494,7 +839,7 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
-                placeholder="Investigate: name, email, phone, username..."
+                placeholder="Add entity: name, email, phone, username..."
                 className="w-full bg-slate-800/60 border border-slate-700/50 rounded-xl pl-12 pr-32 py-4 text-slate-100 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-2 focus:ring-cyan-500/20 transition-all"
               />
               <button
@@ -527,15 +872,19 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
           <NodeComponent key={node.id} node={node} />
         ))}
 
-        {nodes.length === 0 && (
+        {nodes.length === 0 && !isLoading && (
           <div className="absolute inset-0 flex items-center justify-center pt-20">
             <div className="text-center max-w-md">
               <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-slate-800/50 border border-slate-700/30 flex items-center justify-center">
                 <Search className="w-8 h-8 text-slate-600" />
               </div>
-              <h3 className="text-xl font-semibold text-slate-300 mb-2">Begin Your Investigation</h3>
+              <h3 className="text-xl font-semibold text-slate-300 mb-2">
+                {investigationId ? 'No findings yet' : 'Begin Your Investigation'}
+              </h3>
               <p className="text-slate-500 text-sm">
-                Search for a name, email, phone number, or username to start mapping digital footprints
+                {investigationId
+                  ? 'Findings will appear here as the investigation progresses'
+                  : 'Start an investigation above to see the intelligence graph populate with real data'}
               </p>
             </div>
           </div>
@@ -572,11 +921,27 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
                 <div className="p-3 rounded-lg bg-slate-800/50 text-sm text-cyan-400 font-mono break-all">{selectedNode.label}</div>
               </div>
 
+              {/* Pivot Action */}
+              {onPivot && ['email', 'phone', 'username', 'person', 'relative'].includes(selectedNode.type) && (
+                <button
+                  onClick={() => {
+                    const pivotType = selectedNode.type === 'relative' || selectedNode.type === 'person' ? 'name' : selectedNode.type;
+                    onPivot({ type: pivotType as PivotData['type'], value: selectedNode.label, source: 'intelligence_graph' });
+                  }}
+                  className="w-full px-4 py-3 rounded-lg bg-cyan-600/20 text-cyan-400 text-sm font-medium hover:bg-cyan-600/30 transition-colors flex items-center justify-center gap-2"
+                >
+                  <Search className="w-4 h-4" />
+                  Investigate "{selectedNode.label}"
+                </button>
+              )}
+
               {/* Intelligence Data */}
               <div>
                 <p className="text-xs uppercase tracking-wider text-slate-500 mb-2">Intelligence Data</p>
                 <div className="space-y-3">
-                  {Object.entries(selectedNode.data || {}).map(([key, value]) => (
+                  {Object.entries(selectedNode.data || {})
+                    .filter(([key]) => !['type', 'value'].includes(key))
+                    .map(([key, value]) => (
                     <div key={key} className="p-3 rounded-lg bg-slate-800/30">
                       <p className="text-xs text-slate-500 mb-1 capitalize">{key.replace(/_/g, ' ')}</p>
                       <div className="text-sm text-slate-200">
@@ -590,6 +955,8 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
                           </div>
                         ) : typeof value === 'boolean' ? (
                           <span className={value ? 'text-green-400' : 'text-red-400'}>{value ? '✓ Yes' : '✗ No'}</span>
+                        ) : typeof value === 'object' && value !== null ? (
+                          JSON.stringify(value).slice(0, 100)
                         ) : (
                           String(value)
                         )}
