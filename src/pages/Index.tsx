@@ -30,7 +30,7 @@ import ReportDisplay from "@/components/ReportDisplay";
 import ComprehensiveSearchForm from "@/components/ComprehensiveSearchForm";
 import RelationshipGraph from "@/components/RelationshipGraph";
 import OSINTLinkMap, { PivotData } from "@/components/OSINTLinkMap";
-import PalantirLinkGraph from "@/components/PalantirLinkGraph";
+import IntelligenceGraph from "@/components/IntelligenceGraph";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import SaveToCaseDialog from "@/components/cases/SaveToCaseDialog";
 import InvestigationBreadcrumb from "@/components/InvestigationBreadcrumb";
@@ -538,7 +538,7 @@ const Index = () => {
 
           {/* Full-Width OSINT Nexus Mind Map */}
           <div className="mb-6">
-            <PalantirLinkGraph 
+            <IntelligenceGraph 
               active={activeInvestigation} 
               investigationId={currentInvestigationId}
               targetName={targetName}
