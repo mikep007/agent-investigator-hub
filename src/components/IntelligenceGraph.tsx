@@ -58,304 +58,7 @@ const entityTypes: Record<string, { icon: typeof User; color: string; label: str
   post: { icon: MessageSquare, color: '#a855f7', label: 'Post/Content' },
 };
 
-// Parse real findings into graph nodes and connections
-function buildGraphFromFindings(
-  findings: any[],
-  targetName: string
-): { nodes: GraphNode[]; connections: Connection[] } {
-  const nodes: GraphNode[] = [];
-  const connections: Connection[] = [];
-  const seenLabels = new Set<string>();
-
-  const addNode = (type: string, label: string, data: Record<string, any>, position?: { x: number; y: number }): string => {
-    const key = `${type}:${label}`.toLowerCase();
-    if (seenLabels.has(key)) {
-      return nodes.find(n => `${n.type}:${n.label}`.toLowerCase() === key)?.id || '';
-    }
-    seenLabels.add(key);
-    const id = `node-${nodes.length}-${Date.now()}`;
-    nodes.push({ id, type, label, data, position: position || { x: 0, y: 0 } });
-    return id;
-  };
-
-  const addConnection = (from: string, to: string, label: string, field: string) => {
-    if (!from || !to || from === to) return;
-    const exists = connections.some(c => (c.from === from && c.to === to) || (c.from === to && c.to === from));
-    if (!exists) {
-      connections.push({ id: `conn-${connections.length}-${Date.now()}`, from, to, label, field });
-    }
-  };
-
-  // Primary person node
-  const primaryId = addNode('person', targetName || 'Subject', {
-    source: 'investigation',
-    findingsCount: findings.length,
-  });
-
-  for (const finding of findings) {
-    const data = finding.data as any;
-    if (!data) continue;
-
-    // People_search findings
-    if (finding.agent_type === 'People_search') {
-      const params = data.searchParams;
-      if (params?.email) {
-        const eid = addNode('email', params.email, { source: 'search_params', verified: true });
-        addConnection(primaryId, eid, 'owns', 'email');
-      }
-      if (params?.phone) {
-        const formatted = params.phone.length > 10
-          ? `+${params.phone.slice(0, 1)} (${params.phone.slice(1, 4)}) ${params.phone.slice(4, 7)}-${params.phone.slice(7)}`
-          : params.phone;
-        const pid = addNode('phone', formatted, { source: 'search_params', raw: params.phone });
-        addConnection(primaryId, pid, 'owns', 'phone');
-      }
-      if (params?.address) {
-        const lid = addNode('location', params.address, {
-          city: params.city,
-          state: params.state,
-          source: 'search_params',
-        });
-        addConnection(primaryId, lid, 'lives_at', 'location');
-      }
-
-      // Parse actual results if present
-      const results = data.results || data.truePeopleSearch?.persons || data.fastPeopleSearch?.persons || [];
-      for (const person of results) {
-        if (person.emails) {
-          for (const email of person.emails) {
-            const eid = addNode('email', email, { source: data.source || 'people_search' });
-            addConnection(primaryId, eid, 'owns', 'email');
-          }
-        }
-        if (person.phones) {
-          for (const phone of person.phones) {
-            const pid = addNode('phone', phone, { source: data.source || 'people_search' });
-            addConnection(primaryId, pid, 'owns', 'phone');
-          }
-        }
-        if (person.addresses) {
-          for (const addr of person.addresses) {
-            const aid = addNode('location', addr, { source: data.source || 'people_search' });
-            addConnection(primaryId, aid, 'lives_at', 'location');
-          }
-        }
-        if (person.relatives) {
-          for (const rel of person.relatives) {
-            const rid = addNode('relative', rel, { source: data.source || 'people_search' });
-            addConnection(primaryId, rid, 'related_to', 'relative');
-          }
-        }
-      }
-
-      // Manual verification URLs as enrichment data on the person node
-      if (data.manualVerificationUrls?.length) {
-        const personNode = nodes.find(n => n.id === primaryId);
-        if (personNode) {
-          personNode.data.verificationSources = data.manualVerificationUrls.length;
-        }
-      }
-    }
-
-    // Social/name search
-    if (finding.agent_type === 'Social_name' || finding.agent_type === 'IDCrawl') {
-      const profiles = data.profiles || [];
-      for (const profile of profiles) {
-        if (profile.exists && profile.url) {
-          const platform = profile.platform || 'Unknown';
-          const label = profile.name || profile.username || platform;
-          const aid = addNode('account', label, {
-            platform,
-            url: profile.url,
-            username: profile.username,
-            snippet: profile.snippet?.slice(0, 100),
-          });
-          addConnection(primaryId, aid, 'active_on', 'account');
-        }
-      }
-    }
-
-    // Selector enrichment (email/phone platform checks)
-    if (finding.agent_type?.startsWith('Selector_enrichment')) {
-      const results = data.results || [];
-      for (const result of results) {
-        if (result.exists && result.platform) {
-          const label = `${result.platform}${result.profileUrl ? '' : ' (detected)'}`;
-          const aid = addNode('account', label, {
-            platform: result.platform,
-            url: result.profileUrl,
-            verified: result.exists,
-            responseTime: result.responseTime,
-          });
-          // Connect to the relevant selector (email/phone) or primary
-          const selectorType = finding.agent_type.includes('email') ? 'email' : 'phone';
-          const selectorNode = nodes.find(n => n.type === selectorType);
-          addConnection(selectorNode?.id || primaryId, aid, 'registered_on', 'account');
-        }
-      }
-    }
-
-    // Email intelligence / Holehe
-    if (finding.agent_type === 'Email_Intelligence' || finding.agent_type === 'Holehe') {
-      const accounts = data.accounts || [];
-      for (const account of accounts) {
-        if (account.exists) {
-          const aid = addNode('account', `${account.platform || account.name}`, {
-            source: 'email_intelligence',
-            verified: true,
-          });
-          const emailNode = nodes.find(n => n.type === 'email');
-          addConnection(emailNode?.id || primaryId, aid, 'registered_on', 'account');
-        }
-      }
-    }
-
-    // Web search results
-    if (finding.agent_type === 'Web' || finding.agent_type === 'Google_search') {
-      const items = data.items || data.results || [];
-      for (const item of items.slice(0, 5)) {
-        const pid = addNode('post', item.title || item.link || 'Web Result', {
-          url: item.link || item.url,
-          snippet: item.snippet?.slice(0, 100),
-          source: 'web_search',
-        });
-        addConnection(primaryId, pid, 'mentioned_in', 'post');
-      }
-    }
-
-    // Sherlock / username search
-    if (finding.agent_type === 'Sherlock' || finding.agent_type === 'Username_search') {
-      const results = data.results || data.accounts || [];
-      for (const result of results) {
-        if (result.exists || result.found) {
-          const aid = addNode('account', `${result.platform || result.site}: ${result.username || ''}`, {
-            url: result.url || result.profile_url,
-            platform: result.platform || result.site,
-            source: 'username_search',
-          });
-          const usernameNode = nodes.find(n => n.type === 'username');
-          addConnection(usernameNode?.id || primaryId, aid, 'active_on', 'account');
-        }
-      }
-    }
-
-    // Voter registration
-    if (finding.agent_type?.includes('voter') || finding.agent_type?.includes('Voter')) {
-      if (data.records?.length) {
-        for (const record of data.records) {
-          const lid = addNode('location', record.address || record.registration_address || 'Voter Record', {
-            source: 'voter_registration',
-            party: record.party,
-            status: record.status,
-          });
-          addConnection(primaryId, lid, 'registered_at', 'location');
-        }
-      }
-    }
-
-    // Property records
-    if (finding.agent_type === 'Property_records') {
-      const records = data.records || data.properties || [];
-      for (const record of records) {
-        const lid = addNode('location', record.address || record.property_address || 'Property', {
-          source: 'property_records',
-          owner: record.owner,
-          value: record.assessed_value,
-        });
-        addConnection(primaryId, lid, 'owns_property', 'location');
-      }
-    }
-
-    // Power Automate findings with persons data
-    if (finding.agent_type === 'Power_automate' && data.persons) {
-      for (const person of data.persons.slice(0, 10)) {
-        const isSubject = person.name?.toLowerCase() === targetName?.toLowerCase();
-        if (isSubject) {
-          // Enrich primary node
-          const primaryNode = nodes.find(n => n.id === primaryId);
-          if (primaryNode && person.age) primaryNode.data.age = person.age;
-          if (primaryNode && person.location) primaryNode.data.location = person.location;
-          
-          if (person.emails) {
-            for (const email of person.emails) {
-              const eid = addNode('email', email, { source: 'global_findings' });
-              addConnection(primaryId, eid, 'owns', 'email');
-            }
-          }
-          if (person.phones) {
-            for (const phone of person.phones) {
-              const pid = addNode('phone', phone, { source: 'global_findings' });
-              addConnection(primaryId, pid, 'owns', 'phone');
-            }
-          }
-          if (person.addresses) {
-            for (const addr of person.addresses) {
-              const aid = addNode('location', addr, { source: 'global_findings' });
-              addConnection(primaryId, aid, 'lives_at', 'location');
-            }
-          }
-          if (person.relatives) {
-            for (const rel of person.relatives) {
-              const rid = addNode('relative', rel, { source: 'global_findings' });
-              addConnection(primaryId, rid, 'related_to', 'relative');
-            }
-          }
-        } else if (person.name) {
-          const rid = addNode('relative', person.name, {
-            source: 'global_findings',
-            age: person.age,
-            location: person.location,
-          });
-          addConnection(primaryId, rid, 'associated_with', 'relative');
-        }
-      }
-    }
-
-    // Browser scraper results (whitepages, spokeo, etc)
-    if (finding.agent_type?.startsWith('Browser_') && data.success !== false) {
-      if (data.persons) {
-        for (const person of data.persons) {
-          if (person.relatives) {
-            for (const rel of person.relatives) {
-              const rid = addNode('relative', rel, { source: data.source || 'browser_scrape' });
-              addConnection(primaryId, rid, 'related_to', 'relative');
-            }
-          }
-          if (person.addresses) {
-            for (const addr of person.addresses) {
-              const aid = addNode('location', addr, { source: data.source || 'browser_scrape' });
-              addConnection(primaryId, aid, 'lives_at', 'location');
-            }
-          }
-        }
-      }
-    }
-  }
-
-  // Layout: arrange nodes in concentric circles around primary
-  if (nodes.length > 1) {
-    const centerX = 500;
-    const centerY = 350;
-    nodes[0].position = { x: centerX, y: centerY };
-
-    // Group by type for organized layout
-    const childNodes = nodes.slice(1);
-    const radius = 280;
-    const angleStep = (2 * Math.PI) / childNodes.length;
-    
-    childNodes.forEach((node, i) => {
-      const angle = i * angleStep - Math.PI / 2;
-      // Add some jitter based on type for visual variety
-      const typeOffset = Object.keys(entityTypes).indexOf(node.type) * 15;
-      node.position = {
-        x: centerX + (radius + typeOffset) * Math.cos(angle),
-        y: centerY + (radius + typeOffset) * Math.sin(angle),
-      };
-    });
-  }
-
-  return { nodes, connections };
-}
+// No auto-loading — the Intelligence Graph starts blank as a manual analysis canvas
 
 const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: IntelligenceGraphProps) => {
   const [nodes, setNodes] = useState<GraphNode[]>([]);
@@ -365,7 +68,6 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
   const [draggedNode, setDraggedNode] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [isSearching, setIsSearching] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
   const canvasRef = useRef<HTMLDivElement>(null);
 
   const [showSearchDropdown, setShowSearchDropdown] = useState<string | null>(null);
@@ -373,74 +75,6 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
   const [dropdownResults, setDropdownResults] = useState<DropdownResult[]>([]);
   const [isDropdownSearching, setIsDropdownSearching] = useState(false);
   const [hoveredConnection, setHoveredConnection] = useState<string | null>(null);
-
-  // Load real findings when investigationId changes
-  useEffect(() => {
-    if (!investigationId) {
-      setNodes([]);
-      setConnections([]);
-      return;
-    }
-
-    const loadFindings = async () => {
-      setIsLoading(true);
-      try {
-        const { data: findings, error } = await supabase
-          .from('findings')
-          .select('*')
-          .eq('investigation_id', investigationId)
-          .order('created_at', { ascending: true });
-
-        if (error) {
-          console.error('[IntelligenceGraph] Failed to load findings:', error);
-          return;
-        }
-
-        if (findings && findings.length > 0) {
-          const graph = buildGraphFromFindings(findings, targetName || 'Subject');
-          setNodes(graph.nodes);
-          setConnections(graph.connections);
-        }
-      } catch (err) {
-        console.error('[IntelligenceGraph] Error:', err);
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
-    loadFindings();
-
-    // Subscribe to new findings for live updates
-    const channel = supabase
-      .channel(`intel-graph-${investigationId}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'findings',
-          filter: `investigation_id=eq.${investigationId}`,
-        },
-        async () => {
-          const { data: findings } = await supabase
-            .from('findings')
-            .select('*')
-            .eq('investigation_id', investigationId)
-            .order('created_at', { ascending: true });
-
-          if (findings && findings.length > 0) {
-            const graph = buildGraphFromFindings(findings, targetName || 'Subject');
-            setNodes(graph.nodes);
-            setConnections(graph.connections);
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  }, [investigationId, targetName]);
 
   // Dropdown: invoke selector enrichment edge function for real results
   const searchDropdownData = async (query: string, sourceNode: GraphNode) => {
@@ -816,12 +450,6 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
               </div>
             </div>
             <div className="flex items-center gap-4">
-              {isLoading && (
-                <span className="px-3 py-1 rounded-full bg-cyan-500/10 border border-cyan-500/30 text-xs text-cyan-400 flex items-center gap-2">
-                  <Loader className="w-3 h-3 animate-spin" />
-                  Loading findings...
-                </span>
-              )}
               <span className="px-3 py-1 rounded-full bg-slate-800/50 border border-slate-700/50 text-xs text-slate-400">
                 Entities: <span className="text-cyan-400 font-medium">{nodes.length}</span>
               </span>
@@ -872,19 +500,15 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
           <NodeComponent key={node.id} node={node} />
         ))}
 
-        {nodes.length === 0 && !isLoading && (
+        {nodes.length === 0 && (
           <div className="absolute inset-0 flex items-center justify-center pt-20">
             <div className="text-center max-w-md">
               <div className="w-20 h-20 mx-auto mb-6 rounded-2xl bg-slate-800/50 border border-slate-700/30 flex items-center justify-center">
                 <Search className="w-8 h-8 text-slate-600" />
               </div>
-              <h3 className="text-xl font-semibold text-slate-300 mb-2">
-                {investigationId ? 'No findings yet' : 'Begin Your Investigation'}
-              </h3>
+              <h3 className="text-xl font-semibold text-slate-300 mb-2">Build Your Intelligence Map</h3>
               <p className="text-slate-500 text-sm">
-                {investigationId
-                  ? 'Findings will appear here as the investigation progresses'
-                  : 'Start an investigation above to see the intelligence graph populate with real data'}
+                Search for a name, email, phone, or username above to add entities and start mapping connections
               </p>
             </div>
           </div>
