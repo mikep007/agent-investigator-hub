@@ -291,11 +291,7 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
 
   const startSearch = (node: GraphNode) => {
     setNodeActionMenu(null);
-    if (onPivot) {
-      const pivotType = node.type === 'name' ? 'name' : node.type === 'email' ? 'email' : node.type === 'phone' ? 'phone' : 'username';
-      onPivot({ type: pivotType as PivotData['type'], value: node.value, source: 'intelligence_graph' });
-    }
-    // Also run selector enrichment for results panel
+    // Run enrichment search directly in the right panel — no pivot/navigation
     runSearch(node);
   };
 
