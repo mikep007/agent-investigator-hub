@@ -1754,6 +1754,30 @@ Deno.serve(async (req) => {
           console.log(`  [!] Name-only match, capping at possible: ${item.link}`);
         }
         
+        // PENALTY: Bulk legal documents, PDFs, court filings, and bankruptcy records
+        // These often list hundreds of names — a name match alone is nearly meaningless
+        const isBulkDocument = item.link?.includes('.pdf') ||
+          item.link?.includes('pacer') ||
+          item.link?.includes('court') ||
+          item.link?.includes('docket') ||
+          item.link?.includes('bankruptcy') ||
+          item.link?.includes('filing') ||
+          item.link?.includes('judicial') ||
+          item.link?.includes('case-') ||
+          item.snippet?.includes('ADDRESS ON FILE') ||
+          item.snippet?.includes('CREDITOR') ||
+          item.snippet?.includes('DEBTOR');
+        
+        if (isBulkDocument && corroboratingFactors === 0) {
+          // Name-only match in a bulk document is essentially noise
+          confidenceScore = Math.min(confidenceScore, 0.15);
+          console.log(`  [!!] Bulk document/PDF with name-only match — near-zero confidence: ${item.link}`);
+        } else if (isBulkDocument) {
+          // Even with some corroboration, penalize bulk docs
+          confidenceScore *= 0.7;
+          console.log(`  [!] Bulk document/PDF penalty applied: ${item.link}`);
+        }
+        
         // Cap at 0.98
         confidenceScore = Math.min(0.98, confidenceScore);
         
