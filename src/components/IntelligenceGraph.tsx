@@ -66,6 +66,61 @@ const nodeTypeConfig: Record<NodeType, { icon: typeof User; color: string; label
   general: { icon: FileText, color: '#64748b', label: 'General' },
 };
 
+const platformMeta: Record<string, { displayName: string; color: string }> = {
+  microsoft: { displayName: 'Microsoft', color: '#00a4ef' },
+  hubspot: { displayName: 'HubSpot', color: '#ff7a59' },
+  slack: { displayName: 'Slack', color: '#4a154b' },
+  notion: { displayName: 'Notion', color: '#444' },
+  asana: { displayName: 'Asana', color: '#f06a6a' },
+  trello: { displayName: 'Trello', color: '#0079bf' },
+  atlassian: { displayName: 'Atlassian', color: '#0052cc' },
+  zoom: { displayName: 'Zoom', color: '#2d8cff' },
+  dropbox: { displayName: 'Dropbox', color: '#0061ff' },
+  mailchimp: { displayName: 'Mailchimp', color: '#ffe01b' },
+  shopify: { displayName: 'Shopify', color: '#96bf48' },
+  adobe: { displayName: 'Adobe', color: '#ff0000' },
+  canva: { displayName: 'Canva', color: '#00c4cc' },
+  figma: { displayName: 'Figma', color: '#f24e1e' },
+  github: { displayName: 'GitHub', color: '#8b949e' },
+  gravatar: { displayName: 'Gravatar', color: '#1e8cbe' },
+  wordpress: { displayName: 'WordPress', color: '#21759b' },
+  duolingo: { displayName: 'Duolingo', color: '#58cc02' },
+  evernote: { displayName: 'Evernote', color: '#00a82d' },
+  spotify: { displayName: 'Spotify', color: '#1db954' },
+  peloton: { displayName: 'Peloton', color: '#c91c1c' },
+  fitbit: { displayName: 'Fitbit', color: '#00b0b9' },
+  strava: { displayName: 'Strava', color: '#fc4c02' },
+  myfitnesspal: { displayName: 'MyFitnessPal', color: '#0070e0' },
+  nike: { displayName: 'Nike', color: '#f5f5f5' },
+  garmin: { displayName: 'Garmin', color: '#007cc3' },
+  tinder: { displayName: 'Tinder', color: '#fe3c72' },
+  bumble: { displayName: 'Bumble', color: '#ffc629' },
+  hinge: { displayName: 'Hinge', color: '#8b8b8b' },
+  okcupid: { displayName: 'OkCupid', color: '#0500ff' },
+  steam: { displayName: 'Steam', color: '#66c0f4' },
+  discord: { displayName: 'Discord', color: '#5865f2' },
+  epicgames: { displayName: 'Epic Games', color: '#888' },
+  xbox: { displayName: 'Xbox', color: '#107c10' },
+  playstation: { displayName: 'PlayStation', color: '#003087' },
+  nintendo: { displayName: 'Nintendo', color: '#e60012' },
+  twitch: { displayName: 'Twitch', color: '#9146ff' },
+  ebay: { displayName: 'eBay', color: '#e53238' },
+  etsy: { displayName: 'Etsy', color: '#f56400' },
+  amazon: { displayName: 'Amazon', color: '#ff9900' },
+  paypal: { displayName: 'PayPal', color: '#003087' },
+  venmo: { displayName: 'Venmo', color: '#3d95ce' },
+  whatsapp: { displayName: 'WhatsApp', color: '#25d366' },
+  telegram: { displayName: 'Telegram', color: '#0088cc' },
+  viber: { displayName: 'Viber', color: '#7360f2' },
+  signal: { displayName: 'Signal', color: '#3a76f0' },
+  snapchat: { displayName: 'Snapchat', color: '#fffc00' },
+  truecaller: { displayName: 'Truecaller', color: '#0099ff' },
+  textnow: { displayName: 'TextNow', color: '#00d084' },
+  roblox: { displayName: 'Roblox', color: '#e2231a' },
+  poshmark: { displayName: 'Poshmark', color: '#7f0353' },
+  depop: { displayName: 'Depop', color: '#ff2300' },
+};
+
 const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: IntelligenceGraphProps) => {
   const [activeTab, setActiveTab] = useState<ActiveTab>('graph');
   const [nodes, setNodes] = useState<GraphNode[]>(() => {
@@ -111,6 +166,7 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
   const [searchResults, setSearchResults] = useState<any[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [selectedResults, setSelectedResults] = useState<Set<number>>(new Set());
+  const [searchedNode, setSearchedNode] = useState<GraphNode | null>(null);
 
   // Import findings
   const [showImportDialog, setShowImportDialog] = useState(false);
@@ -247,12 +303,13 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
     setIsSearching(true);
     setSearchResults([]);
     setSelectedResults(new Set());
+    setSearchedNode(node);
     try {
       const { data, error } = await supabase.functions.invoke('osint-selector-enrichment', {
         body: { selector: node.value, type: 'auto' },
       });
       if (!error && data?.results) {
-        setSearchResults(data.results.filter((r: any) => r.exists).slice(0, 20));
+        setSearchResults(data.results.filter((r: any) => r.exists).slice(0, 30));
       }
     } catch { /* ignore */ } finally {
       setIsSearching(false);
@@ -619,65 +676,99 @@ const IntelligenceGraph = ({ investigationId, targetName, active, onPivot }: Int
 
       {/* Right results panel */}
       <div className="w-80 border-t border-r border-b rounded-r-xl flex flex-col" style={{ background: '#0d1117', borderColor: 'rgba(51,65,85,0.3)' }}>
-        <div className="px-4 py-3 border-b flex items-center justify-between" style={{ borderColor: 'rgba(51,65,85,0.4)' }}>
-          <h3 className="text-sm font-semibold text-slate-200">Search Results</h3>
-          {searchResults.length > 0 && (
-            <span className="text-[10px] text-slate-500">{searchResults.length} results</span>
+        <div className="px-4 py-3 border-b" style={{ borderColor: 'rgba(51,65,85,0.4)' }}>
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-semibold text-slate-200">Search Results</h3>
+            {searchResults.length > 0 && (
+              <span className="text-[10px] text-slate-500">{searchResults.length} found</span>
+            )}
+          </div>
+          {searchedNode && (
+            <div className="flex items-center gap-2 mt-2 px-2 py-1.5 rounded-md" style={{ background: 'rgba(51,65,85,0.2)' }}>
+              {(() => { const cfg = nodeTypeConfig[searchedNode.type as NodeType] || nodeTypeConfig.general; const Icon = cfg.icon; return <Icon className="w-3.5 h-3.5 shrink-0" style={{ color: cfg.color }} />; })()}
+              <span className="text-[11px] text-slate-400 truncate">{searchedNode.value}</span>
+            </div>
           )}
         </div>
 
         {isSearching ? (
-          <div className="flex-1 flex items-center justify-center">
-            <Loader className="w-5 h-5 text-cyan-400 animate-spin" />
-            <span className="ml-2 text-sm text-slate-500">Search in progress</span>
+          <div className="flex-1 flex flex-col items-center justify-center gap-3">
+            <Loader className="w-6 h-6 text-cyan-400 animate-spin" />
+            <p className="text-sm text-slate-500">Enriching selector…</p>
+            <p className="text-[10px] text-slate-600">Checking platforms</p>
           </div>
         ) : searchResults.length === 0 ? (
           <div className="flex-1 flex items-center justify-center text-center px-6">
             <div>
               <Search className="w-8 h-8 text-slate-700 mx-auto mb-3" />
-              <p className="text-xs text-slate-500">Click a node and select "Start Search" to see results here</p>
+              <p className="text-xs text-slate-500">Click a node and select "Start Search" to enrich and see platform results here</p>
             </div>
           </div>
         ) : (
           <div className="flex-1 flex flex-col overflow-hidden">
             <div className="px-4 py-2 flex items-center justify-between border-b" style={{ borderColor: 'rgba(51,65,85,0.3)' }}>
-              <button onClick={toggleAllResults} className="text-[10px] text-cyan-400 hover:text-cyan-300">
-                {selectedResults.size === searchResults.length ? 'Clear selection' : 'Select all'}
+              <button onClick={toggleAllResults} className="text-[10px] text-cyan-400 hover:text-cyan-300 font-medium">
+                {selectedResults.size === searchResults.length ? 'Clear selection' : 'Select All'}
               </button>
               <span className="text-[10px] text-slate-500">{selectedResults.size} selected</span>
             </div>
             <ScrollArea className="flex-1">
-              <div className="p-2 space-y-1.5">
-                {searchResults.map((result, idx) => (
-                  <button
-                    key={idx}
-                    onClick={() => {
-                      setSelectedResults(prev => {
-                        const next = new Set(prev);
-                        if (next.has(idx)) next.delete(idx); else next.add(idx);
-                        return next;
-                      });
-                    }}
-                    className={`w-full rounded-lg border p-3 text-left transition-colors ${
-                      selectedResults.has(idx) ? 'bg-cyan-600/10 border-cyan-500/30' : 'bg-slate-800/30 border-transparent hover:bg-slate-800/60'
-                    }`}
-                  >
-                    <div className="flex items-center gap-2">
-                      {selectedResults.has(idx) ? (
-                        <CheckSquare className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
-                      ) : (
-                        <Square className="w-3.5 h-3.5 text-slate-600 shrink-0" />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-slate-200 truncate">{result.platform}</p>
-                        {result.name && <p className="text-[10px] text-slate-500">Name: {result.name}</p>}
+              <div className="p-2 space-y-1">
+                {searchResults.map((result, idx) => {
+                  const meta = platformMeta[result.platform?.toLowerCase()];
+                  const displayName = meta?.displayName || result.platform;
+                  const color = meta?.color || '#64748b';
+                  const initials = displayName.split(' ').map((w: string) => w[0]).join('').toUpperCase().slice(0, 2);
+
+                  return (
+                    <button
+                      key={idx}
+                      onClick={() => {
+                        setSelectedResults(prev => {
+                          const next = new Set(prev);
+                          if (next.has(idx)) next.delete(idx); else next.add(idx);
+                          return next;
+                        });
+                      }}
+                      className={`w-full rounded-lg border p-2.5 text-left transition-all ${
+                        selectedResults.has(idx) ? 'bg-cyan-600/10 border-cyan-500/30' : 'bg-slate-800/20 border-transparent hover:bg-slate-800/50'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2.5">
+                        {selectedResults.has(idx) ? (
+                          <CheckSquare className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                        ) : (
+                          <Square className="w-3.5 h-3.5 text-slate-600 shrink-0" />
+                        )}
+                        {/* Platform logo circle */}
+                        <div
+                          className="w-8 h-8 rounded-full flex items-center justify-center text-white text-[10px] font-bold shrink-0"
+                          style={{ backgroundColor: color }}
+                        >
+                          {initials}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-xs font-medium text-slate-200 truncate">{displayName}</p>
+                          {result.username && <p className="text-[10px] text-slate-500 truncate">@{result.username}</p>}
+                          {result.profileUrl && (
+                            <a
+                              href={result.profileUrl}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                              className="text-[10px] text-cyan-500 hover:text-cyan-400 truncate block"
+                            >
+                              View profile ↗
+                            </a>
+                          )}
+                        </div>
+                        <span className="text-[9px] px-1.5 py-0.5 rounded-full font-medium shrink-0" style={{ backgroundColor: `${color}20`, color }}>
+                          Found
+                        </span>
                       </div>
-                      <span className="text-[9px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-400">
-                        {result.exists ? 'Found' : '—'}
-                      </span>
-                    </div>
-                  </button>
-                ))}
+                    </button>
+                  );
+                })}
               </div>
             </ScrollArea>
             {selectedResults.size > 0 && (
