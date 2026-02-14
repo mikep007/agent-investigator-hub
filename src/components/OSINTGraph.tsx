@@ -670,7 +670,11 @@ const OSINTGraph = () => {
           <div className="space-y-4 py-2">
             <div className="space-y-2">
               <Label>Node Type</Label>
-              <Select value={newNodeType} onValueChange={(v) => setNewNodeType(v as NodeType)}>
+              <Select value={newNodeType} onValueChange={(v) => {
+                const t = v as NodeType;
+                setNewNodeType(t);
+                setNewNodeLabel(NODE_CONFIG[t].label);
+              }}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -690,14 +694,6 @@ const OSINTGraph = () => {
               </Select>
             </div>
             <div className="space-y-2">
-              <Label>Label</Label>
-              <Input
-                value={newNodeLabel}
-                onChange={(e) => setNewNodeLabel(e.target.value)}
-                placeholder="Auto-populated from type"
-              />
-            </div>
-            <div className="space-y-2">
               <Label>Value</Label>
               <Input
                 value={newNodeValue}
@@ -711,6 +707,31 @@ const OSINTGraph = () => {
                 }
                 autoFocus
               />
+              {/* Suggestions from existing nodes & search results */}
+              {(() => {
+                const suggestions = [
+                  ...nodes.filter(n => n.type === newNodeType).map(n => n.value),
+                  ...searchResults.filter(r => r.type === newNodeType).map(r => r.value),
+                ].filter((v, i, a) => a.indexOf(v) === i); // dedupe
+                if (suggestions.length === 0) return null;
+                return (
+                  <div className="space-y-1 pt-1">
+                    <span className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Suggestions</span>
+                    <div className="flex flex-wrap gap-1.5">
+                      {suggestions.slice(0, 8).map((val) => (
+                        <button
+                          key={val}
+                          type="button"
+                          className="text-xs px-2.5 py-1 rounded-full border border-border bg-muted/50 hover:bg-primary/10 hover:border-primary/40 text-foreground transition-colors truncate max-w-[200px]"
+                          onClick={() => setNewNodeValue(val)}
+                        >
+                          {val}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })()}
             </div>
           </div>
           <DialogFooter>
