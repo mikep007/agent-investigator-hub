@@ -1001,6 +1001,246 @@ function buildDorkQueries(
     });
   }
 
+  // ========== 3+ PARAMETER CROSS-REFERENCE QUERIES ==========
+  // These combine 3 or more parameters to ensure high accuracy and stronger corroboration.
+  // Results from these queries receive a confidence multiplier boost.
+
+  // --- Email + Phone + Name ---
+  if (cleanEmail && hasValidPhone) {
+    queries.push({
+      query: `"${cleanEmail}" "${cleanPhone}"`,
+      type: 'xref_email_phone',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Email + Phone',
+    });
+    queries.push({
+      query: `"${cleanEmail}" "${cleanPhone}" ${quotedPrimary}`,
+      type: 'xref_email_phone_name',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Email + Phone + Name (3-param)',
+    });
+  }
+
+  // --- Email + City + State ---
+  if (cleanEmail && city && state) {
+    queries.push({
+      query: `"${cleanEmail}" "${city}" "${state}"`,
+      type: 'xref_email_city_state',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Email + City + State (3-param)',
+    });
+    // 4-param: Email + Name + City + State
+    queries.push({
+      query: `"${cleanEmail}" ${quotedPrimary} "${city}" "${state}"`,
+      type: 'xref_email_name_city_state',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Email + Name + City + State (4-param)',
+    });
+  }
+
+  // --- Phone + City + State ---
+  if (hasValidPhone && city && state) {
+    queries.push({
+      query: `"${cleanPhone}" "${city}" "${state}"`,
+      type: 'xref_phone_city_state',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Phone + City + State (3-param)',
+    });
+    // 4-param: Phone + Name + City + State
+    queries.push({
+      query: `"${cleanPhone}" ${quotedPrimary} "${city}" "${state}"`,
+      type: 'xref_phone_name_city_state',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Phone + Name + City + State (4-param)',
+    });
+  }
+
+  // --- Username + Name + City ---
+  if (cleanUsername && city) {
+    queries.push({
+      query: `"${cleanUsername}" ${quotedPrimary} "${city}"`,
+      type: 'xref_username_name_city',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Username + Name + City (3-param)',
+    });
+  }
+
+  // --- Username + Email + Name ---
+  if (cleanUsername && cleanEmail) {
+    queries.push({
+      query: `"${cleanUsername}" "${cleanEmail}"`,
+      type: 'xref_username_email',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Username + Email',
+    });
+    queries.push({
+      query: `"${cleanUsername}" "${cleanEmail}" ${quotedPrimary}`,
+      type: 'xref_username_email_name',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Username + Email + Name (3-param)',
+    });
+  }
+
+  // --- Username + Phone ---
+  if (cleanUsername && hasValidPhone) {
+    queries.push({
+      query: `"${cleanUsername}" "${cleanPhone}"`,
+      type: 'xref_username_phone',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Username + Phone',
+    });
+    queries.push({
+      query: `"${cleanUsername}" "${cleanPhone}" ${quotedPrimary}`,
+      type: 'xref_username_phone_name',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Username + Phone + Name (3-param)',
+    });
+  }
+
+  // --- Phone + Email ---
+  if (hasValidPhone && cleanEmail) {
+    queries.push({
+      query: `"${cleanPhone}" "${cleanEmail}"`,
+      type: 'xref_phone_email',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Phone + Email',
+    });
+  }
+
+  // --- Email + Keyword + Name ---
+  if (cleanEmail && keywordList.length > 0) {
+    for (const keyword of keywordList.slice(0, 3)) {
+      queries.push({
+        query: `"${cleanEmail}" "${keyword}" ${quotedPrimary}`,
+        type: 'xref_email_keyword_name',
+        priority: 1,
+        category: 'cross_reference',
+        description: `Cross-ref: Email + Keyword "${keyword}" + Name (3-param)`,
+      });
+    }
+  }
+
+  // --- Phone + Keyword + Name ---
+  if (hasValidPhone && keywordList.length > 0) {
+    for (const keyword of keywordList.slice(0, 3)) {
+      queries.push({
+        query: `"${cleanPhone}" "${keyword}" ${quotedPrimary}`,
+        type: 'xref_phone_keyword_name',
+        priority: 1,
+        category: 'cross_reference',
+        description: `Cross-ref: Phone + Keyword "${keyword}" + Name (3-param)`,
+      });
+    }
+  }
+
+  // --- Username + Keyword + Name ---
+  if (cleanUsername && keywordList.length > 0) {
+    for (const keyword of keywordList.slice(0, 3)) {
+      queries.push({
+        query: `"${cleanUsername}" "${keyword}" ${quotedPrimary}`,
+        type: 'xref_username_keyword_name',
+        priority: 1,
+        category: 'cross_reference',
+        description: `Cross-ref: Username + Keyword "${keyword}" + Name (3-param)`,
+      });
+    }
+  }
+
+  // --- Relative + Name + City + State ---
+  if (relatives && relatives.length > 0 && city && state) {
+    for (const relative of relatives.slice(0, 3)) {
+      const cleanRelative = stripOuterQuotes(relative);
+      if (cleanRelative.length > 2) {
+        queries.push({
+          query: `"${cleanRelative}" ${quotedPrimary} "${city}" "${state}"`,
+          type: 'xref_relative_name_location',
+          priority: 1,
+          category: 'cross_reference',
+          description: `Cross-ref: Relative "${cleanRelative}" + Name + Location (4-param)`,
+        });
+      }
+    }
+  }
+
+  // --- Relative + Email ---
+  if (relatives && relatives.length > 0 && cleanEmail) {
+    for (const relative of relatives.slice(0, 3)) {
+      const cleanRelative = stripOuterQuotes(relative);
+      if (cleanRelative.length > 2) {
+        queries.push({
+          query: `"${cleanRelative}" "${cleanEmail}"`,
+          type: 'xref_relative_email',
+          priority: 1,
+          category: 'cross_reference',
+          description: `Cross-ref: Relative "${cleanRelative}" + Email`,
+        });
+      }
+    }
+  }
+
+  // --- Relative + Phone ---
+  if (relatives && relatives.length > 0 && hasValidPhone) {
+    for (const relative of relatives.slice(0, 3)) {
+      const cleanRelative = stripOuterQuotes(relative);
+      if (cleanRelative.length > 2) {
+        queries.push({
+          query: `"${cleanRelative}" "${cleanPhone}"`,
+          type: 'xref_relative_phone',
+          priority: 1,
+          category: 'cross_reference',
+          description: `Cross-ref: Relative "${cleanRelative}" + Phone`,
+        });
+      }
+    }
+  }
+
+  // --- Keyword + City + State + Name (always 4-param when all available) ---
+  if (keywordList.length > 0 && city && state) {
+    for (const keyword of keywordList.slice(0, 3)) {
+      queries.push({
+        query: `"${keyword}" "${city}" "${state}" ${quotedPrimary}`,
+        type: 'xref_keyword_location_name',
+        priority: 1,
+        category: 'cross_reference',
+        description: `Cross-ref: Keyword "${keyword}" + Location + Name (4-param)`,
+      });
+    }
+  }
+
+  // --- Email + Username + City ---
+  if (cleanEmail && cleanUsername && city) {
+    queries.push({
+      query: `"${cleanEmail}" "${cleanUsername}" "${city}"`,
+      type: 'xref_email_username_city',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Email + Username + City (3-param)',
+    });
+  }
+
+  // --- Phone + Username + City ---
+  if (hasValidPhone && cleanUsername && city) {
+    queries.push({
+      query: `"${cleanPhone}" "${cleanUsername}" "${city}"`,
+      type: 'xref_phone_username_city',
+      priority: 1,
+      category: 'cross_reference',
+      description: 'Cross-ref: Phone + Username + City (3-param)',
+    });
+  }
+
   // General property record searches (national sites)
   queries.push({
     query: `${quotedPrimary} "property owner" OR "real estate" OR "deed" site:gov`,
@@ -1776,6 +2016,26 @@ Deno.serve(async (req) => {
           // Even with some corroboration, penalize bulk docs
           confidenceScore *= 0.7;
           console.log(`  [!] Bulk document/PDF penalty applied: ${item.link}`);
+        }
+        
+        // BOOST: 3+ parameter cross-reference queries earn a confidence multiplier
+        // Results from queries that combined 3+ search parameters are inherently more reliable
+        const isFromCrossRef = result.queryType?.startsWith('xref_');
+        if (isFromCrossRef && corroboratingFactors >= 2) {
+          // 4+ param match: 1.5x boost
+          const paramCount = (result.queryType?.match(/_/g) || []).length; // rough proxy
+          if (paramCount >= 4 || corroboratingFactors >= 3) {
+            confidenceScore *= 1.5;
+            console.log(`  [⬆] 4+ param cross-ref boost (1.5x): ${item.link}`);
+          } else {
+            // 3-param match: 1.3x boost
+            confidenceScore *= 1.3;
+            console.log(`  [⬆] 3-param cross-ref boost (1.3x): ${item.link}`);
+          }
+        } else if (corroboratingFactors >= 3) {
+          // Even non-xref queries get a boost if 3+ corroborating factors confirmed
+          confidenceScore *= 1.2;
+          console.log(`  [⬆] 3+ corroborating factors boost (1.2x): ${item.link}`);
         }
         
         // Cap at 0.98
