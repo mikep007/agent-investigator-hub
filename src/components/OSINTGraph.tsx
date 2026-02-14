@@ -209,6 +209,34 @@ const OSINTGraph = () => {
     }
   }, [openMenu]);
 
+  // ─── Gather corroborating parameters from sibling nodes ──
+  const gatherCorroboratingParams = useCallback((excludeNodeId?: string) => {
+    const params: Record<string, string> = {};
+    for (const n of nodes) {
+      if (n.id === excludeNodeId) continue;
+      switch (n.type) {
+        case 'name': {
+          const parts = n.value.trim().split(/\s+/);
+          if (parts.length >= 2) {
+            params.firstName = parts[0];
+            params.lastName = parts.slice(1).join(' ');
+          }
+          break;
+        }
+        case 'email':
+          params.email = n.value;
+          break;
+        case 'phone':
+          params.phone = n.value;
+          break;
+        case 'username':
+          params.username = n.value;
+          break;
+      }
+    }
+    return params;
+  }, [nodes]);
+
   // ─── Search ────────────────────────────────────────────
   const startSearch = useCallback(async () => {
     const node = nodes.find(n => n.id === selectedNodeId);
@@ -220,26 +248,51 @@ const OSINTGraph = () => {
     searchAbortRef.current = controller;
 
     try {
-      // Determine which edge function to call based on node type
+      // Collect corroborating params from other nodes on the graph
+      const sibling = gatherCorroboratingParams(node.id);
+
+      // Build function name + body based on node type
       let functionName = '';
-      const body: Record<string, string> = { target: node.value };
+      let body: Record<string, any> = {};
 
       switch (node.type) {
+        case 'name': {
+          functionName = 'osint-people-search';
+          const parts = node.value.trim().split(/\s+/);
+          body = {
+            firstName: parts[0] || '',
+            lastName: parts.slice(1).join(' ') || '',
+            ...(sibling.phone && { phone: sibling.phone }),
+            ...(sibling.email && { email: sibling.email }),
+            validateData: !!(sibling.phone || sibling.email),
+          };
+          break;
+        }
         case 'email':
           functionName = 'osint-holehe';
+          body = { target: node.value };
           break;
         case 'username':
           functionName = 'osint-sherlock';
+          body = { target: node.value };
           break;
-        case 'phone':
-          functionName = 'osint-phone-lookup';
-          break;
-        case 'name':
+        case 'phone': {
           functionName = 'osint-people-search';
+          body = {
+            phone: node.value,
+            ...(sibling.firstName && { firstName: sibling.firstName }),
+            ...(sibling.lastName && { lastName: sibling.lastName }),
+            ...(sibling.email && { email: sibling.email }),
+            validateData: !!(sibling.firstName || sibling.email),
+          };
           break;
+        }
         default:
           functionName = 'osint-web-search';
+          body = { target: node.value };
       }
+
+      console.log(`[OSINTGraph] Searching ${functionName} with params:`, body);
 
       const { data, error } = await supabase.functions.invoke(functionName, {
         body,
