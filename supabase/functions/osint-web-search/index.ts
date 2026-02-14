@@ -1542,9 +1542,9 @@ Deno.serve(async (req) => {
     const dorkQueries = buildDorkQueries(searchName, location, email, phone, keywords, seedQuery, username, relatives);
 
     // Execute MORE queries for comprehensive coverage - increased to 30 for better results
-    // Google CSE allows 100 queries/day free, then paid - 30 queries ensures keyword coverage
+    // Google CSE allows 100 queries/day free, then paid - 40 queries accommodates 3+ param cross-references
     // CRITICAL: Keyword queries are now priority 1, so they will be executed first
-    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 30);
+    const sortedQueries = dorkQueries.sort((a, b) => a.priority - b.priority).slice(0, 40);
     
     console.log('Will execute', sortedQueries.length, 'priority queries out of', dorkQueries.length, 'total generated:');
     sortedQueries.forEach((q, i) => console.log(`  ${i+1}. [P${q.priority}][${q.type}] ${q.query.slice(0, 70)}...`));
