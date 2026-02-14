@@ -12,11 +12,11 @@ import {
   User, Mail, Phone, AtSign, Image, Database,
   Copy, Plus, FolderOpen, Settings, Search,
   Square, Loader2, X, Link2, ChevronRight,
-  Globe, ShieldAlert, CheckCircle2
+  Globe, ShieldAlert, CheckCircle2, MapPin, Server
 } from 'lucide-react';
 
 // ─── Types ───────────────────────────────────────────────
-type NodeType = 'name' | 'email' | 'phone' | 'username' | 'image' | 'data';
+type NodeType = 'name' | 'email' | 'phone' | 'username' | 'image' | 'data' | 'address' | 'domain';
 
 interface GraphNode {
   id: string;
@@ -50,6 +50,8 @@ const NODE_CONFIG: Record<NodeType, { color: string; icon: typeof User; label: s
   username: { color: '#f59e0b', icon: AtSign,   label: 'Username' },
   image:    { color: '#f43f5e', icon: Image,    label: 'Image' },
   data:     { color: '#64748b', icon: Database, label: 'Data' },
+  address:  { color: '#10b981', icon: MapPin,   label: 'Address' },
+  domain:   { color: '#6366f1', icon: Server,   label: 'Domain' },
 };
 
 const NODE_WIDTH = 260;
@@ -251,99 +253,151 @@ const OSINTGraph = () => {
       // Collect corroborating params from other nodes on the graph
       const sibling = gatherCorroboratingParams(node.id);
 
-      // Build function name + body based on node type
-      let functionName = '';
-      let body: Record<string, any> = {};
+      // Build multi-function search calls per node type
+      type SearchCall = { functionName: string; body: Record<string, any> };
+      const calls: SearchCall[] = [];
 
       switch (node.type) {
         case 'name': {
-          functionName = 'osint-people-search';
           const parts = node.value.trim().split(/\s+/);
-          body = {
-            firstName: parts[0] || '',
-            lastName: parts.slice(1).join(' ') || '',
-            ...(sibling.phone && { phone: sibling.phone }),
-            ...(sibling.email && { email: sibling.email }),
-            validateData: !!(sibling.phone || sibling.email),
-          };
+          const firstName = parts[0] || '';
+          const lastName = parts.slice(1).join(' ') || '';
+          // 1. People search (primary)
+          calls.push({
+            functionName: 'osint-people-search',
+            body: {
+              firstName, lastName,
+              ...(sibling.phone && { phone: sibling.phone }),
+              ...(sibling.email && { email: sibling.email }),
+              validateData: !!(sibling.phone || sibling.email),
+            },
+          });
+          // 2. Social search
+          calls.push({
+            functionName: 'osint-social-search',
+            body: { target: node.value, searchType: 'name', fullName: node.value },
+          });
+          // 3. Web search
+          calls.push({
+            functionName: 'osint-web-search',
+            body: { target: `"${firstName} ${lastName}"` },
+          });
           break;
         }
         case 'email':
-          functionName = 'osint-holehe';
-          body = { target: node.value };
+          // 1. Holehe (platform enumeration)
+          calls.push({ functionName: 'osint-holehe', body: { target: node.value } });
+          // 2. OSINT Industries (email intelligence)
+          calls.push({ functionName: 'osint-industries', body: { target: node.value } });
+          // 3. Web search for email mentions
+          calls.push({ functionName: 'osint-web-search', body: { target: `"${node.value}"` } });
           break;
         case 'username':
-          functionName = 'osint-sherlock';
-          body = { target: node.value };
+          // 1. Sherlock (primary)
+          calls.push({ functionName: 'osint-sherlock', body: { target: node.value } });
+          // 2. Social search
+          calls.push({ functionName: 'osint-social-search', body: { target: node.value, searchType: 'username' } });
+          // 3. Web search
+          calls.push({ functionName: 'osint-web-search', body: { target: `"${node.value}"` } });
           break;
         case 'phone': {
-          functionName = 'osint-people-search';
-          body = {
-            phone: node.value,
-            ...(sibling.firstName && { firstName: sibling.firstName }),
-            ...(sibling.lastName && { lastName: sibling.lastName }),
-            ...(sibling.email && { email: sibling.email }),
-            validateData: !!(sibling.firstName || sibling.email),
-          };
+          // 1. People search by phone
+          calls.push({
+            functionName: 'osint-people-search',
+            body: {
+              phone: node.value,
+              ...(sibling.firstName && { firstName: sibling.firstName }),
+              ...(sibling.lastName && { lastName: sibling.lastName }),
+              ...(sibling.email && { email: sibling.email }),
+              validateData: !!(sibling.firstName || sibling.email),
+            },
+          });
+          // 2. Phone lookup
+          calls.push({ functionName: 'osint-phone-lookup', body: { target: node.value } });
+          // 3. Web search
+          calls.push({ functionName: 'osint-web-search', body: { target: `"${node.value}"` } });
           break;
         }
+        case 'address':
+          calls.push({ functionName: 'osint-address-search', body: { target: node.value } });
+          calls.push({ functionName: 'osint-web-search', body: { target: `"${node.value}"` } });
+          break;
+        case 'domain':
+          calls.push({ functionName: 'osint-reputation-check', body: { target: node.value } });
+          calls.push({ functionName: 'osint-web-search', body: { target: `site:${node.value}` } });
+          break;
         default:
-          functionName = 'osint-web-search';
-          body = { target: node.value };
+          calls.push({ functionName: 'osint-web-search', body: { target: node.value } });
       }
 
-      console.log(`[OSINTGraph] Searching ${functionName} with params:`, body);
+      console.log(`[OSINTGraph] Multi-search for ${node.type}:`, calls.map(c => c.functionName));
 
-      const { data, error } = await supabase.functions.invoke(functionName, {
-        body,
-      });
+      // Fire all calls in parallel
+      const responses = await Promise.allSettled(
+        calls.map(c => supabase.functions.invoke(c.functionName, { body: c.body }))
+      );
 
       if (controller.signal.aborted) return;
 
-      if (error) {
-        toast({ title: 'Search error', description: error.message, variant: 'destructive' });
-        setIsSearching(false);
-        return;
-      }
-
-      // Parse results based on function type
+      // Parse & merge results from all responses
       const results: SearchResult[] = [];
 
-      if (functionName === 'osint-holehe' && data?.allResults) {
-        data.allResults
-          .filter((r: any) => r.exists)
-          .slice(0, 20)
-          .forEach((r: any) => {
+      responses.forEach((res, idx) => {
+        if (res.status !== 'fulfilled') {
+          console.warn(`[OSINTGraph] ${calls[idx].functionName} failed:`, res.reason);
+          return;
+        }
+        const { data, error } = res.value;
+        const fn = calls[idx].functionName;
+
+        if (error) {
+          console.warn(`[OSINTGraph] ${fn} error:`, error.message);
+          return;
+        }
+        if (!data) return;
+
+        // Holehe results
+        if (fn === 'osint-holehe' && data.allResults) {
+          data.allResults
+            .filter((r: any) => r.exists)
+            .slice(0, 15)
+            .forEach((r: any) => {
+              results.push({ type: 'data', label: r.name, value: r.domain, icon: 'globe', source: 'Holehe' });
+            });
+        }
+        // Sherlock results
+        else if (fn === 'osint-sherlock' && data.profileLinks) {
+          data.profileLinks.slice(0, 15).forEach((p: any) => {
+            results.push({ type: 'username', label: p.platform || p.name, value: p.url || p.platform, icon: 'globe', source: 'Sherlock' });
+          });
+        }
+        // Social search results
+        else if (fn === 'osint-social-search' && data.profiles) {
+          data.profiles.filter((p: any) => p.exists).slice(0, 10).forEach((p: any) => {
+            results.push({ type: 'username', label: p.platform, value: p.url, icon: 'globe', source: 'Social' });
+          });
+        }
+        // OSINT Industries results
+        else if (fn === 'osint-industries' && data.results) {
+          const items = Array.isArray(data.results) ? data.results : [data.results];
+          items.slice(0, 10).forEach((item: any) => {
+            results.push({ type: 'data', label: item.module || item.name || 'OSINT Industries', value: item.value || JSON.stringify(item).slice(0, 80), icon: 'database', source: 'OSINT Industries' });
+          });
+        }
+        // Generic results (people-search, web-search, etc.)
+        else if (data.results || data.data) {
+          const items = data.results || data.data || [];
+          (Array.isArray(items) ? items : [items]).slice(0, 10).forEach((item: any) => {
             results.push({
               type: 'data',
-              label: r.name,
-              value: r.domain,
-              icon: 'globe',
-              source: 'Holehe',
+              label: item.name || item.title || item.platform || 'Result',
+              value: item.value || item.url || item.link || JSON.stringify(item).slice(0, 80),
+              icon: 'database',
+              source: fn.replace('osint-', ''),
             });
           });
-      } else if (functionName === 'osint-sherlock' && data?.profileLinks) {
-        data.profileLinks.slice(0, 20).forEach((p: any) => {
-          results.push({
-            type: 'username',
-            label: p.platform || p.name,
-            value: p.url || p.platform,
-            icon: 'globe',
-            source: 'Sherlock',
-          });
-        });
-      } else if (data?.results || data?.data) {
-        const items = data.results || data.data || [];
-        (Array.isArray(items) ? items : [items]).slice(0, 15).forEach((item: any) => {
-          results.push({
-            type: 'data',
-            label: item.name || item.title || item.platform || 'Result',
-            value: item.value || item.url || item.link || JSON.stringify(item).slice(0, 80),
-            icon: 'database',
-            source: functionName.replace('osint-', ''),
-          });
-        });
-      }
+        }
+      });
 
       setSearchResults(results);
     } catch (err: any) {
