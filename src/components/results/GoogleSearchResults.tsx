@@ -27,7 +27,8 @@ import {
   Heart,
   Home,
   Gem,
-  Baby
+  Baby,
+  Layers
 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ConfidenceScoreBadge from "../ConfidenceScoreBadge";
@@ -92,6 +93,7 @@ const CATEGORY_CONFIG: Record<string, { label: string; color: string }> = {
   custom_site: { label: 'Custom Sites', color: '#84cc16' },
   keyword_mentions: { label: 'Keyword Mentions', color: '#64748b' },
   keywords: { label: 'Keywords', color: '#a855f7' },
+  cross_reference: { label: 'Cross-Reference', color: '#f59e0b' },
 };
 
 interface GoogleSearchResultsProps {
@@ -424,6 +426,27 @@ const GoogleSearchResults = ({
           <div className="flex items-center gap-2 flex-wrap mb-3">
             {item.confidenceScore !== undefined && (
               <ConfidenceScoreBadge score={item.confidenceScore <= 1 ? item.confidenceScore * 100 : item.confidenceScore} />
+            )}
+            {item.queryCategory === 'cross_reference' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Badge variant="secondary" className="bg-gradient-to-r from-amber-500/20 to-yellow-500/20 text-amber-600 dark:text-amber-400 text-xs gap-1 cursor-help border border-amber-400/30 font-semibold">
+                    <Layers className="h-3 w-3" />
+                    {item.queryDescription?.includes('4-param') ? '4-Param X-Ref' : 
+                     item.queryDescription?.includes('3-param') ? '3-Param X-Ref' : 'Cross-Ref'}
+                  </Badge>
+                </TooltipTrigger>
+                <TooltipContent>
+                  <p className="font-medium">Multi-Parameter Cross-Reference Match</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {item.queryDescription || 'Found via 3+ parameter cross-reference query — higher accuracy'}
+                  </p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {item.queryDescription?.includes('4-param') ? '1.5× confidence boost applied' : 
+                     item.queryDescription?.includes('3-param') ? '1.3× confidence boost applied' : 'Confidence boost applied'}
+                  </p>
+                </TooltipContent>
+              </Tooltip>
             )}
             {item.isExactMatch && (
               <Tooltip>
