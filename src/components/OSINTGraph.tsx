@@ -107,7 +107,10 @@ const OSINTGraph = () => {
   const handleCreateNode = useCallback(() => {
     if (!newNodeValue.trim()) return;
 
-    const pos = getNewNodePosition(menuAnchorNodeId || undefined);
+    const pos = menuAnchorNodeId
+      ? getNewNodePosition(menuAnchorNodeId)
+      : { x: menuPosition.x - NODE_WIDTH / 2, y: menuPosition.y - NODE_HEIGHT / 2 };
+
     const newNode: GraphNode = {
       id: `node-${Date.now()}`,
       type: newNodeType,
@@ -133,7 +136,7 @@ const OSINTGraph = () => {
     setCreateDialogOpen(false);
     setNewNodeValue('');
     setMenuAnchorNodeId(null);
-  }, [newNodeType, newNodeLabel, newNodeValue, menuAnchorNodeId, getNewNodePosition]);
+  }, [newNodeType, newNodeLabel, newNodeValue, menuAnchorNodeId, menuPosition, getNewNodePosition]);
 
   // ─── Auto-populate label from type ─────────────────────
   useEffect(() => {
@@ -157,6 +160,14 @@ const OSINTGraph = () => {
     if (linkMode) return;
     setMenuOpen(false);
     setSelectedNodeId(null);
+
+    // Open create-node menu on click in blank canvas space
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (rect) {
+      setMenuPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+      setMenuAnchorNodeId(null);
+      setCreateDialogOpen(true);
+    }
   }, [linkMode]);
 
   const handleNodeClick = useCallback((nodeId: string, e: React.MouseEvent) => {
@@ -399,6 +410,16 @@ const OSINTGraph = () => {
         className="flex-1 relative overflow-auto"
         style={{ background: 'radial-gradient(circle, hsl(var(--muted)) 1px, transparent 1px)', backgroundSize: '24px 24px' }}
         onClick={handleCanvasClick}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          if (linkMode) return;
+          const rect = canvasRef.current?.getBoundingClientRect();
+          if (rect) {
+            setMenuPosition({ x: e.clientX - rect.left, y: e.clientY - rect.top });
+            setMenuAnchorNodeId(null);
+            setCreateDialogOpen(true);
+          }
+        }}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
         onMouseLeave={handleMouseUp}
